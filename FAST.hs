@@ -2,6 +2,7 @@
 module FAST where
 
 import qualified Data.ByteString as B
+import Data.Ix (inRange)
 
 -- *Ranges of integer types
 
@@ -252,7 +253,49 @@ newtype TemplateNsAttr = TemplateNsAttr String
 newtype IdAttr = IdAttr Token
 newtype Token = Token String
 
+-- *FAST maps.
+
 -- |Reset all entries of a dictionary to 'Undefined'.
 reset::Dictionary -> Dictionary
 reset (Dictionary name xs) = Dictionary name (map h xs)
     where h (key, value) = (key, Undefined)
+
+-- |Delta operation.
+delta::Primitive -> Primitive -> Primitive
+-- delta for integer types is just addition.
+delta (Int32 b) (Int32 p) = Int32 (checkRange i32Range (b + p))
+delta (Int64 b) (Int64 p) = Int64 (checkRange i64Range (b + p))
+delta (UInt32 b) (UInt32 p) = UInt32 (checkRange ui32Range (b + p))
+delta (UInt64 b) (UInt64 p) = UInt64 (checkRange ui64Range (b + p))
+delta _ _ = undefined
+
+-- |Maps types to default base values.
+defaultBaseValue::Primitive -> Primitive
+defaultBaseValue (Int32 _) = Int32 0 
+defaultBaseValue (Int64 _) = Int64 0
+defaultBaseValue (UInt32 _) = UInt32 0 
+defaultBaseValue (UInt64 _) = UInt64 0
+defaultBaseValue (Decimal) = Decimal
+defaultBaseValue (Ascii _) = Ascii ""
+defaultBaseValue (Unicode _) = Unicode ""
+defaultBaseValue (Bytevector _) = Bytevector B.empty
+
+-- |Increment an integer in an increment operator.
+inc::Primitive -> Primitive
+inc (Int32 i) | i == (snd i32Range) = Int32 $ fst i32Range
+inc (Int32 i) = Int32(i + 1)
+inc (Int64 i) | i == (snd i64Range) = Int64 $ fst i64Range 
+inc (Int64 i) = Int64(i + 1)
+inc (UInt32 i) | i == (snd i32Range) = UInt32 $ fst ui32Range
+inc (UInt32 i) = UInt32(i + 1)
+inc (UInt64 i) | i == (snd ui64Range) = UInt64 $ fst ui64Range
+inc (UInt64 i) = UInt64(i + 1)
+inc _ = error "S2: Impossible to increment an non-integer type field."
+
+-- Helper functions
+
+-- |Check wether a value is in a given range.
+checkRange::(Int,Int) -> Int -> Int
+checkRange r x = case (inRange r x) of
+                    True -> x
+                    False -> error "R4: Integer type can not be represented in the target integer type."

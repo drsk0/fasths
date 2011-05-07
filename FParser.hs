@@ -11,7 +11,6 @@ import Control.Monad.State
 import Control.Applicative 
 import Data.Bits
 import Data.Word (Word8)
-import Data.Ix (inRange)
 import FAST
 
 
@@ -87,11 +86,12 @@ intF2P::IntegerField -> FParser (Maybe Primitive)
 -- Every possible case for the Int32 field.
 -- pm: No, Nullable: No
 intF2P (Int32Field (FieldInstrContent _ (Just Mandatory) Nothing)) 
-    = fmap Just int32
+    = Just <$> int32
 
 -- pm: No, Nullable: Yes
 intF2P (Int32Field (FieldInstrContent _ (Just Optional) Nothing)) 
-    = intNULL <|> fmap (Just . minusOne) int32
+    = intNULL 
+        <|> (Just . minusOne) <$> int32
 
 -- pm: No, Nullable: No
 intF2P (Int32Field (FieldInstrContent _ (Just Mandatory) (Just (Constant iv)))) 
@@ -99,35 +99,96 @@ intF2P (Int32Field (FieldInstrContent _ (Just Mandatory) (Just (Constant iv))))
 
 -- pm: Yes, Nullable: No
 intF2P (Int32Field (FieldInstrContent _ (Just Mandatory) (Just (Default (Just iv))))) 
-    = (notPresent *> (return $ Just(ivToInt32 iv))) <|> fmap Just int32
+    = (notPresent *> (return $ Just(ivToInt32 iv))) 
+        <|> Just <$> int32
 
 -- pm: Yes, Nullable: No
 intF2P (Int32Field (FieldInstrContent _ (Just Mandatory) (Just (Default (Nothing))))) 
-    = fail "S5: No initial value given for mandatory default delta operator."
+    = error "S5: No initial value given for mandatory default delta operator."
 
 -- pm: Yes, Nullable: No
-intF2P (Int32Field (FieldInstrContent _ (Just Mandatory) (Just (Copy oc)))) 
-    = undefined
-    {-= notPresent *> <|> fmap Just int32-}
-
+intF2P (Int32Field (FieldInstrContent fname (Just Mandatory) (Just (Copy oc)))) 
+    =   (notPresent *>  
+            (let 
+                h (Assigned p) = Just p
+                h (Undefined) = h' oc
+                    where   h' (OpContext _ _ (Just iv)) = Just (ivToInt32 iv)
+                            h' (OpContext _ _ Nothing) = error "D5: No initial value in operator context\
+                                                              \for mandatory copy operator with undefined dictionary\
+                                                              \value."
+                h (Empty) = error "D6: Previous value is empty in madatory copy operator."
+            in 
+                (prevValue fname oc) >>= return . h 
+            )
+        )
+        <|> Just <$> ((Assigned <$> int32) >>= updatePrevValue fname oc)
+                            
 -- pm: Yes, Nullable: No
-intF2P (Int32Field (FieldInstrContent _ (Just Mandatory) (Just (Increment iv)))) = undefined 
+intF2P (Int32Field (FieldInstrContent fname (Just Mandatory) (Just (Increment oc)))) 
+    = (notPresent *> 
+        (let 
+            h (Assigned p) = Just <$> (return (Assigned(inc p)) >>= (updatePrevValue fname oc))
+            h (Undefined) = h' oc
+                where   h' (OpContext _ _ (Just iv)) = Just <$> (return (Assigned(ivToInt32 iv)) >>= (updatePrevValue fname oc))
+                        h' (OpContext _ _ Nothing) = error "D5: No initial value in operator context given for\
+                                                        \mandatory increment operator with undefined dictionary\
+                                                        \value."
+            h (Empty) = error "D6: Previous value is empty in mandatory increment operator."
+          in
+            (prevValue fname oc) >>= h
+        )
+    )
+    <|> Just <$> ((Assigned <$> (int32)) >>= updatePrevValue fname oc)
+
 
 -- pm: No, Nullable: No
-intF2P (Int32Field (FieldInstrContent _ (Just Mandatory) (Just (Delta iv)))) = undefined
+intF2P (Int32Field (FieldInstrContent fname (Just Mandatory) (Just (Delta oc)))) 
+    = let   baseValue (Assigned p) = p
+            baseValue (Undefined) = h oc
+                where   h (OpContext _ _ (Just iv)) = ivToInt32 iv
+                        h (OpContext _ _ Nothing) = defaultBaseValue (Int32 undefined)
+            baseValue (Empty) = error "D6: previous value in a delta operator can not be empty."
 
--- pm: ?, Nullable: ?
-intF2P (Int32Field (FieldInstrContent _ (Just Mandatory) (Just (Tail iv)))) = undefined
+    in
+        do 
+            i <- int32
+            Just <$> (((flip  delta) i) <$> (baseValue <$> (prevValue fname oc)))
+    
+-- pm: -, Nullable: -
+intF2P (Int32Field (FieldInstrContent _ (Just Mandatory) (Just (Tail iv)))) 
+    = error "S2: Tail operator can not be applied on an integer type field." 
 
--- pm: Yes, Nullable: No
+-- pm: No, Nullable: No
+-- TODO: there is a difference in the CME specification and the FAST specification.
+-- CME: pm: Yes.
+-- FAST: pm: No.
 intF2P (Int32Field (FieldInstrContent _ (Just Optional) (Just (Constant iv)))) 
-    = notPresent <|> (return $ Just(ivToInt32 iv))
+    = return $ Just(ivToInt32 iv)
 
 -- pm: Yes, Nullable: Yes
-intF2P (Int32Field (FieldInstrContent _ (Just Optional) (Just (Default iv)))) = undefined
+intF2P (Int32Field (FieldInstrContent _ (Just Optional) (Just (Default (Just iv)))))
+    = (notPresent *> (return $ Just $ (ivToInt32 iv)))
+    <|> (Just <$> int32)
 
 -- pm: Yes, Nullable: Yes
-intF2P (Int32Field (FieldInstrContent _ (Just Optional) (Just (Copy iv)))) = undefined
+intF2P (Int32Field (FieldInstrContent _ (Just Optional) (Just (Default Nothing))))
+    = (notPresent *> return Nothing)
+    <|> (Just <$> int32)
+
+-- pm: Yes, Nullable: Yes
+intF2P (Int32Field (FieldInstrContent fname (Just Optional) (Just (Copy oc)))) 
+    =   (notPresent *>  
+            (let 
+                h (Assigned p) = return $ Just p
+                h (Undefined) = h' oc
+                    where   h' (OpContext _ _ (Just iv)) = return $ Just (ivToInt32 iv)
+                            h' (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> (return $ Nothing)  
+                h (Empty) = return $ Nothing
+            in 
+                (prevValue fname oc) >>= h 
+            )
+        )
+        <|> Just <$> (Assigned <$> int32 >>= updatePrevValue fname oc)
 
 -- pm: Yes, Nullable: Yes
 intF2P (Int32Field (FieldInstrContent _ (Just Optional) (Just (Increment iv)))) = undefined
@@ -135,8 +196,9 @@ intF2P (Int32Field (FieldInstrContent _ (Just Optional) (Just (Increment iv)))) 
 -- pm: No, Nullable: Yes
 intF2P (Int32Field (FieldInstrContent _ (Just Optional) (Just (Delta iv)))) = undefined
 
--- pm: ?, Nullable: ?
-intF2P (Int32Field (FieldInstrContent _ (Just Optional) (Just (Tail iv)))) = undefined
+-- pm: -, Nullable: -
+intF2P (Int32Field (FieldInstrContent _ (Just Optional) (Just (Tail iv)))) 
+    = error "S2: Tail operator can not be applied on an integer type field." 
 
 -- Every possible case for the UInt32 field.
 intF2P (UInt32Field (FieldInstrContent _ (Just Mandatory) Nothing)) = fmap Just uint32
@@ -175,6 +237,11 @@ groupF2P = undefined
 ivToInt32::InitialValueAttr -> Primitive
 ivToInt32 = undefined 
 
+-- *Previous value related functions.
+
+-- |Get previous value.
+prevValue::NsName -> OpContext -> FParser DictValue
+prevValue = undefined
 
 -- *Raw Parsers for basic FAST primitives
 -- These parsers are unaware of nullability, presence map, deltas etc.
@@ -253,9 +320,7 @@ int = do
 checkBounds::(Int,Int) -> FParser Int -> FParser Int
 checkBounds r p = do
     x <- p
-    case (inRange r x) of
-            True -> return x
-            False -> fail "R4: Integer type can not be represented in the target integer type."
+    return (checkRange r x)
 
 -- |ASCII string field parser.
 asciiString::FParser Primitive
@@ -287,6 +352,10 @@ byteVector c = lift p
 --
 -- *Helper functions.
 --
+
+-- |Update the previous value.
+updatePrevValue::NsName -> OpContext -> DictValue -> FParser Primitive
+updatePrevValue n oc p = undefined
 
 -- |Modify underlying bits of a Char.
 modBits::Char -> (Word8 -> Word8) -> Char
