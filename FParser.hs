@@ -70,8 +70,8 @@ previousValue::NsName -> OpContext -> Primitive
 previousValue = undefined
 
 -- |Constructs a parser out of a field. The FParser monad has underlying type
--- Maybe Primitive, the Nothing constructor represents a NULL value in the
--- FAST stream.
+-- Maybe Primitive, the Nothing constructor represents a field that was not
+-- present in the stream.
 fieldToParser::Field -> FParser (Maybe Primitive)
 fieldToParser (IntField f) = intF2P f
 fieldToParser (DecField f) = decF2P f
@@ -83,36 +83,50 @@ fieldToParser (Grp g) = groupF2P g
 
 -- |Maps an integer field to its parser.
 intF2P::IntegerField -> FParser (Maybe Primitive)
+intF2P (Int32Field fic) = intF2P' fic int32 ivToInt32 dfbInt32
+intF2P (UInt32Field fic) = intF2P' fic uint32 ivToUInt32 dfbUInt32
+intF2P (Int64Field fic) = intF2P' fic int64 ivToInt64 dfbInt64
+intF2P (UInt64Field fic) = intF2P' fic uint64 ivToUInt64 dfbUInt64
+
+-- |Maps an integer field to a parser, given the field instruction context, the 
+-- raw integer parser,a function to convert initial values to the given 
+-- primitive and a default base value for default operators.
+intF2P'::FieldInstrContent
+        -> FParser Primitive 
+        -> (InitialValueAttr -> Primitive)  
+        -> Primitive
+        -> FParser (Maybe Primitive)
+
 -- Every possible case for the Int32 field.
 -- pm: No, Nullable: No
-intF2P (Int32Field (FieldInstrContent _ (Just Mandatory) Nothing)) 
-    = Just <$> int32
+intF2P' (FieldInstrContent _ (Just Mandatory) Nothing) intParser ivToInt _
+    = Just <$> intParser
 
 -- pm: No, Nullable: Yes
-intF2P (Int32Field (FieldInstrContent _ (Just Optional) Nothing)) 
-    = intNULL 
-        <|> (Just . minusOne) <$> int32
+intF2P' (FieldInstrContent _ (Just Optional) Nothing) intParser ivToInt _
+    = nULL 
+    <|> (Just . minusOne) <$> intParser
 
 -- pm: No, Nullable: No
-intF2P (Int32Field (FieldInstrContent _ (Just Mandatory) (Just (Constant iv)))) 
-    = return $ Just(ivToInt32 iv)
+intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Constant iv))) intParser ivToInt _
+    = return $ Just(ivToInt iv)
 
 -- pm: Yes, Nullable: No
-intF2P (Int32Field (FieldInstrContent _ (Just Mandatory) (Just (Default (Just iv))))) 
-    = (notPresent *> (return $ Just(ivToInt32 iv))) 
-        <|> Just <$> int32
+intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Default (Just iv)))) intParser ivToInt _
+    = (notPresent *> (return $ Just(ivToInt iv))) 
+        <|> Just <$> intParser
 
 -- pm: Yes, Nullable: No
-intF2P (Int32Field (FieldInstrContent _ (Just Mandatory) (Just (Default (Nothing))))) 
+intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Default (Nothing)))) _ _ _
     = error "S5: No initial value given for mandatory default delta operator."
 
 -- pm: Yes, Nullable: No
-intF2P (Int32Field (FieldInstrContent fname (Just Mandatory) (Just (Copy oc)))) 
+intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Copy oc))) intParser ivToInt _
     =   (notPresent *>  
             (let 
                 h (Assigned p) = Just p
                 h (Undefined) = h' oc
-                    where   h' (OpContext _ _ (Just iv)) = Just (ivToInt32 iv)
+                    where   h' (OpContext _ _ (Just iv)) = Just (ivToInt iv)
                             h' (OpContext _ _ Nothing) = error "D5: No initial value in operator context\
                                                               \for mandatory copy operator with undefined dictionary\
                                                               \value."
@@ -121,15 +135,15 @@ intF2P (Int32Field (FieldInstrContent fname (Just Mandatory) (Just (Copy oc))))
                 (prevValue fname oc) >>= return . h 
             )
         )
-        <|> Just <$> ((Assigned <$> int32) >>= updatePrevValue fname oc)
+        <|> Just <$> ((Assigned <$> intParser) >>= updatePrevValue fname oc)
                             
 -- pm: Yes, Nullable: No
-intF2P (Int32Field (FieldInstrContent fname (Just Mandatory) (Just (Increment oc)))) 
+intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Increment oc))) intParser ivToInt _
     = (notPresent *> 
         (let 
             h (Assigned p) = Just <$> (return (Assigned(inc p)) >>= (updatePrevValue fname oc))
             h (Undefined) = h' oc
-                where   h' (OpContext _ _ (Just iv)) = Just <$> (return (Assigned(ivToInt32 iv)) >>= (updatePrevValue fname oc))
+                where   h' (OpContext _ _ (Just iv)) = Just <$> (return (Assigned(ivToInt iv)) >>= (updatePrevValue fname oc))
                         h' (OpContext _ _ Nothing) = error "D5: No initial value in operator context given for\
                                                         \mandatory increment operator with undefined dictionary\
                                                         \value."
@@ -138,74 +152,92 @@ intF2P (Int32Field (FieldInstrContent fname (Just Mandatory) (Just (Increment oc
             (prevValue fname oc) >>= h
         )
     )
-    <|> Just <$> ((Assigned <$> (int32)) >>= updatePrevValue fname oc)
+    <|> Just <$> ((Assigned <$> (intParser)) >>= updatePrevValue fname oc)
 
 
 -- pm: No, Nullable: No
-intF2P (Int32Field (FieldInstrContent fname (Just Mandatory) (Just (Delta oc)))) 
+intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Delta oc))) intParser ivToInt defaultBaseValue
     = let   baseValue (Assigned p) = p
             baseValue (Undefined) = h oc
-                where   h (OpContext _ _ (Just iv)) = ivToInt32 iv
-                        h (OpContext _ _ Nothing) = defaultBaseValue (Int32 undefined)
+                where   h (OpContext _ _ (Just iv)) = ivToInt iv
+                        h (OpContext _ _ Nothing) = defaultBaseValue
             baseValue (Empty) = error "D6: previous value in a delta operator can not be empty."
 
     in
         do 
-            i <- int32
+            i <- intParser
             Just <$> (((flip  delta) i) <$> (baseValue <$> (prevValue fname oc)))
     
 -- pm: -, Nullable: -
-intF2P (Int32Field (FieldInstrContent _ (Just Mandatory) (Just (Tail iv)))) 
+intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Tail iv))) _ _ _
     = error "S2: Tail operator can not be applied on an integer type field." 
 
--- pm: No, Nullable: No
--- TODO: there is a difference in the CME specification and the FAST specification.
--- CME: pm: Yes.
--- FAST: pm: No.
-intF2P (Int32Field (FieldInstrContent _ (Just Optional) (Just (Constant iv)))) 
-    = return $ Just(ivToInt32 iv)
+-- pm: Yes, Nullable: No
+intF2P' (FieldInstrContent _ (Just Optional) (Just (Constant iv))) _ ivToInt _
+    = (notPresent *> (return $ Just $ (ivToInt iv)))
+    <|> (return $ Just(ivToInt iv))
 
 -- pm: Yes, Nullable: Yes
-intF2P (Int32Field (FieldInstrContent _ (Just Optional) (Just (Default (Just iv)))))
-    = (notPresent *> (return $ Just $ (ivToInt32 iv)))
-    <|> (Just <$> int32)
+intF2P' (FieldInstrContent _ (Just Optional) (Just (Default (Just iv)))) intParser ivToInt _
+    = (notPresent *> (return $ Just $ (ivToInt iv)))
+    <|> nULL
+    <|> (Just <$> intParser)
 
 -- pm: Yes, Nullable: Yes
-intF2P (Int32Field (FieldInstrContent _ (Just Optional) (Just (Default Nothing))))
+intF2P' (FieldInstrContent _ (Just Optional) (Just (Default Nothing))) intParser _ _
     = (notPresent *> return Nothing)
-    <|> (Just <$> int32)
+    <|> nULL
+    <|> (Just <$> intParser)
 
 -- pm: Yes, Nullable: Yes
-intF2P (Int32Field (FieldInstrContent fname (Just Optional) (Just (Copy oc)))) 
+intF2P' (FieldInstrContent fname (Just Optional) (Just (Copy oc))) intParser ivToInt _
     =   (notPresent *>  
             (let 
                 h (Assigned p) = return $ Just p
                 h (Undefined) = h' oc
-                    where   h' (OpContext _ _ (Just iv)) = return $ Just (ivToInt32 iv)
+                    where   h' (OpContext _ _ (Just iv)) = return $ Just (ivToInt iv)
                             h' (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> (return $ Nothing)  
                 h (Empty) = return $ Nothing
             in 
                 (prevValue fname oc) >>= h 
             )
         )
-        <|> Just <$> (Assigned <$> int32 >>= updatePrevValue fname oc)
+        <|> nULL <* updatePrevValue fname oc Empty
+        <|> Just <$> (Assigned <$> intParser >>= updatePrevValue fname oc)
 
 -- pm: Yes, Nullable: Yes
-intF2P (Int32Field (FieldInstrContent _ (Just Optional) (Just (Increment iv)))) = undefined
+intF2P' (FieldInstrContent fname (Just Optional) (Just (Increment oc))) intParser ivToInt _
+    = (notPresent *> 
+        (let 
+            h (Assigned p) = Just <$> (return (Assigned(inc p)) >>= (updatePrevValue fname oc))
+            h (Undefined) = h' oc
+                where   h' (OpContext _ _ (Just iv)) = Just <$> (return (Assigned(ivToInt iv)) >>= (updatePrevValue fname oc))
+                        h' (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> (return $ Nothing) 
+            h (Empty) = return Nothing
+         in
+            (prevValue fname oc) >>= h
+        )
+    )
+    <|> nULL <* updatePrevValue fname oc Empty
+    <|> Just <$> ((Assigned <$> (intParser)) >>= updatePrevValue fname oc)
 
 -- pm: No, Nullable: Yes
-intF2P (Int32Field (FieldInstrContent _ (Just Optional) (Just (Delta iv)))) = undefined
+intF2P' (FieldInstrContent fname (Just Optional) (Just (Delta oc))) intParser ivToInt defaultBaseValue
+    = nULL
+    <|> let     baseValue (Assigned p) = p
+                baseValue (Undefined) = h oc
+                    where   h (OpContext _ _ (Just iv)) = ivToInt iv
+                            h (OpContext _ _ Nothing) = defaultBaseValue
+                baseValue (Empty) = error "D6: previous value in a delta operator can not be empty."
+
+        in
+            do 
+                i <- intParser
+                Just <$> (((flip  delta) i) <$> (baseValue <$> (prevValue fname oc)))
 
 -- pm: -, Nullable: -
-intF2P (Int32Field (FieldInstrContent _ (Just Optional) (Just (Tail iv)))) 
+intF2P' (FieldInstrContent _ (Just Optional) (Just (Tail iv))) _ _ _
     = error "S2: Tail operator can not be applied on an integer type field." 
-
--- Every possible case for the UInt32 field.
-intF2P (UInt32Field (FieldInstrContent _ (Just Mandatory) Nothing)) = fmap Just uint32
--- Every possible case for the Int64 field.
-intF2P (Int64Field (FieldInstrContent _ (Just Mandatory) Nothing)) = fmap Just int64
--- Every possible case for the UInt64 field.
-intF2P (UInt64Field (FieldInstrContent _ (Just Mandatory) Nothing)) = fmap Just uint64
 
 -- |Maps an decimal field to its parser.
 decF2P::DecimalField -> FParser (Maybe Primitive)
@@ -231,12 +263,6 @@ seqF2P = undefined
 groupF2P::Group -> FParser (Maybe Primitive)
 groupF2P = undefined
 
--- *Conversions from initial values.
-
--- |Convert an initial value to an Int32.
-ivToInt32::InitialValueAttr -> Primitive
-ivToInt32 = undefined 
-
 -- *Previous value related functions.
 
 -- |Get previous value.
@@ -256,10 +282,10 @@ notPresent = do
             True -> fail "Presence bit set."
             False -> return Nothing
 
--- |NULL parser for integer fields.
-intNULL::FParser (Maybe Primitive)
-intNULL = lift intNull'
-    where intNull' = do 
+-- |nULL parser for integer fields.
+nULL::FParser (Maybe Primitive)
+nULL = lift nULL'
+    where nULL' = do 
             char (w2c 0x80)
             return Nothing
 

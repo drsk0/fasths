@@ -269,16 +269,33 @@ delta (UInt32 b) (UInt32 p) = UInt32 (checkRange ui32Range (b + p))
 delta (UInt64 b) (UInt64 p) = UInt64 (checkRange ui64Range (b + p))
 delta _ _ = undefined
 
--- |Maps types to default base values.
-defaultBaseValue::Primitive -> Primitive
-defaultBaseValue (Int32 _) = Int32 0 
-defaultBaseValue (Int64 _) = Int64 0
-defaultBaseValue (UInt32 _) = UInt32 0 
-defaultBaseValue (UInt64 _) = UInt64 0
-defaultBaseValue (Decimal) = Decimal
-defaultBaseValue (Ascii _) = Ascii ""
-defaultBaseValue (Unicode _) = Unicode ""
-defaultBaseValue (Bytevector _) = Bytevector B.empty
+-- |Default base value for Int32.
+dfbInt32::Primitive
+dfbInt32 = Int32 0
+
+-- |Default base value for UInt32.
+dfbUInt32::Primitive
+dfbUInt32 = UInt32 0
+
+-- |Default base value for Int64.
+dfbInt64::Primitive
+dfbInt64 = Int64 0
+
+-- |Default base value for UInt64.
+dfbUInt64::Primitive
+dfbUInt64 = UInt64 0
+
+-- |Default base value for ascii string.
+dfbAscii::Primitive
+dfbAscii = Ascii ""
+
+-- |Default base value for unicode string.
+dfbUnicode::Primitive
+dfbUnicode = Unicode ""
+
+-- |Default base value for Bytevector.
+dfbBytevector::Primitive
+dfbBytevector = Bytevector B.empty
 
 -- |Increment an integer in an increment operator.
 inc::Primitive -> Primitive
@@ -292,7 +309,25 @@ inc (UInt64 i) | i == (snd ui64Range) = UInt64 $ fst ui64Range
 inc (UInt64 i) = UInt64(i + 1)
 inc _ = error "S2: Impossible to increment an non-integer type field."
 
--- Helper functions
+-- *Conversions from initial values.
+
+-- |Convert an initial value to an Int32.
+ivToInt32::InitialValueAttr -> Primitive
+ivToInt32 = undefined 
+
+-- |Convert an initial value to an UInt32
+ivToUInt32::InitialValueAttr -> Primitive
+ivToUInt32 = undefined 
+
+-- |Convert an initial value to an Int64
+ivToInt64::InitialValueAttr -> Primitive
+ivToInt64= undefined 
+
+-- |Convert an initial value to an UInt64
+ivToUInt64::InitialValueAttr -> Primitive
+ivToUInt64= undefined 
+
+-- *Helper functions
 
 -- |Check wether a value is in a given range.
 checkRange::(Int,Int) -> Int -> Int
