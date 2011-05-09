@@ -22,6 +22,9 @@ i64Range = (-9223372036854775808, 9223372036854775807)
 ui64Range::(Int,Int)
 ui64Range = (0,18446744073709551615)
 
+decExpRange::(Int,Int)
+decExpRange = (-63,63)
+
 -- |Some basic types, renamed for readability.
 type UnicodeString = String
 type AsciiString = String
@@ -38,7 +41,7 @@ data Primitive = Int32 Int
                     |UInt64 Int
                     |Ascii AsciiString
                     |Unicode UnicodeString
-                    |Decimal
+                    |Decimal {exponent::Primitive, mantissa::Primitive}
                     |Bytevector B.ByteString
 
 -- |The default namespace.
@@ -190,8 +193,8 @@ data FieldOp = Constant InitialValueAttr
  
 -- |The decimal field operator consists of two standart operators.
 data DecFieldOp = DecFieldOp {
-    exponent    ::FieldOp,
-    mantissa    ::FieldOp
+    do_exponent    ::FieldOp,
+    do_mantissa    ::FieldOp
     }
 
 -- |Dictionary consists of a name and a list of key value pairs.

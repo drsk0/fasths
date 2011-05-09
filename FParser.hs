@@ -95,6 +95,10 @@ intF2P'::FieldInstrContent
         -> FParser (Maybe Primitive)
 
 -- Every possible case for the Int32 field.
+
+-- if the presence attribute is not specified, it is mandatory.
+intF2P' (FieldInstrContent fname Nothing maybe_op) intParser ivToInt defaultBaseValue 
+    = intF2P' (FieldInstrContent fname (Just Mandatory) maybe_op) intParser ivToInt defaultBaseValue
 -- pm: No, Nullable: No
 intF2P' (FieldInstrContent _ (Just Mandatory) Nothing) intParser ivToInt _
     = Just <$> intParser
@@ -238,7 +242,25 @@ intF2P' (FieldInstrContent _ (Just Optional) (Just (Tail iv))) _ _ _
 
 -- |Maps an decimal field to its parser.
 decF2P::DecimalField -> FParser (Maybe Primitive)
-decF2P = undefined
+-- If the presence attribute is not specified, the field is considered mandatory.
+decF2P (DecimalField fname Nothing either_op) 
+    = decF2P (DecimalField fname (Just Mandatory) either_op)
+decF2P (DecimalField _ (Just Mandatory) (Left (Constant iv))) = undefined
+decF2P (DecimalField _ (Just Mandatory) (Left (Default Nothing))) = undefined
+decF2P (DecimalField _ (Just Mandatory) (Left (Default (Just iv)))) = undefined
+decF2P (DecimalField _ (Just Mandatory) (Left (Copy oc))) = undefined
+decF2P (DecimalField _ (Just Mandatory) (Left (Increment oc))) = undefined
+decF2P (DecimalField _ (Just Mandatory) (Left (Delta oc))) = undefined
+decF2P (DecimalField _ (Just Mandatory) (Left (Tail oc))) = undefined
+decF2P (DecimalField _ (Just Optional) (Left (Constant iv))) = undefined
+decF2P (DecimalField _ (Just Optional) (Left (Default Nothing))) = undefined
+decF2P (DecimalField _ (Just Optional) (Left (Default (Just iv)))) = undefined
+decF2P (DecimalField _ (Just Optional) (Left (Copy oc))) = undefined
+decF2P (DecimalField _ (Just Optional) (Left (Increment oc))) = undefined
+decF2P (DecimalField _ (Just Optional) (Left (Delta oc))) = undefined
+decF2P (DecimalField _ (Just Optional) (Left (Tail oc))) = undefined
+decF2P (DecimalField _ (Just Mandatory) (Right dop)) = undefined
+decF2P (DecimalField _ (Just Optional) (Right dop)) = undefined
 
 -- |Maps an ascii field to its parser.
 asciiStrF2P::AsciiStringField -> FParser (Maybe Primitive)
