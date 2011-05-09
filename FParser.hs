@@ -20,9 +20,6 @@ data FState = FState {
     pm  ::[Bool]
     } deriving (Show)
 
-updateFState::FState -> FState
-updateFState = undefined
-
 data OrderBook = OrderBook
 
 type FParser a = StateT FState Parser a
@@ -282,7 +279,7 @@ notPresent = do
             True -> fail "Presence bit set."
             False -> return Nothing
 
--- |nULL parser for integer fields.
+-- |nULL parser.
 nULL::FParser (Maybe Primitive)
 nULL = lift nULL'
     where nULL' = do 

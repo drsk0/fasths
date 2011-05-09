@@ -211,10 +211,10 @@ data OpContext = OpContext {
 
 -- |Dictionary attribute. Three predefined dictionaries are "template", "type" 
 -- and "global".
-data DictionaryAttr = TemplateDict
-                        |TypeDict
-                        |GlobalDict
-                        |UserDict String
+data DictionaryAttr = TemplateDict Dictionary
+                        |TypeDict Dictionary
+                        |GlobalDict Dictionary
+                        |UserDict String Dictionary
 
 -- |nsKey attribute.
 data NsKey = NsKey {
