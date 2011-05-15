@@ -175,7 +175,7 @@ intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Tail iv))) _ _ _
 
 -- pm: Yes, Nullable: No
 intF2P' (FieldInstrContent _ (Just Optional) (Just (Constant iv))) _ ivToInt _
-    = (notPresent *> (return $ Just $ (ivToInt iv)))
+    = (notPresent *> (return $ Nothing))
     <|> (return $ Just(ivToInt iv))
 
 -- pm: Yes, Nullable: Yes
@@ -297,15 +297,82 @@ decF2P (DecimalField fname (Just Mandatory) (Left (Delta oc)))
 decF2P (DecimalField _ (Just Mandatory) (Left (Tail oc))) 
     = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields." 
 
-decF2P (DecimalField _ (Just Optional) (Left (Constant iv))) = undefined
-decF2P (DecimalField _ (Just Optional) (Left (Default Nothing))) = undefined
-decF2P (DecimalField _ (Just Optional) (Left (Default (Just iv)))) = undefined
-decF2P (DecimalField _ (Just Optional) (Left (Copy oc))) = undefined
-decF2P (DecimalField _ (Just Optional) (Left (Increment oc))) = undefined
-decF2P (DecimalField _ (Just Optional) (Left (Delta oc))) = undefined
-decF2P (DecimalField _ (Just Optional) (Left (Tail oc))) = undefined
-decF2P (DecimalField _ (Just Mandatory) (Right dop)) = undefined
-decF2P (DecimalField _ (Just Optional) (Right dop)) = undefined
+-- pm: Yes, Nullable: No
+decF2P (DecimalField _ (Just Optional) (Left (Constant iv))) 
+    = (notPresent *> (return $ Nothing))
+    <|> (return $ Just(ivToDec iv))
+
+-- pm: Yes, Nullable: Yes
+decF2P (DecimalField _ (Just Optional) (Left (Default Nothing))) 
+    = (notPresent *> return Nothing)
+    <|> nULL
+    <|> (Just <$> dec)
+
+-- pm: Yes, Nullable: Yes
+decF2P (DecimalField _ (Just Optional) (Left (Default (Just iv)))) 
+    = (notPresent *> (return $ Just $ (ivToDec iv)))
+    <|> nULL
+    <|> (Just <$> dec)
+
+-- pm: Yes, Nullable: Yes
+decF2P (DecimalField fname (Just Optional) (Left (Copy oc))) 
+    =   (notPresent *>  
+            (let 
+                h (Assigned p) = return $ Just p
+                h (Undefined) = h' oc
+                    where   h' (OpContext _ _ (Just iv)) = return $ Just (ivToDec iv)
+                            h' (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> (return $ Nothing)  
+                h (Empty) = return $ Nothing
+            in 
+                (prevValue fname oc) >>= h 
+            )
+        )
+        <|> nULL <* updatePrevValue fname oc Empty
+        <|> Just <$> (Assigned <$> dec >>= updatePrevValue fname oc)
+
+-- pm: Yes, Nullable: Yes
+decF2P (DecimalField fname (Just Optional) (Left (Increment oc))) 
+    = error "S2: Increment operator is applicable only to integer fields."
+
+-- pm: No, Nullable: Yes
+decF2P (DecimalField fname (Just Optional) (Left (Delta oc))) 
+    = nULL
+    <|> let     baseValue (Assigned p) = p
+                baseValue (Undefined) = h oc
+                    where   h (OpContext _ _ (Just iv)) = ivToDec iv
+                            h (OpContext _ _ Nothing) = dfbDecimal
+                baseValue (Empty) = error "D6: previous value in a delta operator can not be empty."
+
+        in
+            do 
+                d <- dec
+                Just <$> (((flip  delta) d) <$> (baseValue <$> (prevValue fname oc)))
+
+-- pm: No, Nullable: Yes
+decF2P (DecimalField _ (Just Optional) (Left (Tail oc))) 
+    = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields." 
+
+-- Both operators are handled individually as mandatory operators.
+-- TODO: the fname's for exponent and mantissa need to be changed!
+decF2P (DecimalField fname (Just Mandatory) (Right (DecFieldOp ex_op ma_op))) 
+    = do 
+        e <- (intF2P (Int32Field (FieldInstrContent (fname) (Just Mandatory) (Just ex_op))))
+        m <- (intF2P (Int64Field (FieldInstrContent (fname) (Just Mandatory) (Just ma_op))))
+        return (h e m) where   
+                        h Nothing _ = Nothing
+                        h _ Nothing = Nothing
+                        h (Just (Int32 e')) (Just m') = Just (Decimal (Int32 (checkRange decExpRange e')) m')
+
+-- The exponent field is considered as an optional field, the mantissa field as a mandatory field.
+-- TODO: the fname's for exponent and mantissa need to be changed!
+decF2P (DecimalField fname (Just Optional) (Right (DecFieldOp ex_op ma_op)))
+    = do 
+        e <- (intF2P (Int32Field (FieldInstrContent fname (Just Optional) (Just ex_op))))
+        m <- (intF2P (Int64Field (FieldInstrContent fname (Just Mandatory) (Just ma_op))))
+        return (h e m) where   
+                        h Nothing _ = Nothing
+                        h _ Nothing = Nothing
+                        h (Just (Int32 e')) (Just m') = Just (Decimal (Int32 (checkRange decExpRange e')) m')
 
 -- |Maps an ascii field to its parser.
 asciiStrF2P::AsciiStringField -> FParser (Maybe Primitive)
