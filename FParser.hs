@@ -353,22 +353,30 @@ decF2P (DecimalField _ (Just Optional) (Left (Tail oc)))
     = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields." 
 
 -- Both operators are handled individually as mandatory operators.
--- TODO: the fname's for exponent and mantissa need to be changed!
 decF2P (DecimalField fname (Just Mandatory) (Right (DecFieldOp ex_op ma_op))) 
-    = do 
-        e <- (intF2P (Int32Field (FieldInstrContent (fname) (Just Mandatory) (Just ex_op))))
-        m <- (intF2P (Int64Field (FieldInstrContent (fname) (Just Mandatory) (Just ma_op))))
+-- make fname unique for exponent and mantissa
+    = let fname' = NsName (NameAttr(n ++ ['e'])) ns id  
+                where (NsName (NameAttr n) ns id) = fname 
+          fname'' = NsName (NameAttr(n ++ ['m'])) ns id 
+                where (NsName (NameAttr n) ns id) = fname 
+    in do 
+        e <- (intF2P (Int32Field (FieldInstrContent (fname') (Just Mandatory) (Just ex_op))))
+        m <- (intF2P (Int64Field (FieldInstrContent (fname'') (Just Mandatory) (Just ma_op))))
         return (h e m) where   
                         h Nothing _ = Nothing
                         h _ Nothing = Nothing
                         h (Just (Int32 e')) (Just m') = Just (Decimal (Int32 (checkRange decExpRange e')) m')
 
 -- The exponent field is considered as an optional field, the mantissa field as a mandatory field.
--- TODO: the fname's for exponent and mantissa need to be changed!
 decF2P (DecimalField fname (Just Optional) (Right (DecFieldOp ex_op ma_op)))
-    = do 
-        e <- (intF2P (Int32Field (FieldInstrContent fname (Just Optional) (Just ex_op))))
-        m <- (intF2P (Int64Field (FieldInstrContent fname (Just Mandatory) (Just ma_op))))
+-- make fname unique for exponent and mantissa
+    = let fname' = NsName (NameAttr(n ++ ['e'])) ns id  
+                where (NsName (NameAttr n) ns id) = fname 
+          fname'' = NsName (NameAttr(n ++ ['m'])) ns id 
+                where (NsName (NameAttr n) ns id) = fname 
+    in do 
+        e <- (intF2P (Int32Field (FieldInstrContent fname' (Just Optional) (Just ex_op))))
+        m <- (intF2P (Int64Field (FieldInstrContent fname'' (Just Mandatory) (Just ma_op))))
         return (h e m) where   
                         h Nothing _ = Nothing
                         h _ Nothing = Nothing
@@ -376,7 +384,24 @@ decF2P (DecimalField fname (Just Optional) (Right (DecFieldOp ex_op ma_op)))
 
 -- |Maps an ascii field to its parser.
 asciiStrF2P::AsciiStringField -> FParser (Maybe Primitive)
-asciiStrF2P = undefined
+-- If the presence attribute is not specified, its a mandatory field.
+asciiStrF2P (AsciiStringField(FieldInstrContent fname Nothing maybe_op))
+    = asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) maybe_op))
+-- pm: No, Nullable: No
+asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) Nothing))
+    = Just <$> asciiString
+-- pm: No, Nullable: Yes
+asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Optional) Nothing))
+    = undefined
+-- pm: No, Nullable: No
+asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Constant iv)))) 
+    = undefined
+asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))))= undefined
+asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Default (Just iv)))))= undefined
+asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Copy oc))))= undefined
+asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Increment oc))))= undefined
+asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Delta oc))))= undefined
+asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Tail oc))))= undefined
 
 -- |Maps an unicode field to its parser.
 unicodeF2P::UnicodeStringField -> FParser (Maybe Primitive)
