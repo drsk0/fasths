@@ -1,6 +1,7 @@
 -- |A FAST protocoll implementation.
 module FAST where
 
+import Prelude hiding (exponent)
 import qualified Data.ByteString as B
 import Data.Ix (inRange)
 
@@ -266,10 +267,13 @@ reset (Dictionary name xs) = Dictionary name (map h xs)
 -- |Delta operation.
 delta::Primitive -> Primitive -> Primitive
 -- delta for integer types is just addition.
-delta (Int32 b) (Int32 p) = Int32 (checkRange i32Range (b + p))
-delta (Int64 b) (Int64 p) = Int64 (checkRange i64Range (b + p))
-delta (UInt32 b) (UInt32 p) = UInt32 (checkRange ui32Range (b + p))
-delta (UInt64 b) (UInt64 p) = UInt64 (checkRange ui64Range (b + p))
+delta (Int32 b) (Int32 d) = Int32 (checkRange i32Range (b + d))
+delta (Int64 b) (Int64 d) = Int64 (checkRange i64Range (b + d))
+delta (UInt32 b) (UInt32 d) = UInt32 (checkRange ui32Range (b + d))
+delta (UInt64 b) (UInt64 d) = UInt64 (checkRange ui64Range (b + d))
+-- delta for decimal type is addition of exponents and mantissas.
+delta (Decimal (Int32 b) (Int64 b')) (Decimal (Int32 d) (Int64 d')) 
+    = Decimal (Int32 (checkRange decExpRange (b + d))) (Int64 (checkRange i64Range (b' + d')))
 delta _ _ = undefined
 
 -- |Default base value for Int32.
@@ -300,6 +304,10 @@ dfbUnicode = Unicode ""
 dfbBytevector::Primitive
 dfbBytevector = Bytevector B.empty
 
+-- |Default base value for Decimal.
+dfbDecimal::Primitive
+dfbDecimal = Decimal (Int32 0) (Int64 0)
+
 -- |Increment an integer in an increment operator.
 inc::Primitive -> Primitive
 inc (Int32 i) | i == (snd i32Range) = Int32 $ fst i32Range
@@ -324,12 +332,14 @@ ivToUInt32 = undefined
 
 -- |Convert an initial value to an Int64
 ivToInt64::InitialValueAttr -> Primitive
-ivToInt64= undefined 
+ivToInt64 = undefined 
 
 -- |Convert an initial value to an UInt64
 ivToUInt64::InitialValueAttr -> Primitive
-ivToUInt64= undefined 
+ivToUInt64 = undefined 
 
+ivToDec::InitialValueAttr -> Primitive
+ivToDec = undefined
 -- *Helper functions
 
 -- |Check wether a value is in a given range.

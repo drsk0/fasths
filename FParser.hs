@@ -26,15 +26,15 @@ type FParser a = StateT FState Parser a
 
 -- |Make StateT s m an instance of Applicative, such that FParser becomes an
 -- instance of Applicative.
-instance (Monad m) => Applicative (StateT s m) where
-    pure = return
-    (<*>) = ap
+{-instance (Monad m) => Applicative (StateT s m) where-}
+    {-pure = return-}
+    {-(<*>) = ap-}
 
--- |Make StateT s p an instance of Alternative, such that FParser becomes an 
--- instance of Alternative.
-instance (Alternative p, MonadPlus p) => Alternative (StateT s p) where
-    empty = lift $ empty
-    (<|>) = mplus
+{--- |Make StateT s p an instance of Alternative, such that FParser becomes an -}
+{--- instance of Alternative.-}
+{-instance (Alternative p, MonadPlus p) => Alternative (StateT s p) where-}
+    {-empty = lift $ empty-}
+    {-(<|>) = mplus-}
 
 parseFStream::B.ByteString -> [OrderBook]
 parseFStream str = undefined
@@ -119,7 +119,7 @@ intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Default (Just iv)))) intPar
 
 -- pm: Yes, Nullable: No
 intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Default (Nothing)))) _ _ _
-    = error "S5: No initial value given for mandatory default delta operator."
+    = error "S5: No initial value given for mandatory default operator."
 
 -- pm: Yes, Nullable: No
 intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Copy oc))) intParser ivToInt _
@@ -242,16 +242,61 @@ intF2P' (FieldInstrContent _ (Just Optional) (Just (Tail iv))) _ _ _
 
 -- |Maps an decimal field to its parser.
 decF2P::DecimalField -> FParser (Maybe Primitive)
+
 -- If the presence attribute is not specified, the field is considered mandatory.
 decF2P (DecimalField fname Nothing either_op) 
     = decF2P (DecimalField fname (Just Mandatory) either_op)
-decF2P (DecimalField _ (Just Mandatory) (Left (Constant iv))) = undefined
-decF2P (DecimalField _ (Just Mandatory) (Left (Default Nothing))) = undefined
-decF2P (DecimalField _ (Just Mandatory) (Left (Default (Just iv)))) = undefined
-decF2P (DecimalField _ (Just Mandatory) (Left (Copy oc))) = undefined
-decF2P (DecimalField _ (Just Mandatory) (Left (Increment oc))) = undefined
-decF2P (DecimalField _ (Just Mandatory) (Left (Delta oc))) = undefined
-decF2P (DecimalField _ (Just Mandatory) (Left (Tail oc))) = undefined
+
+-- pm: No, Nullable: No
+decF2P (DecimalField _ (Just Mandatory) (Left (Constant iv))) 
+    = return $ Just(ivToDec iv)
+
+-- pm: Yes, Nullable: No
+decF2P (DecimalField _ (Just Mandatory) (Left (Default Nothing))) 
+    = error "S5: No initial value given for mandatory default operator."
+
+-- pm: Yes, Nullable: No
+decF2P (DecimalField _ (Just Mandatory) (Left (Default (Just iv)))) 
+    = (notPresent *> (return $ Just(ivToDec iv)))
+    <|> (Just <$> dec)
+
+-- pm: Yes, Nullable: No
+decF2P (DecimalField fname (Just Mandatory) (Left (Copy oc))) 
+    =   (notPresent *>  
+            (let 
+                h (Assigned p) = Just p
+                h (Undefined) = h' oc
+                    where   h' (OpContext _ _ (Just iv)) = Just (ivToDec iv)
+                            h' (OpContext _ _ Nothing) = error "D5: No initial value in operator context\
+                                                              \for mandatory copy operator with undefined dictionary\
+                                                              \value."
+                h (Empty) = error "D6: Previous value is empty in madatory copy operator."
+            in 
+                (prevValue fname oc) >>= return . h 
+            )
+        )
+        <|> Just <$> ((Assigned <$> dec) >>= updatePrevValue fname oc)
+
+-- pm: Yes, Nullable: No
+decF2P (DecimalField fname (Just Mandatory) (Left (Increment oc))) 
+    = error "S2:Increment operator is only applicable to integer fields." 
+
+-- pm: No, Nullable: No
+decF2P (DecimalField fname (Just Mandatory) (Left (Delta oc))) 
+    = let   baseValue (Assigned p) = p
+            baseValue (Undefined) = h oc
+                where   h (OpContext _ _ (Just iv)) = ivToDec iv
+                        h (OpContext _ _ Nothing) = dfbDecimal
+            baseValue (Empty) = error "D6: previous value in a delta operator can not be empty."
+
+    in
+        do 
+            d <- dec
+            Just <$> (((flip  delta) d) <$> (baseValue <$> (prevValue fname oc)))
+
+decF2P (DecimalField _ (Just Mandatory) (Left (Tail oc))) 
+    = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields." 
+
 decF2P (DecimalField _ (Just Optional) (Left (Constant iv))) = undefined
 decF2P (DecimalField _ (Just Optional) (Left (Default Nothing))) = undefined
 decF2P (DecimalField _ (Just Optional) (Left (Default (Just iv)))) = undefined
@@ -329,6 +374,11 @@ int32 = do
     return $ Int32 x
     where p = checkBounds i32Range uint
     
+exint32::FParser Primitive 
+exint32 = do 
+    x <- p
+    return $ Int32 x
+    where p = checkBounds decExpRange uint
 
 -- |Int64 field parser.
 int64::FParser Primitive
@@ -336,6 +386,12 @@ int64 = do
     x <- p
     return $ Int64 x
     where p = checkBounds i64Range uint
+-- |Dec field parser.
+dec::FParser Primitive
+dec = do
+        e <- exint32 
+        m <- int64 
+        return (Decimal e m)
 
 -- |Unsigned integer parser, doesn't check for bounds.
 -- TODO: should we check for R6 errors, i.e overlong fields?
