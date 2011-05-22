@@ -287,6 +287,17 @@ delta (Ascii str) (AsciiDelta (Int32 l) (Ascii str')) | (l < 0) = Ascii (str' ++
 delta (Ascii str) (AsciiDelta (Int32 l) (Ascii str')) | (l >= 0) = Ascii (str'' ++ str') where str'' = take ((length str) - l) str
 delta _ _ = undefined
 
+-- |Tail data. Not present in the FAT specification.
+data Tail = AsciiTail Primitive
+            |UnicodeTail Primitive
+            |ByteVectorTail Primitive
+
+-- |Tail operation.
+tail::Primitive -> Tail -> Primitive
+tail (Ascii str) (AsciiTail (Ascii str')) | (length str' < length str) = Ascii ((take (length str - length str') str) ++ str')
+tail _ _ = undefined
+
+
 -- |Default base value for Int32.
 dfbInt32::Primitive
 dfbInt32 = Int32 0

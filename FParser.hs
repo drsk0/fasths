@@ -1,12 +1,12 @@
 -- |A FAST protocoll parser.
 module FParser where 
 
-import Prelude hiding (take)
+import Prelude as P
 import qualified Data.ByteString as B
 import qualified Codec.Binary.UTF8.String as U
 import Data.ByteString.Internal (c2w, w2c)
 import Data.Char (ord)
-import Data.Attoparsec.Char8
+import Data.Attoparsec.Char8 as A
 import Control.Monad.State
 import Control.Applicative 
 import Data.Bits
@@ -60,7 +60,7 @@ stopBitSet c = testBit (c2w c) 8
 takeTill'::(Char -> Bool) -> Parser B.ByteString
 takeTill' f = do
     str <- takeTill f
-    c <- take 1
+    c <- A.take 1
     return (str `B.append` c)
 
 previousValue::NsName -> OpContext -> Primitive
@@ -410,8 +410,8 @@ asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) Nothing))
 asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Optional) Nothing))
     = nULL
     <|> do
-        str <- asciiString
-        return $ Just (rmPreamble' str)
+        str <- asciiString'
+        return $ Just str
 
 -- pm: No, Nullable: No
 asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Constant iv)))) 
@@ -473,13 +473,86 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Ta
                     in
                         (prevValue fname oc) >>= baseValue)
 
--- |Maps an unicode field to its parser.
-unicodeF2P::UnicodeStringField -> FParser (Maybe Primitive)
-unicodeF2P = undefined
+-- pm: Yes, Nullable: No
+asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Constant iv)))) 
+    = (notPresent *> (return $ Nothing))
+    <|> (return $ Just(ivToAscii iv))
+
+-- pm: Yes, Nullable: Yes
+asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Default Nothing))))
+    = (notPresent *> (return Nothing))
+    <|> nULL
+    <|> (Just <$> asciiString')
+
+-- pm: Yes, Nullable: Yes
+asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Default (Just iv)))))
+    = notPresent *> (return $ Just (ivToAscii iv))
+    <|> nULL
+    <|> Just <$> asciiString'
+
+-- pm: Yes, Nullable: Yes
+asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Copy oc))))
+    =   (notPresent *>  
+            (let 
+                h (Assigned p) = return (Just p)
+                h (Undefined) = h' oc
+                    where   h' (OpContext _ _ (Just iv)) = return (Just (ivToAscii iv))
+                            h' (OpContext _ _ Nothing) = (updatePrevValue fname oc Empty) >> return Nothing
+                h (Empty) = return Nothing
+            in 
+                (prevValue fname oc) >>= h 
+            )
+        )
+        <|> (nULL *> (updatePrevValue fname oc Empty >> return Nothing))
+        <|> Just <$> ((Assigned <$> asciiString') >>= updatePrevValue fname oc)
+
+-- pm: Yes, Nullable: Yes
+asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Increment oc))))
+    = error "S2:Increment operator is only applicable to integer fields." 
+
+-- pm: No, Nullable: Yes
+asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Delta oc))))
+    = nULL 
+    <|> (let    baseValue (Assigned p) = p
+                baseValue (Undefined) = h oc
+                    where   h (OpContext _ _ (Just iv)) = ivToAscii iv
+                            h (OpContext _ _ Nothing) = dfbAscii
+                baseValue (Empty) = error "D6: previous value in a delta operator can not be empty."
+        in
+            do 
+                str <- asciiDelta'
+                Just <$> (((flip  delta) str) <$> (baseValue <$> (prevValue fname oc))))
+
+-- pm: Yes, Nullable: Yes
+asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Tail oc))))
+    = notPresent *> (let    baseValue (Assigned p) = return (Just p)
+                            baseValue (Undefined) = h oc
+                                where   h (OpContext _ _ (Just iv)) = Just <$> (updatePrevValue fname oc (Assigned (ivToAscii iv)))
+                                        h (OpContext _ _ Nothing) = (updatePrevValue fname oc Empty) >> return Nothing
+                            baseValue (Empty) = return Nothing
+                    in
+                        (prevValue fname oc) >>= baseValue)
+    <|> (nULL >> updatePrevValue fname oc Empty >> return Nothing)
+    <|> let baseValue (Assigned p) = return p
+            baseValue (Undefined) = h oc
+                where   h (OpContext _ _ (Just iv)) = return (ivToAscii iv)
+                        h (OpContext _ _ Nothing) = return dfbAscii
+            baseValue (Empty) = h oc
+                where   h (OpContext _ _ (Just iv)) = return (ivToAscii iv)
+                        h (OpContext _ _ Nothing) = return dfbAscii
+        in
+            do
+                bv <- (prevValue fname oc) >>= baseValue
+                t <- asciiString'
+                return (Just (bv `FAST.tail` (AsciiTail t)))
 
 -- |Maps a bytevector field to its parser.
 bytevecF2P::ByteVectorField -> FParser (Maybe Primitive)
 bytevecF2P = undefined
+
+-- |Maps an unicode field to its parser.
+unicodeF2P::UnicodeStringField -> FParser (Maybe Primitive)
+unicodeF2P = undefined
 
 -- |Maps a sequence field to its parser.
 seqF2P::Sequence -> FParser (Maybe Primitive)
@@ -502,7 +575,7 @@ prevValue = undefined
 notPresent::FParser (Maybe Primitive)
 notPresent = do
     s <- get
-    put (FState (tail (pm s)))
+    put (FState (P.tail (pm s)))
     let pmap = pm s in
         case head pmap of
             True -> fail "Presence bit set."
@@ -585,12 +658,19 @@ checkBounds r p = do
     x <- p
     return (checkRange r x)
 
--- |ASCII string field parser.
+-- |ASCII string field parser, non-Nullable.
 asciiString::FParser Primitive
 asciiString = do
     bs <- anySBEEntity
     let bs' = (B.init bs) `B.append` B.singleton (clearBit (B.last bs) 8) in
-        return (Ascii (map w2c (B.unpack bs')))
+        return (rmPreamble(Ascii (map w2c (B.unpack bs'))))
+
+-- |ASCII string field parser, Nullable.
+asciiString'::FParser Primitive
+asciiString' = do
+    bs <- anySBEEntity
+    let bs' = (B.init bs) `B.append` B.singleton (clearBit (B.last bs) 8) in
+        return (rmPreamble'(Ascii ((map w2c (B.unpack bs')))))
     
 -- |Remove Preamble of an ascii string, non-Nullable situation.
 rmPreamble::Primitive -> Primitive
@@ -624,7 +704,7 @@ bvSize = lift bvSize'
 -- |Bytevector field parser. The first argument is the size of the bytevector.
 byteVector::Int -> FParser Primitive
 byteVector c = lift p
-    where p = fmap Bytevector (take c)
+    where p = fmap Bytevector (A.take c)
 
 -- * Delta parsers.
 -- |Int32 delta parser.
@@ -647,11 +727,17 @@ uint64Delta = UInt64Delta <$> int64
 decDelta::FParser Delta
 decDelta = DecimalDelta <$> dec
 
--- |Ascii delta parser.
+-- |Ascii delta parser, non-Nullable.
 asciiDelta::FParser Delta
 asciiDelta = do
                l <- int32
                str <- asciiString
+               return (AsciiDelta l str)
+-- |Ascii delta parser, Nullable.
+asciiDelta'::FParser Delta
+asciiDelta' = do
+               l <- int32
+               str <- asciiString'
                return (AsciiDelta l str)
 
 -- *Helper functions.
