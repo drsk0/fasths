@@ -548,7 +548,41 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Tai
 
 -- |Maps a bytevector field to its parser.
 bytevecF2P::ByteVectorField -> FParser (Maybe Primitive)
-bytevecF2P = undefined
+bytevecF2P (ByteVectorField (FieldInstrContent fname Nothing _ ) length) 
+    = undefined
+bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) Nothing ) length) 
+    = undefined
+bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) Nothing ) length) 
+    = undefined
+bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just (Constant iv))) length) 
+    = undefined
+bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Constant iv))) length) 
+    = undefined
+bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Default Nothing))) length) 
+    = undefined
+bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Default (Just iv)))) length) 
+    = undefined
+bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Default Nothing))) length) 
+    = undefined
+bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Default (Just iv)))) length) 
+    = undefined
+bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Copy oc))) length) 
+    = undefined
+bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Copy oc))) length) 
+    = undefined
+bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Increment oc))) length) 
+    = undefined
+bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Increment oc))) length) 
+    = undefined
+bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Delta oc))) length) 
+    = undefined
+bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Delta oc))) length) 
+    = undefined
+bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail oc))) length) 
+    = undefined
+bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Tail oc))) length) 
+    = undefined
+
 
 -- |Maps an unicode field to its parser.
 unicodeF2P::UnicodeStringField -> FParser (Maybe Primitive)
