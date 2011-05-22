@@ -264,16 +264,27 @@ reset::Dictionary -> Dictionary
 reset (Dictionary name xs) = Dictionary name (map h xs)
     where h (key, value) = (key, Undefined)
 
+-- |Delta data. Not in the FAST specification.
+data Delta = Int32Delta Primitive
+            |UInt32Delta Primitive
+            |Int64Delta Primitive
+            |UInt64Delta Primitive
+            |DecimalDelta Primitive
+            |AsciiDelta Primitive Primitive
+            |ByteVectorDelta Primitive Primitive
+
 -- |Delta operation.
-delta::Primitive -> Primitive -> Primitive
+delta::Primitive -> Delta -> Primitive
 -- delta for integer types is just addition.
-delta (Int32 b) (Int32 d) = Int32 (checkRange i32Range (b + d))
-delta (Int64 b) (Int64 d) = Int64 (checkRange i64Range (b + d))
-delta (UInt32 b) (UInt32 d) = UInt32 (checkRange ui32Range (b + d))
-delta (UInt64 b) (UInt64 d) = UInt64 (checkRange ui64Range (b + d))
+delta (Int32 b) (Int32Delta (Int32 d)) = Int32 (checkRange i32Range (b + d))
+delta (Int64 b) (Int64Delta (Int64 d)) = Int64 (checkRange i64Range (b + d))
+delta (UInt32 b) (UInt32Delta (Int32 d)) = UInt32 (checkRange ui32Range (b + d))
+delta (UInt64 b) (UInt64Delta (Int64 d)) = UInt64 (checkRange ui64Range (b + d))
 -- delta for decimal type is addition of exponents and mantissas.
-delta (Decimal (Int32 b) (Int64 b')) (Decimal (Int32 d) (Int64 d')) 
+delta (Decimal (Int32 b) (Int64 b')) (DecimalDelta (Decimal (Int32 d) (Int64 d'))) 
     = Decimal (Int32 (checkRange decExpRange (b + d))) (Int64 (checkRange i64Range (b' + d')))
+delta (Ascii str) (AsciiDelta (Int32 l) (Ascii str')) | (l < 0) = Ascii (str' ++ str'') where str'' = drop (l + 1) str
+delta (Ascii str) (AsciiDelta (Int32 l) (Ascii str')) | (l >= 0) = Ascii (str'' ++ str') where str'' = take ((length str) - l) str
 delta _ _ = undefined
 
 -- |Default base value for Int32.
@@ -340,6 +351,9 @@ ivToUInt64 = undefined
 
 ivToDec::InitialValueAttr -> Primitive
 ivToDec = undefined
+
+ivToAscii::InitialValueAttr -> Primitive
+ivToAscii = undefined
 -- *Helper functions
 
 -- |Check wether a value is in a given range.

@@ -80,9 +80,14 @@ fieldToParser (Grp g) = groupF2P g
 
 -- |Maps an integer field to its parser.
 intF2P::IntegerField -> FParser (Maybe Primitive)
+-- Delta operator needs delta parser!
+intF2P (Int32Field fic@(FieldInstrContent _ _ (Just (Delta _)))) = intF2P'' fic int32Delta ivToUInt32 dfbUInt32
 intF2P (Int32Field fic) = intF2P' fic int32 ivToInt32 dfbInt32
+intF2P (UInt32Field fic@(FieldInstrContent _ _ (Just (Delta _)))) = intF2P'' fic int32Delta ivToUInt32 dfbUInt32
 intF2P (UInt32Field fic) = intF2P' fic uint32 ivToUInt32 dfbUInt32
+intF2P (Int64Field fic@(FieldInstrContent _ _ (Just (Delta _)))) = intF2P'' fic int64Delta ivToUInt32 dfbUInt32
 intF2P (Int64Field fic) = intF2P' fic int64 ivToInt64 dfbInt64
+intF2P (UInt64Field fic@(FieldInstrContent _ _ (Just (Delta _)))) = intF2P'' fic int64Delta ivToUInt32 dfbUInt32
 intF2P (UInt64Field fic) = intF2P' fic uint64 ivToUInt64 dfbUInt64
 
 -- |Maps an integer field to a parser, given the field instruction context, the 
@@ -156,18 +161,6 @@ intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Increment oc))) intPars
     <|> Just <$> ((Assigned <$> (intParser)) >>= updatePrevValue fname oc)
 
 
--- pm: No, Nullable: No
-intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Delta oc))) intParser ivToInt defaultBaseValue
-    = let   baseValue (Assigned p) = p
-            baseValue (Undefined) = h oc
-                where   h (OpContext _ _ (Just iv)) = ivToInt iv
-                        h (OpContext _ _ Nothing) = defaultBaseValue
-            baseValue (Empty) = error "D6: previous value in a delta operator can not be empty."
-
-    in
-        do 
-            i <- intParser
-            Just <$> (((flip  delta) i) <$> (baseValue <$> (prevValue fname oc)))
     
 -- pm: -, Nullable: -
 intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Tail iv))) _ _ _
@@ -222,8 +215,35 @@ intF2P' (FieldInstrContent fname (Just Optional) (Just (Increment oc))) intParse
     <|> nULL <* updatePrevValue fname oc Empty
     <|> Just <$> ((Assigned <$> (intParser)) >>= updatePrevValue fname oc)
 
+
+-- pm: -, Nullable: -
+intF2P' (FieldInstrContent _ (Just Optional) (Just (Tail iv))) _ _ _
+    = error "S2: Tail operator can not be applied on an integer type field." 
+
+-- |Maps an integer field with delta operator to a parser, given the field instruction context, the 
+-- integer delta parser,a function to convert initial values to the given 
+-- primitive and a default base value for default operators.
+intF2P''::FieldInstrContent
+        -> FParser Delta
+        -> (InitialValueAttr -> Primitive)  
+        -> Primitive
+        -> FParser (Maybe Primitive)
+
+-- pm: No, Nullable: No
+intF2P'' (FieldInstrContent fname (Just Mandatory) (Just (Delta oc))) deltaParser ivToInt defaultBaseValue
+    = let   baseValue (Assigned p) = p
+            baseValue (Undefined) = h oc
+                where   h (OpContext _ _ (Just iv)) = ivToInt iv
+                        h (OpContext _ _ Nothing) = defaultBaseValue
+            baseValue (Empty) = error "D6: previous value in a delta operator can not be empty."
+
+    in
+        do 
+            d <- deltaParser
+            Just <$> (((flip  delta) d) <$> (baseValue <$> (prevValue fname oc)))
+
 -- pm: No, Nullable: Yes
-intF2P' (FieldInstrContent fname (Just Optional) (Just (Delta oc))) intParser ivToInt defaultBaseValue
+intF2P'' (FieldInstrContent fname (Just Optional) (Just (Delta oc))) deltaParser ivToInt defaultBaseValue
     = nULL
     <|> let     baseValue (Assigned p) = p
                 baseValue (Undefined) = h oc
@@ -233,12 +253,8 @@ intF2P' (FieldInstrContent fname (Just Optional) (Just (Delta oc))) intParser iv
 
         in
             do 
-                i <- intParser
-                Just <$> (((flip  delta) i) <$> (baseValue <$> (prevValue fname oc)))
-
--- pm: -, Nullable: -
-intF2P' (FieldInstrContent _ (Just Optional) (Just (Tail iv))) _ _ _
-    = error "S2: Tail operator can not be applied on an integer type field." 
+                d <- deltaParser
+                Just <$> (((flip  delta) d) <$> (baseValue <$> (prevValue fname oc)))
 
 -- |Maps an decimal field to its parser.
 decF2P::DecimalField -> FParser (Maybe Primitive)
@@ -291,7 +307,7 @@ decF2P (DecimalField fname (Just Mandatory) (Left (Delta oc)))
 
     in
         do 
-            d <- dec
+            d <- decDelta
             Just <$> (((flip  delta) d) <$> (baseValue <$> (prevValue fname oc)))
 
 decF2P (DecimalField _ (Just Mandatory) (Left (Tail oc))) 
@@ -345,7 +361,7 @@ decF2P (DecimalField fname (Just Optional) (Left (Delta oc)))
 
         in
             do 
-                d <- dec
+                d <- decDelta
                 Just <$> (((flip  delta) d) <$> (baseValue <$> (prevValue fname oc)))
 
 -- pm: No, Nullable: Yes
@@ -392,16 +408,70 @@ asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) Nothing))
     = Just <$> asciiString
 -- pm: No, Nullable: Yes
 asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Optional) Nothing))
-    = undefined
+    = nULL
+    <|> do
+        str <- asciiString
+        return $ Just (rmPreamble' str)
+
 -- pm: No, Nullable: No
 asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Constant iv)))) 
-    = undefined
-asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))))= undefined
-asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Default (Just iv)))))= undefined
-asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Copy oc))))= undefined
-asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Increment oc))))= undefined
-asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Delta oc))))= undefined
-asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Tail oc))))= undefined
+    = return $ Just (ivToAscii iv)
+
+-- pm: Yes, Nullable: No
+asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))))
+    = error "S5: No initial value given for mandatory default operator."
+
+-- pm: Yes, Nullable: No
+asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Default (Just iv)))))
+    = notPresent *> (return $ Just (ivToAscii iv))
+    <|> do
+        str <- asciiString 
+        return $ Just (rmPreamble str)
+
+-- pm: Yes, Nullable: No
+asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Copy oc))))
+    =   (notPresent *>  
+            (let 
+                h (Assigned p) = Just p
+                h (Undefined) = h' oc
+                    where   h' (OpContext _ _ (Just iv)) = Just (ivToAscii iv)
+                            h' (OpContext _ _ Nothing) = error "D5: No initial value in operator context\
+                                                              \for mandatory copy operator with undefined dictionary\
+                                                              \value."
+                h (Empty) = error "D6: Previous value is empty in madatory copy operator."
+            in 
+                (prevValue fname oc) >>= return . h 
+            )
+        )
+        <|> Just <$> ((Assigned <$> asciiString) >>= updatePrevValue fname oc)
+
+-- pm: Yes, Nullable: No
+asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Increment oc))))
+    = error "S2:Increment operator is only applicable to integer fields." 
+
+-- pm: No, Nullable: No
+asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Delta oc))))
+    = let   baseValue (Assigned p) = p
+            baseValue (Undefined) = h oc
+                where   h (OpContext _ _ (Just iv)) = ivToAscii iv
+                        h (OpContext _ _ Nothing) = dfbAscii
+            baseValue (Empty) = error "D6: previous value in a delta operator can not be empty."
+    in
+        do 
+            str <- asciiDelta
+            Just <$> (((flip  delta) str) <$> (baseValue <$> (prevValue fname oc)))
+
+-- pm: Yes, Nullable: No
+asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Tail oc))))
+    = notPresent *> (let    baseValue (Assigned p) = return (Just p)
+                            baseValue (Undefined) = h oc
+                                where   h (OpContext _ _ (Just iv)) = Just <$> (updatePrevValue fname oc (Assigned (ivToAscii iv)))
+                                        h (OpContext _ _ Nothing) = error "D6: No initial value in operator context\
+                                                              \for mandatory tail operator with undefined dictionary\
+                                                              \value."
+                            baseValue (Empty) = error "D6: previous value in a tail operator can not be empty."
+                    in
+                        (prevValue fname oc) >>= baseValue)
 
 -- |Maps an unicode field to its parser.
 unicodeF2P::UnicodeStringField -> FParser (Maybe Primitive)
@@ -522,6 +592,20 @@ asciiString = do
     let bs' = (B.init bs) `B.append` B.singleton (clearBit (B.last bs) 8) in
         return (Ascii (map w2c (B.unpack bs')))
     
+-- |Remove Preamble of an ascii string, non-Nullable situation.
+rmPreamble::Primitive -> Primitive
+rmPreamble (Ascii ['\0']) = Ascii []
+rmPreamble (Ascii ['\0', '\0']) = Ascii ['\0']
+-- overlong string.
+rmPreamble (Ascii x) = Ascii (filter (\c -> (c /= '\0')) x)
+
+-- |Remove preamble of an ascii string, NULLable situation.
+rmPreamble'::Primitive -> Primitive
+rmPreamble' (Ascii ['\0','\0']) = Ascii []
+rmPreamble' (Ascii ['\0','\0','\0']) = Ascii ['\0']
+-- overlong string.
+rmPreamble' (Ascii x) = Ascii (filter (\c -> (c /= '\0')) x)
+
 -- |Unicode string field parser. The first argument is the size of the string.
 unicodeString::Int -> FParser Primitive
 unicodeString c = do
@@ -542,7 +626,34 @@ byteVector::Int -> FParser Primitive
 byteVector c = lift p
     where p = fmap Bytevector (take c)
 
---
+-- * Delta parsers.
+-- |Int32 delta parser.
+int32Delta::FParser Delta
+int32Delta = Int32Delta <$> int32
+
+-- |Uint32 delta parser.
+uint32Delta::FParser Delta
+uint32Delta = UInt32Delta <$> int32
+
+-- |Int64 delta parser.
+int64Delta::FParser Delta
+int64Delta = Int64Delta <$> int64
+
+-- |UInt64 delta parser.
+uint64Delta::FParser Delta
+uint64Delta = UInt64Delta <$> int64
+
+-- |Decimal delta parser.
+decDelta::FParser Delta
+decDelta = DecimalDelta <$> dec
+
+-- |Ascii delta parser.
+asciiDelta::FParser Delta
+asciiDelta = do
+               l <- int32
+               str <- asciiString
+               return (AsciiDelta l str)
+
 -- *Helper functions.
 --
 
