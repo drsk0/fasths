@@ -432,18 +432,18 @@ asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Defaul
 asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Copy oc))))
     =   (notPresent *>  
             (let 
-                h (Assigned p) = Just p
+                h (Assigned p) = return (Just p)
                 h (Undefined) = h' oc
-                    where   h' (OpContext _ _ (Just iv)) = Just (ivToAscii iv)
+                    where   h' (OpContext _ _ (Just iv)) =  Just <$> (updatePrevValue fname oc (Assigned (ivToAscii iv)))
                             h' (OpContext _ _ Nothing) = error "D5: No initial value in operator context\
                                                               \for mandatory copy operator with undefined dictionary\
                                                               \value."
                 h (Empty) = error "D6: Previous value is empty in madatory copy operator."
             in 
-                (prevValue fname oc) >>= return . h 
+                (prevValue fname oc) >>= h 
             )
         )
-        <|> Just <$> ((Assigned <$> asciiString) >>= updatePrevValue fname oc)
+        <|> Just <$> ((Assigned <$> byteVector) >>= updatePrevValue fname oc)
 
 -- pm: Yes, Nullable: No
 asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Increment oc))))
@@ -496,7 +496,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Cop
             (let 
                 h (Assigned p) = return (Just p)
                 h (Undefined) = h' oc
-                    where   h' (OpContext _ _ (Just iv)) = return (Just (ivToAscii iv))
+                    where   h' (OpContext _ _ (Just iv)) = Just <$> (updatePrevValue fname oc (Assigned (ivToAscii iv)))
                             h' (OpContext _ _ Nothing) = (updatePrevValue fname oc Empty) >> return Nothing
                 h (Empty) = return Nothing
             in 
@@ -548,38 +548,143 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Tai
 
 -- |Maps a bytevector field to its parser.
 bytevecF2P::ByteVectorField -> FParser (Maybe Primitive)
-bytevecF2P (ByteVectorField (FieldInstrContent fname Nothing _ ) length) 
-    = undefined
+bytevecF2P (ByteVectorField (FieldInstrContent fname Nothing maybe_op) length) 
+    = bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) maybe_op) length)
+
+-- pm: No, Nullable: No
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) Nothing ) length) 
-    = undefined
+    = Just <$> byteVector
+
+-- pm: No, Nullable: Yes
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) Nothing ) length) 
-    = undefined
+    = nULL
+    <|> do
+        bv <- byteVector
+        return $ Just bv
+
+-- pm: No, Nullable: No
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just (Constant iv))) length) 
-    = undefined
+    = return $ Just (ivToByteVector iv)
+
+-- pm: Yes, Nullable: No
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Constant iv))) length) 
-    = undefined
+    = (notPresent *> (return $ Nothing))
+    <|> (return $ Just(ivToByteVector iv))
+
+-- pm: Yes, Nullable: No
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Default Nothing))) length) 
-    = undefined
+    = error "S5: No initial value given for mandatory default operator."
+
+-- pm: Yes, Nullable: No
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Default (Just iv)))) length) 
-    = undefined
+    = notPresent *> (return $ Just (ivToByteVector iv))
+    <|> do
+        bv <- byteVector
+        return $ Just (bv)
+
+-- pm: Yes, Nullable: Yes
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Default Nothing))) length) 
-    = undefined
+    = (notPresent *> (return Nothing))
+    <|> nULL
+    <|> (Just <$> byteVector)
+
+-- pm: Yes, Nullable: Yes
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Default (Just iv)))) length) 
-    = undefined
+    = notPresent *> (return $ Just (ivToByteVector iv))
+    <|> nULL
+    <|> Just <$> byteVector
+
+-- pm: Yes, Nullable: No
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Copy oc))) length) 
-    = undefined
+    =   (notPresent *>  
+            (let 
+                h (Assigned p) = return (Just p)
+                h (Undefined) = h' oc
+                    where   h' (OpContext _ _ (Just iv)) =  Just <$> (updatePrevValue fname oc (Assigned (ivToByteVector iv)))
+                            h' (OpContext _ _ Nothing) = error "D5: No initial value in operator context\
+                                                              \for mandatory copy operator with undefined dictionary\
+                                                              \value."
+                h (Empty) = error "D6: Previous value is empty in madatory copy operator."
+            in 
+                (prevValue fname oc) >>= h 
+            )
+        )
+        <|> Just <$> ((Assigned <$> byteVector) >>= updatePrevValue fname oc)
+
+-- pm: Yes, Nullable: Yes
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Copy oc))) length) 
-    = undefined
+    =   (notPresent *>  
+            (let 
+                h (Assigned p) = return (Just p)
+                h (Undefined) = h' oc
+                    where   h' (OpContext _ _ (Just iv)) = Just <$> (updatePrevValue fname oc (Assigned (ivToByteVector iv)))
+                            h' (OpContext _ _ Nothing) = (updatePrevValue fname oc Empty) >> return Nothing
+                h (Empty) = return Nothing
+            in 
+                (prevValue fname oc) >>= h 
+            )
+        )
+        <|> (nULL *> (updatePrevValue fname oc Empty >> return Nothing))
+        <|> Just <$> ((Assigned <$> byteVector) >>= updatePrevValue fname oc)
+
+-- pm: Yes, Nullable: No
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Increment oc))) length) 
-    = undefined
+    = error "S2:Increment operator is only applicable to integer fields." 
+-- pm: Yes, Nullable: Yes
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Increment oc))) length) 
-    = undefined
+    = error "S2:Increment operator is only applicable to integer fields." 
+
+-- pm: No, Nullable: No
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Delta oc))) length) 
-    = undefined
+    = let   baseValue (Assigned p) = p
+            baseValue (Undefined) = h oc
+                where   h (OpContext _ _ (Just iv)) = ivToByteVector iv
+                        h (OpContext _ _ Nothing) = dfbByteVector
+            baseValue (Empty) = error "D6: previous value in a delta operator can not be empty."
+    in
+        do 
+            bv <- byteVectorDelta
+            Just <$> (((flip  delta) bv) <$> (baseValue <$> (prevValue fname oc)))
+
+-- pm: No, Nullable: Yes
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Delta oc))) length) 
-    = undefined
+    = nULL
+    <|> (let    baseValue (Assigned p) = p
+                baseValue (Undefined) = h oc
+                    where   h (OpContext _ _ (Just iv)) = ivToByteVector iv
+                            h (OpContext _ _ Nothing) = dfbByteVector
+                baseValue (Empty) = error "D6: previous value in a delta operator can not be empty."
+        in
+            do 
+                bv <- byteVectorDelta
+                Just <$> (((flip  delta) bv) <$> (baseValue <$> (prevValue fname oc))))
+
+-- pm: Yes, Nullable: No
+asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Tail oc))))
+    = notPresent *> (let    baseValue (Assigned p) = return (Just p)
+                            baseValue (Undefined) = h oc
+                                where   h (OpContext _ _ (Just iv)) = Just <$> (updatePrevValue fname oc (Assigned (ivToAscii iv)))
+                                        h (OpContext _ _ Nothing) = error "D6: No initial value in operator context\
+                                                              \for mandatory tail operator with undefined dictionary\
+                                                              \value."
+                            baseValue (Empty) = error "D6: previous value in a mandatory tail operator can not be empty."
+                    in
+                        (prevValue fname oc) >>= baseValue)
+    <|> (let    baseValue (Assigned p) = return (Just p)
+                            baseValue (Undefined) = h oc
+                                where   h (OpContext _ _ (Just iv)) = ivToAscii iv
+                                        h (OpContext _ _ Nothing) = dfbBytevector
+
+                            baseValue (Empty) = h oc
+                                where   h (OpContext _ _ (Just iv)) = ivToAscii iv
+                                        h (OpContext _ _ Nothing) = dfbBytevector
+                    in
+                        (prevValue fname oc) >>= baseValue)
+
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail oc))) length) 
     = undefined
+
+
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Tail oc))) length) 
     = undefined
 
@@ -721,23 +826,23 @@ rmPreamble' (Ascii ['\0','\0','\0']) = Ascii ['\0']
 rmPreamble' (Ascii x) = Ascii (filter (\c -> (c /= '\0')) x)
 
 -- |Unicode string field parser. The first argument is the size of the string.
-unicodeString::Int -> FParser Primitive
-unicodeString c = do
-    bv <- byteVector c
+unicodeString::FParser Primitive
+unicodeString = do
+    bv <- byteVector
     let (Bytevector bs) = bv in
         return (Unicode (U.decode (B.unpack bs)))
     
 -- |Bytevector size preamble parser.
--- TODO: is it simply a byte or itself a uint32 field?
-bvSize::FParser Int
-bvSize = lift bvSize'
-    where bvSize' = do
-            c <- anyChar
-            return (ord c)
+-- TODO: Is it a UInt32 or a UInt64?
+byteVector::FParser Primitive
+byteVector = do
+    s <- uint32
+    let (UInt32 s') = s in
+            byteVector' s'
 
 -- |Bytevector field parser. The first argument is the size of the bytevector.
-byteVector::Int -> FParser Primitive
-byteVector c = lift p
+byteVector'::Int -> FParser Primitive
+byteVector' c = lift p
     where p = fmap Bytevector (A.take c)
 
 -- * Delta parsers.
@@ -773,6 +878,13 @@ asciiDelta' = do
                l <- int32
                str <- asciiString'
                return (AsciiDelta l str)
+
+-- |Bytevector delta parser.
+byteVectorDelta::FParser Delta
+byteVectorDelta = do
+                    l <- int32
+                    bv <- byteVector
+                    return (ByteVectorDelta l bv)
 
 -- *Helper functions.
 --

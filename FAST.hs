@@ -285,6 +285,8 @@ delta (Decimal (Int32 b) (Int64 b')) (DecimalDelta (Decimal (Int32 d) (Int64 d')
     = Decimal (Int32 (checkRange decExpRange (b + d))) (Int64 (checkRange i64Range (b' + d')))
 delta (Ascii str) (AsciiDelta (Int32 l) (Ascii str')) | (l < 0) = Ascii (str' ++ str'') where str'' = drop (l + 1) str
 delta (Ascii str) (AsciiDelta (Int32 l) (Ascii str')) | (l >= 0) = Ascii (str'' ++ str') where str'' = take ((length str) - l) str
+delta (Bytevector bv) (ByteVectorDelta (Int32 l) (Bytevector bv')) | (l < 0) = Bytevector (bv'' `B.append` bv') where bv'' = B.drop (l + 1) bv
+delta (Bytevector bv) (ByteVectorDelta (Int32 l) (Bytevector bv')) | (l >= 0) = Bytevector (bv'' `B.append` bv') where bv'' = B.take ((B.length bv) - l) bv
 delta _ _ = undefined
 
 -- |Tail data. Not present in the FAT specification.
@@ -323,8 +325,8 @@ dfbUnicode::Primitive
 dfbUnicode = Unicode ""
 
 -- |Default base value for Bytevector.
-dfbBytevector::Primitive
-dfbBytevector = Bytevector B.empty
+dfbByteVector::Primitive
+dfbByteVector = Bytevector B.empty
 
 -- |Default base value for Decimal.
 dfbDecimal::Primitive
@@ -365,6 +367,9 @@ ivToDec = undefined
 
 ivToAscii::InitialValueAttr -> Primitive
 ivToAscii = undefined
+
+ivToByteVector::InitialValueAttr -> Primitive
+ivToByteVector = undefined
 -- *Helper functions
 
 -- |Check wether a value is in a given range.
