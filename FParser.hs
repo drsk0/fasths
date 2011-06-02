@@ -3,7 +3,7 @@ module FParser where
 
 import Prelude as P
 import qualified Data.ByteString as B
-import qualified Codec.Binary.UTF8.String as U
+import qualified Data.ByteString.UTF8 as U
 import Data.ByteString.Internal (c2w, w2c)
 import Data.Char (ord)
 import Data.Attoparsec.Char8 as A
@@ -469,9 +469,22 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Ta
                                         h (OpContext _ _ Nothing) = error "D6: No initial value in operator context\
                                                               \for mandatory tail operator with undefined dictionary\
                                                               \value."
-                            baseValue (Empty) = error "D6: previous value in a tail operator can not be empty."
+                            baseValue (Empty) = error "D7: previous value in a mandatory tail operator can not be empty."
                     in
                         (prevValue fname oc) >>= baseValue)
+    <|> (let    baseValue (Assigned p) = p
+                baseValue (Undefined) = h oc
+                    where   h (OpContext _ _ (Just iv)) = ivToAscii iv
+                            h (OpContext _ _ Nothing) = dfbAscii
+
+                baseValue (Empty) = h oc
+                    where   h (OpContext _ _ (Just iv)) = ivToAscii iv
+                            h (OpContext _ _ Nothing) = dfbAscii
+        in
+            do
+                pv <- (prevValue fname oc)
+                t <- asciiTail
+                return (Just((baseValue pv) `FAST.tail` t)))
 
 -- pm: Yes, Nullable: No
 asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Constant iv)))) 
@@ -660,38 +673,59 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Delta
                 Just <$> (((flip  delta) bv) <$> (baseValue <$> (prevValue fname oc))))
 
 -- pm: Yes, Nullable: No
-asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Tail oc))))
+bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail oc))) length) 
     = notPresent *> (let    baseValue (Assigned p) = return (Just p)
                             baseValue (Undefined) = h oc
-                                where   h (OpContext _ _ (Just iv)) = Just <$> (updatePrevValue fname oc (Assigned (ivToAscii iv)))
+                                where   h (OpContext _ _ (Just iv)) = Just <$> (updatePrevValue fname oc (Assigned (ivToByteVector iv)))
                                         h (OpContext _ _ Nothing) = error "D6: No initial value in operator context\
                                                               \for mandatory tail operator with undefined dictionary\
                                                               \value."
-                            baseValue (Empty) = error "D6: previous value in a mandatory tail operator can not be empty."
+                            baseValue (Empty) = error "D7: previous value in a mandatory tail operator can not be empty."
                     in
                         (prevValue fname oc) >>= baseValue)
-    <|> (let    baseValue (Assigned p) = return (Just p)
-                            baseValue (Undefined) = h oc
-                                where   h (OpContext _ _ (Just iv)) = ivToAscii iv
-                                        h (OpContext _ _ Nothing) = dfbBytevector
+    <|> (let    baseValue (Assigned p) = p
+                baseValue (Undefined) = h oc
+                    where   h (OpContext _ _ (Just iv)) = ivToByteVector iv
+                            h (OpContext _ _ Nothing) = dfbByteVector
 
-                            baseValue (Empty) = h oc
-                                where   h (OpContext _ _ (Just iv)) = ivToAscii iv
-                                        h (OpContext _ _ Nothing) = dfbBytevector
-                    in
-                        (prevValue fname oc) >>= baseValue)
+                baseValue (Empty) = h oc
+                    where   h (OpContext _ _ (Just iv)) = ivToAscii iv
+                            h (OpContext _ _ Nothing) = dfbByteVector
+        in
+            do
+                pv <- prevValue fname oc
+                t <- bytevectorTail
+                return (Just((baseValue pv) `FAST.tail` t)))
 
-bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail oc))) length) 
-    = undefined
-
-
+-- pm: Yes, Nullable: Yes
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Tail oc))) length) 
-    = undefined
-
+    = notPresent *> (let    baseValue (Assigned p) = return (Just p)
+                            baseValue (Undefined) = h oc
+                                where   h (OpContext _ _ (Just iv)) = Just <$> (updatePrevValue fname oc (Assigned (ivToByteVector iv)))
+                                        h (OpContext _ _ Nothing) = (updatePrevValue fname oc Empty) >> return Nothing
+                            baseValue (Empty) = return Nothing
+                    in
+                        (prevValue fname oc) >>= baseValue)
+    <|> (nULL >> updatePrevValue fname oc Empty >> return Nothing)
+    <|> let baseValue (Assigned p) = return p
+            baseValue (Undefined) = h oc
+                where   h (OpContext _ _ (Just iv)) = return (ivToByteVector iv)
+                        h (OpContext _ _ Nothing) = return dfbByteVector
+            baseValue (Empty) = h oc
+                where   h (OpContext _ _ (Just iv)) = return (ivToByteVector iv)
+                        h (OpContext _ _ Nothing) = return dfbByteVector
+        in
+            do
+                bv <- (prevValue fname oc) >>= baseValue
+                t <- bytevectorTail
+                return (Just (bv `FAST.tail` t))
 
 -- |Maps an unicode field to its parser.
 unicodeF2P::UnicodeStringField -> FParser (Maybe Primitive)
-unicodeF2P = undefined
+unicodeF2P (UnicodeStringField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)
+    = h <$> bytevecF2P (ByteVectorField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)
+        where   h (Just (Bytevector bv)) = Just (Unicode (U.toString bv))
+                h (Nothing) = Nothing
 
 -- |Maps a sequence field to its parser.
 seqF2P::Sequence -> FParser (Maybe Primitive)
@@ -830,7 +864,7 @@ unicodeString::FParser Primitive
 unicodeString = do
     bv <- byteVector
     let (Bytevector bs) = bv in
-        return (Unicode (U.decode (B.unpack bs)))
+        return (Unicode (U.toString bs))
     
 -- |Bytevector size preamble parser.
 -- TODO: Is it a UInt32 or a UInt64?
@@ -843,7 +877,7 @@ byteVector = do
 -- |Bytevector field parser. The first argument is the size of the bytevector.
 byteVector'::Int -> FParser Primitive
 byteVector' c = lift p
-    where p = fmap Bytevector (A.take c)
+    where p = Bytevector <$> (A.take c)
 
 -- * Delta parsers.
 -- |Int32 delta parser.
@@ -885,6 +919,19 @@ byteVectorDelta = do
                     l <- int32
                     bv <- byteVector
                     return (ByteVectorDelta l bv)
+
+-- * Tail parsers.
+-- | Ascii tail parser, non-nullable case.
+asciiTail::FParser Tail
+asciiTail = AsciiTail <$> asciiString
+
+-- | Ascii tail parser, nullable case.
+asciiTail'::FParser Tail
+asciiTail' = AsciiTail <$> asciiString'
+
+-- | Bytevector tail parser.
+bytevectorTail::FParser Tail
+bytevectorTail = ByteVectorTail <$> byteVector
 
 -- *Helper functions.
 --

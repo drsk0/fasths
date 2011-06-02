@@ -297,6 +297,7 @@ data Tail = AsciiTail Primitive
 -- |Tail operation.
 tail::Primitive -> Tail -> Primitive
 tail (Ascii str) (AsciiTail (Ascii str')) | (length str' < length str) = Ascii ((take (length str - length str') str) ++ str')
+tail (Bytevector bv) (ByteVectorTail (Bytevector bv')) = Bytevector ((B.take (B.length bv - B.length bv') bv) `B.append` bv')
 tail _ _ = undefined
 
 
