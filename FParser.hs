@@ -6,7 +6,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.UTF8 as U
 import Data.ByteString.Internal (c2w, w2c)
 import Data.Char (ord)
-import Data.Attoparsec.Char8 as A
+import qualified Data.Attoparsec.Char8 as A
 import Control.Monad.State
 import Control.Applicative 
 import Data.Bits
@@ -20,9 +20,24 @@ data FState = FState {
     pm  ::[Bool]
     } deriving (Show)
 
-data OrderBook = OrderBook
+type FParser a = StateT FState A.Parser a
 
-type FParser a = StateT FState Parser a
+data FValue = I Int
+              |S String
+              |D Double
+              |BS B.ByteString
+              |Sq Int [[(NsName, Maybe FValue)]]
+              |Gr [(NsName, Maybe FValue)]
+
+p2FValue::Primitive -> FValue
+p2FValue (Int32 i) = I i
+p2FValue (UInt32 i) = I i
+p2FValue (Int64 i) = I i
+p2FValue (UInt64 i) = I i
+p2FValue (Ascii s) = S s
+p2FValue (Unicode s) = S s
+p2FValue (Decimal (Int32 e) (Int64 m)) = D (10^e * fromIntegral m)
+p2FValue (Bytevector bs) = BS bs
 
 -- |Make StateT s m an instance of Applicative, such that FParser becomes an
 -- instance of Applicative.
@@ -35,9 +50,6 @@ type FParser a = StateT FState Parser a
 {-instance (Alternative p, MonadPlus p) => Alternative (StateT s p) where-}
     {-empty = lift $ empty-}
     {-(<|>) = mplus-}
-
-parseFStream::B.ByteString -> [OrderBook]
-parseFStream str = undefined
 
 -- |Parse PreseneceMap.
 presenceMap::FParser ()
@@ -57,24 +69,39 @@ stopBitSet::Char -> Bool
 stopBitSet c = testBit (c2w c) 8
 
 -- |Like takeTill, but takes the matching byte as well.
-takeTill'::(Char -> Bool) -> Parser B.ByteString
+takeTill'::(Char -> Bool) -> A.Parser B.ByteString
 takeTill' f = do
-    str <- takeTill f
+    str <- A.takeTill f
     c <- A.take 1
     return (str `B.append` c)
 
 previousValue::NsName -> OpContext -> Primitive
 previousValue = undefined
 
+-- |Translates a template reference into the correct template.
+tr2Template::Maybe TemplateReferenceContent -> Template
+tr2Template = undefined
+
+template2P::Template -> FParser (NsName, Maybe FValue)
+template2P = undefined
+
+-- |Maps an instruction to its corresponding parser.
+instr2P::Instruction -> FParser (NsName, Maybe FValue)
+instr2P (Instruction f) = fieldToParser f
+instr2P (TemplateReference maybe_trc) =  template2P $ tr2Template maybe_trc
+
 -- |Constructs a parser out of a field. The FParser monad has underlying type
 -- Maybe Primitive, the Nothing constructor represents a field that was not
 -- present in the stream.
-fieldToParser::Field -> FParser (Maybe Primitive)
-fieldToParser (IntField f) = intF2P f
-fieldToParser (DecField f) = decF2P f
-fieldToParser (AsciiStrField f) = asciiStrF2P f
-fieldToParser (UnicodeStrField f) = unicodeF2P f
-fieldToParser (ByteVecField f) = bytevecF2P f
+fieldToParser::Field -> FParser (NsName, Maybe FValue)
+fieldToParser (IntField f@(Int32Field (FieldInstrContent fname _ _))) = (fname, ) <$> (fmap p2FValue) <$> intF2P f
+fieldToParser (IntField f@(Int64Field (FieldInstrContent fname _ _))) = (fname, ) <$> (fmap p2FValue) <$> intF2P f
+fieldToParser (IntField f@(UInt32Field (FieldInstrContent fname _ _))) = (fname, ) <$> (fmap p2FValue) <$> intF2P f
+fieldToParser (IntField f@(UInt64Field (FieldInstrContent fname _ _))) = (fname, ) <$> (fmap p2FValue) <$> intF2P f
+fieldToParser (DecField f@(DecimalField fname _ _ )) = (fname, ) <$> (fmap p2FValue) <$> decF2P f
+fieldToParser (AsciiStrField f@(AsciiStringField(FieldInstrContent fname _ _ ))) = (fname, ) <$> (fmap p2FValue) <$> asciiStrF2P f
+fieldToParser (UnicodeStrField f@(UnicodeStringField (FieldInstrContent fname _ _ ) _ )) = (fname, ) <$> (fmap p2FValue) <$> unicodeF2P f
+fieldToParser (ByteVecField f@(ByteVectorField (FieldInstrContent fname _ _ ) _ )) = (fname, ) <$> (fmap p2FValue) <$> bytevecF2P f
 fieldToParser (Seq s) = seqF2P s
 fieldToParser (Grp g) = groupF2P g
 
@@ -371,10 +398,8 @@ decF2P (DecimalField _ (Just Optional) (Left (Tail oc)))
 -- Both operators are handled individually as mandatory operators.
 decF2P (DecimalField fname (Just Mandatory) (Right (DecFieldOp ex_op ma_op))) 
 -- make fname unique for exponent and mantissa
-    = let fname' = NsName (NameAttr(n ++ ['e'])) ns id  
-                where (NsName (NameAttr n) ns id) = fname 
-          fname'' = NsName (NameAttr(n ++ ['m'])) ns id 
-                where (NsName (NameAttr n) ns id) = fname 
+    = let fname' = uniqueFName fname "e"
+          fname'' = uniqueFName fname "m"
     in do 
         e <- (intF2P (Int32Field (FieldInstrContent (fname') (Just Mandatory) (Just ex_op))))
         m <- (intF2P (Int64Field (FieldInstrContent (fname'') (Just Mandatory) (Just ma_op))))
@@ -383,13 +408,12 @@ decF2P (DecimalField fname (Just Mandatory) (Right (DecFieldOp ex_op ma_op)))
                         h _ Nothing = Nothing
                         h (Just (Int32 e')) (Just m') = Just (Decimal (Int32 (checkRange decExpRange e')) m')
 
+
 -- The exponent field is considered as an optional field, the mantissa field as a mandatory field.
 decF2P (DecimalField fname (Just Optional) (Right (DecFieldOp ex_op ma_op)))
 -- make fname unique for exponent and mantissa
-    = let fname' = NsName (NameAttr(n ++ ['e'])) ns id  
-                where (NsName (NameAttr n) ns id) = fname 
-          fname'' = NsName (NameAttr(n ++ ['m'])) ns id 
-                where (NsName (NameAttr n) ns id) = fname 
+    = let fname' = uniqueFName fname "e"
+          fname'' = uniqueFName fname  "m"
     in do 
         e <- (intF2P (Int32Field (FieldInstrContent fname' (Just Optional) (Just ex_op))))
         m <- (intF2P (Int64Field (FieldInstrContent fname'' (Just Mandatory) (Just ma_op))))
@@ -728,11 +752,23 @@ unicodeF2P (UnicodeStringField (FieldInstrContent fname maybe_presence maybe_op)
                 h (Nothing) = Nothing
 
 -- |Maps a sequence field to its parser.
-seqF2P::Sequence -> FParser (Maybe Primitive)
-seqF2P = undefined
-
+seqF2P::Sequence -> FParser (NsName, Maybe FValue)
+seqF2P (Sequence fname maybe_presence maybe_dict maybe_typeref maybe_length instrs) 
+    = do 
+        i <- (h maybe_presence maybe_length)
+        g i
+        where   g Nothing = return (fname, Nothing)
+                g (Just (Int32 i')) = do
+                                        s <- (A.count i' (sequence (map instr2P instrs)))
+                                        return (fname, Just (Sq i' s))
+                -- get the correct parser for the length field.
+                fname' = uniqueFName fname "l" 
+                h p Nothing = intF2P (Int32Field (FieldInstrContent fname' p Nothing))
+                h p (Just (Length Nothing op)) = intF2P (Int32Field (FieldInstrContent fname' p op))
+                h p (Just (Length (Just fn) op)) = intF2P (Int32Field (FieldInstrContent fn p op))
+                
 -- |Maps a group field to its parser.
-groupF2P::Group -> FParser (Maybe Primitive)
+groupF2P::Group -> FParser (NsName, Maybe FValue)
 groupF2P = undefined
 
 -- *Previous value related functions.
@@ -758,7 +794,7 @@ notPresent = do
 nULL::FParser (Maybe Primitive)
 nULL = lift nULL'
     where nULL' = do 
-            char (w2c 0x80)
+            A.char (w2c 0x80)
             return Nothing
 
 -- |UInt32 field parser.
@@ -935,6 +971,11 @@ bytevectorTail = ByteVectorTail <$> byteVector
 
 -- *Helper functions.
 --
+
+-- |Create a unique fname out of a given one and a string.
+uniqueFName::NsName -> String -> NsName
+uniqueFName fname s = NsName (NameAttr(n ++ s)) ns id
+    where (NsName (NameAttr n) ns id) = fname
 
 -- |Update the previous value.
 updatePrevValue::NsName -> OpContext -> DictValue -> FParser Primitive
