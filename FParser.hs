@@ -769,7 +769,8 @@ seqF2P (Sequence fname maybe_presence maybe_dict maybe_typeref maybe_length inst
                 
 -- |Maps a group field to its parser.
 groupF2P::Group -> FParser (NsName, Maybe FValue)
-groupF2P = undefined
+groupF2P (Group fname maybe_presence maybe_dict maybe_typeref instrs) 
+    = (fname,) . Just . Gr <$> (sequence (map instr2P instrs))
 
 -- *Previous value related functions.
 
