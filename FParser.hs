@@ -39,71 +39,47 @@ p2FValue (Unicode s) = S s
 p2FValue (Decimal (Int32 e) (Int64 m)) = D (10^e * fromIntegral m)
 p2FValue (Bytevector bs) = BS bs
 
--- |Make StateT s m an instance of Applicative, such that FParser becomes an
--- instance of Applicative.
-{-instance (Monad m) => Applicative (StateT s m) where-}
-    {-pure = return-}
-    {-(<*>) = ap-}
-
-{--- |Make StateT s p an instance of Alternative, such that FParser becomes an -}
-{--- instance of Alternative.-}
-{-instance (Alternative p, MonadPlus p) => Alternative (StateT s p) where-}
-    {-empty = lift $ empty-}
-    {-(<|>) = mplus-}
-
--- |Parse PreseneceMap.
-presenceMap::FParser ()
-presenceMap = do
-    bs <- anySBEEntity
-    -- update state
-    put FState {pm = bsToPm bs}
-
--- |Get a Stopbit encoded entity.
-anySBEEntity::FParser B.ByteString
-anySBEEntity = lift (takeTill' stopBitSet)
-
--- |Test wether the stop bit is set of a Char. (Note: Chars are converted to
--- Word8's. 
--- TODO: Is this unsafe?
-stopBitSet::Char -> Bool
-stopBitSet c = testBit (c2w c) 8
-
--- |Like takeTill, but takes the matching byte as well.
-takeTill'::(Char -> Bool) -> A.Parser B.ByteString
-takeTill' f = do
-    str <- A.takeTill f
-    c <- A.take 1
-    return (str `B.append` c)
-
-previousValue::NsName -> OpContext -> Primitive
-previousValue = undefined
 
 -- |Translates a template reference into the correct template.
-tr2Template::Maybe TemplateReferenceContent -> Template
+tr2Template::TemplateReferenceContent -> Template
 tr2Template = undefined
 
+-- |Maps several templates to a list of corresponding parsers.
+templates2P::Templates -> [(TemplateNsName, FParser (NsName, Maybe FValue))]
+templates2P t = [(n, p) | n <- (fmap t_name (ts_templates t)), p <- (fmap template2P (ts_templates t))]
+
+-- |Maps a template to its corresponding parser.
+-- We treat a template as a group with NsName equal the TemplateNsName.
 template2P::Template -> FParser (NsName, Maybe FValue)
-template2P = undefined
+template2P t = (tname2fname (t_name t), ) <$> Just . Gr <$> sequence (map instr2P (t_instructions t))
+
+-- |Translates a TemplateNsName into a NsName. Its the same anyway.
+tname2fname::TemplateNsName -> NsName
+tname2fname (TemplateNsName n (Just (TemplateNsAttr ns)) maybe_id) = NsName n (Just (NsAttr ns)) maybe_id
+tname2fname (TemplateNsName n Nothing maybe_id) = NsName n Nothing maybe_id
 
 -- |Maps an instruction to its corresponding parser.
 instr2P::Instruction -> FParser (NsName, Maybe FValue)
-instr2P (Instruction f) = fieldToParser f
-instr2P (TemplateReference maybe_trc) =  template2P $ tr2Template maybe_trc
+instr2P (Instruction f) = field2Parser f
+-- Static template reference.
+instr2P (TemplateReference (Just trc)) =  template2P $ tr2Template trc
+-- Dynamic template reference.
+instr2P (TemplateReference Nothing) = segment'
 
 -- |Constructs a parser out of a field. The FParser monad has underlying type
 -- Maybe Primitive, the Nothing constructor represents a field that was not
 -- present in the stream.
-fieldToParser::Field -> FParser (NsName, Maybe FValue)
-fieldToParser (IntField f@(Int32Field (FieldInstrContent fname _ _))) = (fname, ) <$> (fmap p2FValue) <$> intF2P f
-fieldToParser (IntField f@(Int64Field (FieldInstrContent fname _ _))) = (fname, ) <$> (fmap p2FValue) <$> intF2P f
-fieldToParser (IntField f@(UInt32Field (FieldInstrContent fname _ _))) = (fname, ) <$> (fmap p2FValue) <$> intF2P f
-fieldToParser (IntField f@(UInt64Field (FieldInstrContent fname _ _))) = (fname, ) <$> (fmap p2FValue) <$> intF2P f
-fieldToParser (DecField f@(DecimalField fname _ _ )) = (fname, ) <$> (fmap p2FValue) <$> decF2P f
-fieldToParser (AsciiStrField f@(AsciiStringField(FieldInstrContent fname _ _ ))) = (fname, ) <$> (fmap p2FValue) <$> asciiStrF2P f
-fieldToParser (UnicodeStrField f@(UnicodeStringField (FieldInstrContent fname _ _ ) _ )) = (fname, ) <$> (fmap p2FValue) <$> unicodeF2P f
-fieldToParser (ByteVecField f@(ByteVectorField (FieldInstrContent fname _ _ ) _ )) = (fname, ) <$> (fmap p2FValue) <$> bytevecF2P f
-fieldToParser (Seq s) = seqF2P s
-fieldToParser (Grp g) = groupF2P g
+field2Parser::Field -> FParser (NsName, Maybe FValue)
+field2Parser (IntField f@(Int32Field (FieldInstrContent fname _ _))) = (fname, ) <$> (fmap p2FValue) <$> intF2P f
+field2Parser (IntField f@(Int64Field (FieldInstrContent fname _ _))) = (fname, ) <$> (fmap p2FValue) <$> intF2P f
+field2Parser (IntField f@(UInt32Field (FieldInstrContent fname _ _))) = (fname, ) <$> (fmap p2FValue) <$> intF2P f
+field2Parser (IntField f@(UInt64Field (FieldInstrContent fname _ _))) = (fname, ) <$> (fmap p2FValue) <$> intF2P f
+field2Parser (DecField f@(DecimalField fname _ _ )) = (fname, ) <$> (fmap p2FValue) <$> decF2P f
+field2Parser (AsciiStrField f@(AsciiStringField(FieldInstrContent fname _ _ ))) = (fname, ) <$> (fmap p2FValue) <$> asciiStrF2P f
+field2Parser (UnicodeStrField f@(UnicodeStringField (FieldInstrContent fname _ _ ) _ )) = (fname, ) <$> (fmap p2FValue) <$> unicodeF2P f
+field2Parser (ByteVecField f@(ByteVectorField (FieldInstrContent fname _ _ ) _ )) = (fname, ) <$> (fmap p2FValue) <$> bytevecF2P f
+field2Parser (Seq s) = seqF2P s
+field2Parser (Grp g) = groupF2P g
 
 -- |Maps an integer field to its parser.
 intF2P::IntegerField -> FParser (Maybe Primitive)
@@ -759,7 +735,7 @@ seqF2P (Sequence fname maybe_presence maybe_dict maybe_typeref maybe_length inst
         g i
         where   g Nothing = return (fname, Nothing)
                 g (Just (Int32 i')) = do
-                                        s <- (A.count i' (sequence (map instr2P instrs)))
+                                        s <- (A.count i' ((segmentDep instrs) >> (sequence (map instr2P instrs))))
                                         return (fname, Just (Sq i' s))
                 -- get the correct parser for the length field.
                 fname' = uniqueFName fname "l" 
@@ -770,7 +746,7 @@ seqF2P (Sequence fname maybe_presence maybe_dict maybe_typeref maybe_length inst
 -- |Maps a group field to its parser.
 groupF2P::Group -> FParser (NsName, Maybe FValue)
 groupF2P (Group fname maybe_presence maybe_dict maybe_typeref instrs) 
-    = (fname,) . Just . Gr <$> (sequence (map instr2P instrs))
+    = (fname,) . Just . Gr <$> ((segmentGrp instrs)  >> sequence (map instr2P instrs))
 
 -- *Previous value related functions.
 
@@ -790,6 +766,27 @@ notPresent = do
         case head pmap of
             True -> fail "Presence bit set."
             False -> return Nothing
+
+
+-- |Parses the beginning of a new segment.
+segment::FParser ()
+segment = presenceMap
+
+-- |Parses presence map and template identifier.
+segment'::FParser (NsName, Maybe FValue)
+segment' = presenceMap >> templateIdentifier
+
+-- |Returns newSegment | id, depending on presence bit usage of a group of fields.
+segmentDep::[Instruction] -> FParser ()
+segmentDep = undefined
+
+-- |New segment depending on the instructions in the group, creates a presence map for the group.
+segmentGrp::[Instruction] -> FParser ()
+segmentGrp = undefined
+
+-- |Parses template identifier and returns the corresponding parser.
+templateIdentifier::FParser (NsName, Maybe FValue)
+templateIdentifier = undefined
 
 -- |nULL parser.
 nULL::FParser (Maybe Primitive)
@@ -1002,3 +999,29 @@ bsToPm bs = concat (map h (B.unpack bs))
     where   h::Word8 -> [Bool]
             h w = map (testBit w) [1..7] 
             
+-- |Parse PreseneceMap.
+presenceMap::FParser ()
+presenceMap = do
+    bs <- anySBEEntity
+    -- update state
+    put FState {pm = bsToPm bs}
+
+-- |Get a Stopbit encoded entity.
+anySBEEntity::FParser B.ByteString
+anySBEEntity = lift (takeTill' stopBitSet)
+
+-- |Test wether the stop bit is set of a Char. (Note: Chars are converted to
+-- Word8's. 
+-- TODO: Is this unsafe?
+stopBitSet::Char -> Bool
+stopBitSet c = testBit (c2w c) 8
+
+-- |Like takeTill, but takes the matching byte as well.
+takeTill'::(Char -> Bool) -> A.Parser B.ByteString
+takeTill' f = do
+    str <- A.takeTill f
+    c <- A.take 1
+    return (str `B.append` c)
+
+previousValue::NsName -> OpContext -> Primitive
+previousValue = undefined

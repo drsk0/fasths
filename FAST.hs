@@ -63,7 +63,7 @@ data Templates = Templates {
 
 -- |FAST template.
 data Template = Template {
-    t_fname         ::TemplateNsName,
+    t_name          ::TemplateNsName,
     t_ns            ::Maybe NsAttr,
     t_dictionary    ::Maybe DictionaryAttr,
     t_typeRef       ::Maybe TypeRef,
