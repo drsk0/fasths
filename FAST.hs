@@ -86,17 +86,6 @@ data TemplateReferenceContent = TemplateReferenceContent {
         trc_templateNs  ::Maybe TemplateNsAttr 
         }
 
--- |The instruction context. This is NOT directly a data construct mentioned 
--- in the FAST reference, but probably helpful.
-data InstructionContext = InstructionContext {
-    templates       ::Templates,
-    template        ::Template,
-    appTypes        ::[TypeRef],
-    appType         ::TypeRef,
-    dictionaries    ::[Dictionary],
-    ic_initialValue ::Primitive
-    }
-
 -- |Field Instruction content.
 data FieldInstrContent = FieldInstrContent {
     fic_fname       ::NsName,
@@ -215,10 +204,7 @@ data OpContext = OpContext {
 
 -- |Dictionary attribute. Three predefined dictionaries are "template", "type" 
 -- and "global".
-data DictionaryAttr = TemplateDict Dictionary
-                        |TypeDict Dictionary
-                        |GlobalDict Dictionary
-                        |UserDict String Dictionary
+data DictionaryAttr = DictionaryAttr String
 
 -- |nsKey attribute.
 data NsKey = NsKey {

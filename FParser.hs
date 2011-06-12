@@ -745,8 +745,11 @@ seqF2P (Sequence fname maybe_presence maybe_dict maybe_typeref maybe_length inst
                 
 -- |Maps a group field to its parser.
 groupF2P::Group -> FParser (NsName, Maybe FValue)
-groupF2P (Group fname maybe_presence maybe_dict maybe_typeref instrs) 
+groupF2P (Group fname (Just Mandatory) maybe_dict maybe_typeref instrs) 
     = (fname,) . Just . Gr <$> ((segmentGrp instrs)  >> sequence (map instr2P instrs))
+groupF2P (Group fname (Just Optional) maybe_dict maybe_typeref instrs) 
+    = notPresent *> return (fname, Nothing)
+    <|> (fname,) . Just . Gr <$> ((segmentGrp instrs)  >> sequence (map instr2P instrs))
 
 -- *Previous value related functions.
 
@@ -785,8 +788,26 @@ segmentGrp::[Instruction] -> FParser ()
 segmentGrp = undefined
 
 -- |Parses template identifier and returns the corresponding parser.
+-- template identifier is considered a mandatory copy operator UIn32 field.
+-- TODO: Check wether mandatory is right.
+-- TODO: Which token should this key have, policy?
 templateIdentifier::FParser (NsName, Maybe FValue)
-templateIdentifier = undefined
+templateIdentifier = do
+    (_ , maybe_i) <- p
+    case maybe_i of
+        (Just (I i')) -> template2P (tId2Template i') 
+        Nothing -> error "Failed to parse template identifier."
+
+    where p = field2Parser (IntField (UInt32Field (FieldInstrContent 
+                            (NsName (NameAttr "templateId") Nothing Nothing) 
+                            (Just Mandatory) 
+                            (Just (Copy (OpContext (Just (DictionaryAttr "global")) (Just (NsKey(KeyAttr (Token "tid")) Nothing)) Nothing)))
+                            )))
+
+-- |This function is not defined by the reference. The application must define this function, i.e. how 
+-- to map a UInt32 to a template.
+tId2Template::Int -> Template
+tId2Template = undefined
 
 -- |nULL parser.
 nULL::FParser (Maybe Primitive)
