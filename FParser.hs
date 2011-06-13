@@ -146,15 +146,15 @@ intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Copy oc))) intParser iv
                 (prevValue fname oc) >>= return . h 
             )
         )
-        <|> Just <$> ((Assigned <$> intParser) >>= updatePrevValue fname oc)
+        <|> (((Assigned <$> p) >>= updatePrevValue fname oc) >> Just <$> p) where p = intParser
                             
 -- pm: Yes, Nullable: No
 intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Increment oc))) intParser ivToInt _
     = (notPresent *> 
         (let 
-            h (Assigned p) = Just <$> (return (Assigned(inc p)) >>= (updatePrevValue fname oc))
+            h (Assigned p) = ((return (Assigned p')) >>= (updatePrevValue fname oc )) >> (return (Just p')) where p' = inc p
             h (Undefined) = h' oc
-                where   h' (OpContext _ _ (Just iv)) = Just <$> (return (Assigned(ivToInt iv)) >>= (updatePrevValue fname oc))
+                where   h' (OpContext _ _ (Just iv)) = ((return $ Assigned $ i) >>= (updatePrevValue fname oc)) >> (return $ Just $ i) where i =ivToInt iv
                         h' (OpContext _ _ Nothing) = error "D5: No initial value in operator context given for\
                                                         \mandatory increment operator with undefined dictionary\
                                                         \value."
@@ -163,7 +163,7 @@ intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Increment oc))) intPars
             (prevValue fname oc) >>= h
         )
     )
-    <|> Just <$> ((Assigned <$> (intParser)) >>= updatePrevValue fname oc)
+    <|> (((Assigned <$> p) >>= updatePrevValue fname oc) >> (Just <$> p)) where p = intParser
 
 
     
@@ -202,23 +202,23 @@ intF2P' (FieldInstrContent fname (Just Optional) (Just (Copy oc))) intParser ivT
             )
         )
         <|> nULL <* updatePrevValue fname oc Empty
-        <|> Just <$> (Assigned <$> intParser >>= updatePrevValue fname oc)
+        <|> ((Assigned <$> p >>= updatePrevValue fname oc) >> (Just <$> p)) where p = intParser
 
 -- pm: Yes, Nullable: Yes
 intF2P' (FieldInstrContent fname (Just Optional) (Just (Increment oc))) intParser ivToInt _
     = (notPresent *> 
         (let 
-            h (Assigned p) = Just <$> (return (Assigned(inc p)) >>= (updatePrevValue fname oc))
+            h (Assigned p) = (return (Assigned p') >>= (updatePrevValue fname oc)) >> Just <$> (return $ p') where p' = inc p
             h (Undefined) = h' oc
-                where   h' (OpContext _ _ (Just iv)) = Just <$> (return (Assigned(ivToInt iv)) >>= (updatePrevValue fname oc))
+                where   h' (OpContext _ _ (Just iv)) = ((return (Assigned $ i) >>= (updatePrevValue fname oc)) >> (Just <$> (return $ i))) where i = ivToInt iv
                         h' (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> (return $ Nothing) 
             h (Empty) = return Nothing
          in
             (prevValue fname oc) >>= h
         )
     )
-    <|> nULL <* updatePrevValue fname oc Empty
-    <|> Just <$> ((Assigned <$> (intParser)) >>= updatePrevValue fname oc)
+    <|> nULL <* (updatePrevValue fname oc Empty >> return Nothing)
+    <|> (((Assigned <$> p) >>= updatePrevValue fname oc) >> Just <$> p ) where p = intParser
 
 
 -- pm: -, Nullable: -
@@ -296,7 +296,7 @@ decF2P (DecimalField fname (Just Mandatory) (Left (Copy oc)))
                 (prevValue fname oc) >>= return . h 
             )
         )
-        <|> Just <$> ((Assigned <$> dec) >>= updatePrevValue fname oc)
+        <|> (((Assigned <$> dec) >>= updatePrevValue fname oc) >> Just <$> dec)
 
 -- pm: Yes, Nullable: No
 decF2P (DecimalField fname (Just Mandatory) (Left (Increment oc))) 
@@ -349,7 +349,7 @@ decF2P (DecimalField fname (Just Optional) (Left (Copy oc)))
             )
         )
         <|> nULL <* updatePrevValue fname oc Empty
-        <|> Just <$> (Assigned <$> dec >>= updatePrevValue fname oc)
+        <|> ((Assigned <$> dec >>= updatePrevValue fname oc) >> Just <$> dec)
 
 -- pm: Yes, Nullable: Yes
 decF2P (DecimalField fname (Just Optional) (Left (Increment oc))) 
@@ -436,7 +436,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Co
             (let 
                 h (Assigned p) = return (Just p)
                 h (Undefined) = h' oc
-                    where   h' (OpContext _ _ (Just iv)) =  Just <$> (updatePrevValue fname oc (Assigned (ivToAscii iv)))
+                    where   h' (OpContext _ _ (Just iv)) =  (updatePrevValue fname oc (Assigned i)) >> (return $ Just i) where i = ivToAscii iv
                             h' (OpContext _ _ Nothing) = error "D5: No initial value in operator context\
                                                               \for mandatory copy operator with undefined dictionary\
                                                               \value."
@@ -445,7 +445,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Co
                 (prevValue fname oc) >>= h 
             )
         )
-        <|> Just <$> ((Assigned <$> byteVector) >>= updatePrevValue fname oc)
+        <|> (((Assigned <$> byteVector) >>= updatePrevValue fname oc) >> (Just <$> byteVector))
 
 -- pm: Yes, Nullable: No
 asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Increment oc))))
@@ -467,7 +467,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (De
 asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Tail oc))))
     = notPresent *> (let    baseValue (Assigned p) = return (Just p)
                             baseValue (Undefined) = h oc
-                                where   h (OpContext _ _ (Just iv)) = Just <$> (updatePrevValue fname oc (Assigned (ivToAscii iv)))
+                                where   h (OpContext _ _ (Just iv)) = (updatePrevValue fname oc (Assigned i)) >> (return $ Just i) where i = ivToAscii iv
                                         h (OpContext _ _ Nothing) = error "D6: No initial value in operator context\
                                                               \for mandatory tail operator with undefined dictionary\
                                                               \value."
@@ -511,7 +511,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Cop
             (let 
                 h (Assigned p) = return (Just p)
                 h (Undefined) = h' oc
-                    where   h' (OpContext _ _ (Just iv)) = Just <$> (updatePrevValue fname oc (Assigned (ivToAscii iv)))
+                    where   h' (OpContext _ _ (Just iv)) = (updatePrevValue fname oc (Assigned i)) >> (return $ Just i) where i =ivToAscii iv
                             h' (OpContext _ _ Nothing) = (updatePrevValue fname oc Empty) >> return Nothing
                 h (Empty) = return Nothing
             in 
@@ -519,7 +519,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Cop
             )
         )
         <|> (nULL *> (updatePrevValue fname oc Empty >> return Nothing))
-        <|> Just <$> ((Assigned <$> asciiString') >>= updatePrevValue fname oc)
+        <|> (((Assigned <$> asciiString') >>= updatePrevValue fname oc) >> (Just <$> asciiString'))
 
 -- pm: Yes, Nullable: Yes
 asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Increment oc))))
@@ -542,7 +542,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Del
 asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Tail oc))))
     = notPresent *> (let    baseValue (Assigned p) = return (Just p)
                             baseValue (Undefined) = h oc
-                                where   h (OpContext _ _ (Just iv)) = Just <$> (updatePrevValue fname oc (Assigned (ivToAscii iv)))
+                                where   h (OpContext _ _ (Just iv)) = (updatePrevValue fname oc (Assigned i)) >> (return $ Just i) where i = ivToAscii iv
                                         h (OpContext _ _ Nothing) = (updatePrevValue fname oc Empty) >> return Nothing
                             baseValue (Empty) = return Nothing
                     in
@@ -615,7 +615,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Copy
             (let 
                 h (Assigned p) = return (Just p)
                 h (Undefined) = h' oc
-                    where   h' (OpContext _ _ (Just iv)) =  Just <$> (updatePrevValue fname oc (Assigned (ivToByteVector iv)))
+                    where   h' (OpContext _ _ (Just iv)) = (updatePrevValue fname oc (Assigned bv)) >> (return $ (Just bv)) where bv = ivToByteVector iv 
                             h' (OpContext _ _ Nothing) = error "D5: No initial value in operator context\
                                                               \for mandatory copy operator with undefined dictionary\
                                                               \value."
@@ -624,7 +624,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Copy
                 (prevValue fname oc) >>= h 
             )
         )
-        <|> Just <$> ((Assigned <$> byteVector) >>= updatePrevValue fname oc)
+        <|> (((Assigned <$> byteVector) >>= updatePrevValue fname oc) >> (Just <$> byteVector))
 
 -- pm: Yes, Nullable: Yes
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Copy oc))) length) 
@@ -632,7 +632,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Copy 
             (let 
                 h (Assigned p) = return (Just p)
                 h (Undefined) = h' oc
-                    where   h' (OpContext _ _ (Just iv)) = Just <$> (updatePrevValue fname oc (Assigned (ivToByteVector iv)))
+                    where   h' (OpContext _ _ (Just iv)) = (updatePrevValue fname oc (Assigned bv)) >> (return $ Just bv) where bv = ivToByteVector iv
                             h' (OpContext _ _ Nothing) = (updatePrevValue fname oc Empty) >> return Nothing
                 h (Empty) = return Nothing
             in 
@@ -640,7 +640,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Copy 
             )
         )
         <|> (nULL *> (updatePrevValue fname oc Empty >> return Nothing))
-        <|> Just <$> ((Assigned <$> byteVector) >>= updatePrevValue fname oc)
+        <|> (((Assigned <$> byteVector) >>= updatePrevValue fname oc) >> (Just <$> byteVector))
 
 -- pm: Yes, Nullable: No
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Increment oc))) length) 
@@ -678,7 +678,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Delta
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail oc))) length) 
     = notPresent *> (let    baseValue (Assigned p) = return (Just p)
                             baseValue (Undefined) = h oc
-                                where   h (OpContext _ _ (Just iv)) = Just <$> (updatePrevValue fname oc (Assigned (ivToByteVector iv)))
+                                where   h (OpContext _ _ (Just iv)) = (updatePrevValue fname oc (Assigned bv)) >> (return $ Just bv) where bv = ivToByteVector iv
                                         h (OpContext _ _ Nothing) = error "D6: No initial value in operator context\
                                                               \for mandatory tail operator with undefined dictionary\
                                                               \value."
@@ -703,7 +703,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Tail oc))) length) 
     = notPresent *> (let    baseValue (Assigned p) = return (Just p)
                             baseValue (Undefined) = h oc
-                                where   h (OpContext _ _ (Just iv)) = Just <$> (updatePrevValue fname oc (Assigned (ivToByteVector iv)))
+                                where   h (OpContext _ _ (Just iv)) = (updatePrevValue fname oc (Assigned bv)) >> (return $ Just bv) where bv = ivToByteVector iv
                                         h (OpContext _ _ Nothing) = (updatePrevValue fname oc Empty) >> return Nothing
                             baseValue (Empty) = return Nothing
                     in
@@ -773,17 +773,31 @@ prevValue (NsName (NameAttr name) _ _) (OpContext Nothing Nothing Nothing)
 prevValue _ (OpContext Nothing (Just(NsKey (KeyAttr (Token name)) _)) Nothing) 
     = pv "global" name
 
-pv:: String -> String -> FParser DictValue
+pv::String -> String -> FParser DictValue
 pv d k = do
        st <- get
        case M.lookup d (dict st) >>= \(Dictionary _ xs) -> M.lookup k xs of
         Nothing -> error "Could not find specified dictionary/key."
         Just dv -> return dv
 
+uppv::String -> String -> DictValue -> FParser ()
+uppv d k v = do
+    st <- get
+    put (FState (pm st) (M.adjust (\(Dictionary n xs) -> Dictionary n (M.adjust (\_ -> v) k xs)) d (dict st)))
+
 -- |Update the previous value.
-updatePrevValue::NsName -> OpContext -> DictValue -> FParser Primitive
-updatePrevValue
-    = undefined
+updatePrevValue::NsName -> OpContext -> DictValue -> FParser ()
+updatePrevValue (NsName (NameAttr name) _ _) (OpContext (Just (DictionaryAttr dname)) Nothing Nothing) dvalue
+    = uppv dname name dvalue
+
+updatePrevValue _ (OpContext (Just (DictionaryAttr dname)) (Just(NsKey (KeyAttr (Token name)) _)) Nothing) dvalue
+    = uppv dname name dvalue
+
+updatePrevValue (NsName (NameAttr name) _ _) (OpContext Nothing Nothing Nothing) dvalue
+    = uppv "global" name dvalue
+
+updatePrevValue _ (OpContext Nothing (Just(NsKey (KeyAttr (Token name)) _)) Nothing) dvalue
+    = uppv "global" name dvalue
 
 -- *Raw Parsers for basic FAST primitives
 -- These parsers are unaware of nullability, presence map, deltas etc.
