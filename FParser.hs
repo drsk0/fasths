@@ -17,8 +17,9 @@ import FAST
 -- |Proviosonal state of the parser, will be changed according to reference.
 data FState = FState {
     -- |bitmap
-    pm  ::[Bool]
-    } deriving (Show)
+    pm  ::[Bool],
+    dict::[(String, Dictionary)]
+    }
 
 type FParser a = StateT FState A.Parser a
 
@@ -754,17 +755,56 @@ groupF2P (Group fname (Just Optional) maybe_dict maybe_typeref instrs)
 -- *Previous value related functions.
 
 -- |Get previous value.
+-- TODO: Is the default key the full uri, or just the local name?
+-- TODO: Do I look up values by the name of the key or by namespace/name uri?
+-- TODO: Reduce boilerplate code here.
+-- TODO: Should we have global, template dicts separatly in state, so we don't have to look them up?
 prevValue::NsName -> OpContext -> FParser DictValue
-prevValue = undefined
+prevValue (NsName (NameAttr name) _ _) (OpContext (Just (DictionaryAttr dname)) Nothing Nothing) 
+    = do
+       st <- get
+       case lookup dname (dict st) of
+        Nothing -> error "Specified dictionary was not found."
+        Just (Dictionary _ xs) -> case lookup name xs of
+            Nothing -> error "Specified key was not found in dictionary"
+            Just dv -> return dv
+
+prevValue _ (OpContext (Just (DictionaryAttr dname)) (Just(NsKey (KeyAttr (Token name)) _)) Nothing) 
+    = do
+       st <- get
+       case lookup dname (dict st) of
+        Nothing -> error "Specified dictionary was not found."
+        Just (Dictionary _ xs) -> case lookup name xs of
+            Nothing -> error "Specified key was not found in dictionary"
+            Just dv -> return dv
+
+prevValue (NsName (NameAttr name) _ _) (OpContext Nothing Nothing Nothing) 
+    = do
+       st <- get
+       case lookup "global" (dict st) of
+        Nothing -> error "Specified dictionary was not found."
+        Just (Dictionary _ xs) -> case lookup name xs of
+            Nothing -> error "Specified key was not found in dictionary"
+            Just dv -> return dv
+
+prevValue _ (OpContext Nothing (Just(NsKey (KeyAttr (Token name)) _)) Nothing) 
+    = do
+       st <- get
+       case lookup "global" (dict st) of
+        Nothing -> error "Specified dictionary was not found."
+        Just (Dictionary _ xs) -> case lookup name xs of
+            Nothing -> error "Specified key was not found in dictionary"
+            Just dv -> return dv
 
 -- *Raw Parsers for basic FAST primitives
 -- These parsers are unaware of nullability, presence map, deltas etc.
 
 -- |Checks wether a field is NOT present according to presence map.
+-- TODO: unsafe head usage here.
 notPresent::FParser (Maybe Primitive)
 notPresent = do
     s <- get
-    put (FState (P.tail (pm s)))
+    put (FState (P.tail (pm s)) (dict s))
     let pmap = pm s in
         case head pmap of
             True -> fail "Presence bit set."
@@ -790,7 +830,7 @@ segmentGrp = undefined
 -- |Parses template identifier and returns the corresponding parser.
 -- template identifier is considered a mandatory copy operator UIn32 field.
 -- TODO: Check wether mandatory is right.
--- TODO: Which token should this key have, policy?
+-- TODO: Which token should this key have, define a policy?
 templateIdentifier::FParser (NsName, Maybe FValue)
 templateIdentifier = do
     (_ , maybe_i) <- p
@@ -1025,7 +1065,8 @@ presenceMap::FParser ()
 presenceMap = do
     bs <- anySBEEntity
     -- update state
-    put FState {pm = bsToPm bs}
+    st <- get
+    put (FState (bsToPm bs) (dict st))
 
 -- |Get a Stopbit encoded entity.
 anySBEEntity::FParser B.ByteString
@@ -1043,6 +1084,3 @@ takeTill' f = do
     str <- A.takeTill f
     c <- A.take 1
     return (str `B.append` c)
-
-previousValue::NsName -> OpContext -> Primitive
-previousValue = undefined
