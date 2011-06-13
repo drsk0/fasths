@@ -18,8 +18,9 @@ import FAST
 -- |Proviosonal state of the parser, will be changed according to reference.
 data FState = FState {
     -- |bitmap
-    pm  ::[Bool],
-    dict::M.Map String Dictionary
+    pm          ::[Bool],
+    dict        ::M.Map String Dictionary,
+    templates   ::M.Map String Template
     }
 
 type FParser a = StateT FState A.Parser a
@@ -57,15 +58,16 @@ tname2fname::TemplateNsName -> NsName
 tname2fname (TemplateNsName n (Just (TemplateNsAttr ns)) maybe_id) = NsName n (Just (NsAttr ns)) maybe_id
 tname2fname (TemplateNsName n Nothing maybe_id) = NsName n Nothing maybe_id
 
--- |Translates a template reference into the correct template.
-tr2Template::TemplateReferenceContent -> Template
-tr2Template = undefined
-
 -- |Maps an instruction to its corresponding parser.
 instr2P::Instruction -> FParser (NsName, Maybe FValue)
 instr2P (Instruction f) = field2Parser f
+
 -- Static template reference.
-instr2P (TemplateReference (Just trc)) =  template2P $ tr2Template trc
+instr2P (TemplateReference (Just trc)) = do
+    st <- get
+    template2P ((templates st) M.! name) 
+    where (TemplateReferenceContent (NameAttr name) _) = trc
+
 -- Dynamic template reference.
 instr2P (TemplateReference Nothing) = segment'
 
@@ -798,7 +800,7 @@ updatePrevValue _ (OpContext Nothing (Just(NsKey (KeyAttr (Token name)) _)) Noth
 uppv::String -> String -> DictValue -> FParser ()
 uppv d k v = do
     st <- get
-    put (FState (pm st) (M.adjust (\(Dictionary n xs) -> Dictionary n (M.adjust (\_ -> v) k xs)) d (dict st)))
+    put (FState (pm st) (M.adjust (\(Dictionary n xs) -> Dictionary n (M.adjust (\_ -> v) k xs)) d (dict st)) (templates st))
 
 -- *Raw Parsers for basic FAST primitives
 -- These parsers are unaware of nullability, presence map, deltas etc.
@@ -990,7 +992,7 @@ presenceMap = do
     bs <- anySBEEntity
     -- update state
     st <- get
-    put (FState (bsToPm bs) (dict st))
+    put (FState (bsToPm bs) (dict st) (templates st))
 
 -- |Convert a bytestring into a presence map.
 bsToPm::B.ByteString -> [Bool]
@@ -1003,7 +1005,7 @@ bsToPm bs = concat (map h (B.unpack bs))
 notPresent::FParser (Maybe Primitive)
 notPresent = do
     s <- get
-    put (FState (P.tail (pm s)) (dict s))
+    put (FState (P.tail (pm s)) (dict s) (templates s))
     let pmap = pm s in
         case head pmap of
             True -> fail "Presence bit set."
