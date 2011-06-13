@@ -18,16 +18,17 @@ import FAST
 
 -- |State of the parser.
 data FState = FState {
-    -- |bitmap
+    -- |Presence map
     pm          ::[Bool],
+    -- |Dictionaries.
     dict        ::M.Map String Dictionary
     }
 
 -- |Environment of the parser.
 data FEnv = FEnv {
-    -- all known templates.
+    -- |All known templates.
     templates   ::M.Map String Template,
-    -- the application needs to define how uint32 values are mapped to template names.
+    -- |The application needs to define how uint32 values are mapped to template names.
     tid2temp   ::Int -> String
     }
 
