@@ -8,6 +8,7 @@ import Data.ByteString.Internal (c2w, w2c)
 import Data.Char (ord)
 import qualified Data.Attoparsec.Char8 as A
 import Control.Monad.State
+import Control.Monad.Reader
 import Control.Applicative 
 import Data.Bits
 import Data.Word (Word8)
@@ -15,15 +16,22 @@ import qualified Data.Map as M
 import FAST
 
 
--- |Proviosonal state of the parser, will be changed according to reference.
+-- |State of the parser.
 data FState = FState {
     -- |bitmap
     pm          ::[Bool],
-    dict        ::M.Map String Dictionary,
-    templates   ::M.Map String Template
+    dict        ::M.Map String Dictionary
     }
 
-type FParser a = StateT FState A.Parser a
+-- |Environment of the parser.
+data FEnv = FEnv {
+    -- all known templates.
+    templates   ::M.Map String Template,
+    -- the application needs to define how uint32 values are mapped to template names.
+    tid2temp   ::Int -> String
+    }
+
+type FParser a = ReaderT FEnv (StateT FState A.Parser) a
 
 data FValue = I Int
               |S String
@@ -64,12 +72,11 @@ instr2P (Instruction f) = field2Parser f
 
 -- Static template reference.
 instr2P (TemplateReference (Just trc)) = do
-    st <- get
-    template2P ((templates st) M.! name) 
+    env <- ask
+    template2P ((templates env) M.! name) 
     where (TemplateReferenceContent (NameAttr name) _) = trc
 
--- Dynamic template reference.
-instr2P (TemplateReference Nothing) = segment'
+-- Dynamic template reference.  instr2P (TemplateReference Nothing) = segment'
 
 -- |Constructs a parser out of a field. The FParser monad has underlying type
 -- Maybe Primitive, the Nothing constructor represents a field that was not
@@ -800,14 +807,14 @@ updatePrevValue _ (OpContext Nothing (Just(NsKey (KeyAttr (Token name)) _)) Noth
 uppv::String -> String -> DictValue -> FParser ()
 uppv d k v = do
     st <- get
-    put (FState (pm st) (M.adjust (\(Dictionary n xs) -> Dictionary n (M.adjust (\_ -> v) k xs)) d (dict st)) (templates st))
+    put (FState (pm st) (M.adjust (\(Dictionary n xs) -> Dictionary n (M.adjust (\_ -> v) k xs)) d (dict st)))
 
 -- *Raw Parsers for basic FAST primitives
 -- These parsers are unaware of nullability, presence map, deltas etc.
 
 -- |nULL parser.
 nULL::FParser (Maybe Primitive)
-nULL = lift nULL'
+nULL = lift $ lift nULL'
     where nULL' = do 
             A.char (w2c 0x80)
             return Nothing
@@ -927,7 +934,7 @@ byteVector = do
 
 -- |Bytevector field parser. The first argument is the size of the bytevector.
 byteVector'::Int -> FParser Primitive
-byteVector' c = lift p
+byteVector' c = lift $ lift p
     where p = Bytevector <$> (A.take c)
 
 -- * Delta parsers.
@@ -992,7 +999,7 @@ presenceMap = do
     bs <- anySBEEntity
     -- update state
     st <- get
-    put (FState (bsToPm bs) (dict st) (templates st))
+    put (FState (bsToPm bs) (dict st))
 
 -- |Convert a bytestring into a presence map.
 bsToPm::B.ByteString -> [Bool]
@@ -1005,7 +1012,7 @@ bsToPm bs = concat (map h (B.unpack bs))
 notPresent::FParser (Maybe Primitive)
 notPresent = do
     s <- get
-    put (FState (P.tail (pm s)) (dict s) (templates s))
+    put (FState (P.tail (pm s)) (dict s))
     let pmap = pm s in
         case head pmap of
             True -> fail "Presence bit set."
@@ -1013,7 +1020,7 @@ notPresent = do
 
 -- |Get a Stopbit encoded entity.
 anySBEEntity::FParser B.ByteString
-anySBEEntity = lift (takeTill' stopBitSet)
+anySBEEntity = lift $ lift (takeTill' stopBitSet)
 
 -- |Like takeTill, but takes the matching byte as well.
 takeTill'::(Char -> Bool) -> A.Parser B.ByteString
@@ -1054,7 +1061,9 @@ templateIdentifier::FParser (NsName, Maybe FValue)
 templateIdentifier = do
     (_ , maybe_i) <- p
     case maybe_i of
-        (Just (I i')) -> template2P (tId2Template i') 
+        (Just (I i')) -> do 
+            env <- ask
+            template2P $ (templates env) M.! ((tid2temp env) i')
         Nothing -> error "Failed to parse template identifier."
 
     where p = field2Parser (IntField (UInt32Field (FieldInstrContent 
@@ -1062,11 +1071,6 @@ templateIdentifier = do
                             (Just Mandatory) 
                             (Just (Copy (OpContext (Just (DictionaryAttr "global")) (Just (NsKey(KeyAttr (Token "tid")) Nothing)) Nothing)))
                             )))
-
--- |This function is not defined by the reference. The application must define this function, i.e. how 
--- to map a UInt32 to a template.
-tId2Template::Int -> Template
-tId2Template = undefined
 
 -- *Helper functions.
 --
