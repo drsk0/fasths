@@ -42,9 +42,6 @@ p2FValue (Decimal (Int32 e) (Int64 m)) = D (10^e * fromIntegral m)
 p2FValue (Bytevector bs) = BS bs
 
 
--- |Translates a template reference into the correct template.
-tr2Template::TemplateReferenceContent -> Template
-tr2Template = undefined
 
 -- |Maps several templates to a list of corresponding parsers.
 templates2P::Templates -> [(TemplateNsName, FParser (NsName, Maybe FValue))]
@@ -59,6 +56,10 @@ template2P t = (tname2fname (t_name t), ) <$> Just . Gr <$> sequence (map instr2
 tname2fname::TemplateNsName -> NsName
 tname2fname (TemplateNsName n (Just (TemplateNsAttr ns)) maybe_id) = NsName n (Just (NsAttr ns)) maybe_id
 tname2fname (TemplateNsName n Nothing maybe_id) = NsName n Nothing maybe_id
+
+-- |Translates a template reference into the correct template.
+tr2Template::TemplateReferenceContent -> Template
+tr2Template = undefined
 
 -- |Maps an instruction to its corresponding parser.
 instr2P::Instruction -> FParser (NsName, Maybe FValue)
@@ -780,11 +781,6 @@ pv d k = do
         Nothing -> error "Could not find specified dictionary/key."
         Just dv -> return dv
 
-uppv::String -> String -> DictValue -> FParser ()
-uppv d k v = do
-    st <- get
-    put (FState (pm st) (M.adjust (\(Dictionary n xs) -> Dictionary n (M.adjust (\_ -> v) k xs)) d (dict st)))
-
 -- |Update the previous value.
 updatePrevValue::NsName -> OpContext -> DictValue -> FParser ()
 updatePrevValue (NsName (NameAttr name) _ _) (OpContext (Just (DictionaryAttr dname)) Nothing Nothing) dvalue
@@ -799,58 +795,13 @@ updatePrevValue (NsName (NameAttr name) _ _) (OpContext Nothing Nothing Nothing)
 updatePrevValue _ (OpContext Nothing (Just(NsKey (KeyAttr (Token name)) _)) Nothing) dvalue
     = uppv "global" name dvalue
 
+uppv::String -> String -> DictValue -> FParser ()
+uppv d k v = do
+    st <- get
+    put (FState (pm st) (M.adjust (\(Dictionary n xs) -> Dictionary n (M.adjust (\_ -> v) k xs)) d (dict st)))
+
 -- *Raw Parsers for basic FAST primitives
 -- These parsers are unaware of nullability, presence map, deltas etc.
-
--- |Checks wether a field is NOT present according to presence map.
--- TODO: unsafe head usage here.
-notPresent::FParser (Maybe Primitive)
-notPresent = do
-    s <- get
-    put (FState (P.tail (pm s)) (dict s))
-    let pmap = pm s in
-        case head pmap of
-            True -> fail "Presence bit set."
-            False -> return Nothing
-
-
--- |Parses the beginning of a new segment.
-segment::FParser ()
-segment = presenceMap
-
--- |Parses presence map and template identifier.
-segment'::FParser (NsName, Maybe FValue)
-segment' = presenceMap >> templateIdentifier
-
--- |Returns newSegment | id, depending on presence bit usage of a group of fields.
-segmentDep::[Instruction] -> FParser ()
-segmentDep = undefined
-
--- |New segment depending on the instructions in the group, creates a presence map for the group.
-segmentGrp::[Instruction] -> FParser ()
-segmentGrp = undefined
-
--- |Parses template identifier and returns the corresponding parser.
--- template identifier is considered a mandatory copy operator UIn32 field.
--- TODO: Check wether mandatory is right.
--- TODO: Which token should this key have, define a policy?
-templateIdentifier::FParser (NsName, Maybe FValue)
-templateIdentifier = do
-    (_ , maybe_i) <- p
-    case maybe_i of
-        (Just (I i')) -> template2P (tId2Template i') 
-        Nothing -> error "Failed to parse template identifier."
-
-    where p = field2Parser (IntField (UInt32Field (FieldInstrContent 
-                            (NsName (NameAttr "templateId") Nothing Nothing) 
-                            (Just Mandatory) 
-                            (Just (Copy (OpContext (Just (DictionaryAttr "global")) (Just (NsKey(KeyAttr (Token "tid")) Nothing)) Nothing)))
-                            )))
-
--- |This function is not defined by the reference. The application must define this function, i.e. how 
--- to map a UInt32 to a template.
-tId2Template::Int -> Template
-tId2Template = undefined
 
 -- |nULL parser.
 nULL::FParser (Maybe Primitive)
@@ -1031,6 +982,90 @@ asciiTail' = AsciiTail <$> asciiString'
 bytevectorTail::FParser Tail
 bytevectorTail = ByteVectorTail <$> byteVector
 
+-- *Presence map parsers. 
+
+-- |Parse PreseneceMap.
+presenceMap::FParser ()
+presenceMap = do
+    bs <- anySBEEntity
+    -- update state
+    st <- get
+    put (FState (bsToPm bs) (dict st))
+
+-- |Convert a bytestring into a presence map.
+bsToPm::B.ByteString -> [Bool]
+bsToPm bs = concat (map h (B.unpack bs)) 
+    where   h::Word8 -> [Bool]
+            h w = map (testBit w) [1..7] 
+
+-- |Checks wether a field is NOT present according to presence map.
+-- TODO: unsafe head usage here.
+notPresent::FParser (Maybe Primitive)
+notPresent = do
+    s <- get
+    put (FState (P.tail (pm s)) (dict s))
+    let pmap = pm s in
+        case head pmap of
+            True -> fail "Presence bit set."
+            False -> return Nothing
+
+-- |Get a Stopbit encoded entity.
+anySBEEntity::FParser B.ByteString
+anySBEEntity = lift (takeTill' stopBitSet)
+
+-- |Like takeTill, but takes the matching byte as well.
+takeTill'::(Char -> Bool) -> A.Parser B.ByteString
+takeTill' f = do
+    str <- A.takeTill f
+    c <- A.take 1
+    return (str `B.append` c)
+
+-- |Test wether the stop bit is set of a Char. (Note: Chars are converted to
+-- Word8's. 
+-- TODO: Is this unsafe?
+stopBitSet::Char -> Bool
+stopBitSet c = testBit (c2w c) 8
+
+-- *Stream parsers.
+
+-- |Parses the beginning of a new segment.
+segment::FParser ()
+segment = presenceMap
+
+-- |Parses presence map and template identifier.
+segment'::FParser (NsName, Maybe FValue)
+segment' = presenceMap >> templateIdentifier
+
+-- |Returns newSegment | id, depending on presence bit usage of a group of fields.
+segmentDep::[Instruction] -> FParser ()
+segmentDep = undefined
+
+-- |New segment depending on the instructions in the group, creates a presence map for the group.
+segmentGrp::[Instruction] -> FParser ()
+segmentGrp = undefined
+
+-- |Parses template identifier and returns the corresponding parser.
+-- template identifier is considered a mandatory copy operator UIn32 field.
+-- TODO: Check wether mandatory is right.
+-- TODO: Which token should this key have, define a policy?
+templateIdentifier::FParser (NsName, Maybe FValue)
+templateIdentifier = do
+    (_ , maybe_i) <- p
+    case maybe_i of
+        (Just (I i')) -> template2P (tId2Template i') 
+        Nothing -> error "Failed to parse template identifier."
+
+    where p = field2Parser (IntField (UInt32Field (FieldInstrContent 
+                            (NsName (NameAttr "templateId") Nothing Nothing) 
+                            (Just Mandatory) 
+                            (Just (Copy (OpContext (Just (DictionaryAttr "global")) (Just (NsKey(KeyAttr (Token "tid")) Nothing)) Nothing)))
+                            )))
+
+-- |This function is not defined by the reference. The application must define this function, i.e. how 
+-- to map a UInt32 to a template.
+tId2Template::Int -> Template
+tId2Template = undefined
+
 -- *Helper functions.
 --
 
@@ -1038,7 +1073,6 @@ bytevectorTail = ByteVectorTail <$> byteVector
 uniqueFName::NsName -> String -> NsName
 uniqueFName fname s = NsName (NameAttr(n ++ s)) ns id
     where (NsName (NameAttr n) ns id) = fname
-
 
 -- |Modify underlying bits of a Char.
 modBits::Char -> (Word8 -> Word8) -> Char
@@ -1051,36 +1085,3 @@ minusOne (Int64 x) | x > 0 = Int64(x - 1)
 minusOne (UInt32 x)| x > 0 = UInt32(x - 1)
 minusOne (UInt64 x)| x > 0 = UInt64(x - 1)
 minusOne x = x
-
--- *Presence map related functions
-
--- |Convert a bytestring into a presence map.
-bsToPm::B.ByteString -> [Bool]
-bsToPm bs = concat (map h (B.unpack bs)) 
-    where   h::Word8 -> [Bool]
-            h w = map (testBit w) [1..7] 
-            
--- |Parse PreseneceMap.
-presenceMap::FParser ()
-presenceMap = do
-    bs <- anySBEEntity
-    -- update state
-    st <- get
-    put (FState (bsToPm bs) (dict st))
-
--- |Get a Stopbit encoded entity.
-anySBEEntity::FParser B.ByteString
-anySBEEntity = lift (takeTill' stopBitSet)
-
--- |Test wether the stop bit is set of a Char. (Note: Chars are converted to
--- Word8's. 
--- TODO: Is this unsafe?
-stopBitSet::Char -> Bool
-stopBitSet c = testBit (c2w c) 8
-
--- |Like takeTill, but takes the matching byte as well.
-takeTill'::(Char -> Bool) -> A.Parser B.ByteString
-takeTill' f = do
-    str <- A.takeTill f
-    c <- A.take 1
-    return (str `B.append` c)
