@@ -4,6 +4,7 @@ module FAST where
 import Prelude hiding (exponent)
 import qualified Data.ByteString as B
 import Data.Ix (inRange)
+import qualified Data.Map as M
 
 -- *Ranges of integer types
 
@@ -188,7 +189,8 @@ data DecFieldOp = DecFieldOp {
     }
 
 -- |Dictionary consists of a name and a list of key value pairs.
-data Dictionary = Dictionary String [(String, DictValue)]
+data Dictionary = Dictionary String (M.Map String DictValue)
+
 
 -- |Entry in a dictionary can be in one of three states.
 data DictValue = Undefined 
@@ -247,8 +249,8 @@ newtype Token = Token String
 
 -- |Reset all entries of a dictionary to 'Undefined'.
 reset::Dictionary -> Dictionary
-reset (Dictionary name xs) = Dictionary name (map h xs)
-    where h (key, value) = (key, Undefined)
+reset (Dictionary name xs) = Dictionary name (M.map h xs)
+    where h value = Undefined
 
 -- |Delta data. Not in the FAST specification.
 data Delta = Int32Delta Primitive

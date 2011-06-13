@@ -11,6 +11,7 @@ import Control.Monad.State
 import Control.Applicative 
 import Data.Bits
 import Data.Word (Word8)
+import qualified Data.Map as M
 import FAST
 
 
@@ -18,7 +19,7 @@ import FAST
 data FState = FState {
     -- |bitmap
     pm  ::[Bool],
-    dict::[(String, Dictionary)]
+    dict::M.Map String Dictionary
     }
 
 type FParser a = StateT FState A.Parser a
@@ -757,44 +758,32 @@ groupF2P (Group fname (Just Optional) maybe_dict maybe_typeref instrs)
 -- |Get previous value.
 -- TODO: Is the default key the full uri, or just the local name?
 -- TODO: Do I look up values by the name of the key or by namespace/name uri?
--- TODO: Reduce boilerplate code here.
 -- TODO: Should we have global, template dicts separatly in state, so we don't have to look them up?
+
 prevValue::NsName -> OpContext -> FParser DictValue
 prevValue (NsName (NameAttr name) _ _) (OpContext (Just (DictionaryAttr dname)) Nothing Nothing) 
-    = do
-       st <- get
-       case lookup dname (dict st) of
-        Nothing -> error "Specified dictionary was not found."
-        Just (Dictionary _ xs) -> case lookup name xs of
-            Nothing -> error "Specified key was not found in dictionary"
-            Just dv -> return dv
+    = pv dname name
 
 prevValue _ (OpContext (Just (DictionaryAttr dname)) (Just(NsKey (KeyAttr (Token name)) _)) Nothing) 
-    = do
-       st <- get
-       case lookup dname (dict st) of
-        Nothing -> error "Specified dictionary was not found."
-        Just (Dictionary _ xs) -> case lookup name xs of
-            Nothing -> error "Specified key was not found in dictionary"
-            Just dv -> return dv
+    = pv dname name
 
 prevValue (NsName (NameAttr name) _ _) (OpContext Nothing Nothing Nothing) 
-    = do
-       st <- get
-       case lookup "global" (dict st) of
-        Nothing -> error "Specified dictionary was not found."
-        Just (Dictionary _ xs) -> case lookup name xs of
-            Nothing -> error "Specified key was not found in dictionary"
-            Just dv -> return dv
+    = pv "global" name
 
 prevValue _ (OpContext Nothing (Just(NsKey (KeyAttr (Token name)) _)) Nothing) 
-    = do
+    = pv "global" name
+
+pv:: String -> String -> FParser DictValue
+pv d k = do
        st <- get
-       case lookup "global" (dict st) of
-        Nothing -> error "Specified dictionary was not found."
-        Just (Dictionary _ xs) -> case lookup name xs of
-            Nothing -> error "Specified key was not found in dictionary"
-            Just dv -> return dv
+       case M.lookup d (dict st) >>= \(Dictionary _ xs) -> M.lookup k xs of
+        Nothing -> error "Could not find specified dictionary/key."
+        Just dv -> return dv
+
+-- |Update the previous value.
+updatePrevValue::NsName -> OpContext -> DictValue -> FParser Primitive
+updatePrevValue
+    = undefined
 
 -- *Raw Parsers for basic FAST primitives
 -- These parsers are unaware of nullability, presence map, deltas etc.
@@ -1036,9 +1025,6 @@ uniqueFName::NsName -> String -> NsName
 uniqueFName fname s = NsName (NameAttr(n ++ s)) ns id
     where (NsName (NameAttr n) ns id) = fname
 
--- |Update the previous value.
-updatePrevValue::NsName -> OpContext -> DictValue -> FParser Primitive
-updatePrevValue n oc p = undefined
 
 -- |Modify underlying bits of a Char.
 modBits::Char -> (Word8 -> Word8) -> Char
