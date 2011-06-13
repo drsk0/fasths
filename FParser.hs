@@ -748,7 +748,7 @@ seqF2P (Sequence fname maybe_presence maybe_dict maybe_typeref maybe_length inst
         g i
         where   g Nothing = return (fname, Nothing)
                 g (Just (Int32 i')) = do
-                                        s <- (A.count i' ((segmentDep instrs) >> (sequence (map instr2P instrs))))
+                                        s <- (ask >>= \env -> A.count i' ((segmentDep instrs (templates env)) >> (sequence (map instr2P instrs))))
                                         return (fname, Just (Sq i' s))
                 -- get the correct parser for the length field.
                 fname' = uniqueFName fname "l" 
@@ -759,18 +759,16 @@ seqF2P (Sequence fname maybe_presence maybe_dict maybe_typeref maybe_length inst
 -- |Maps a group field to its parser.
 groupF2P::Group -> FParser (NsName, Maybe FValue)
 groupF2P (Group fname (Just Mandatory) maybe_dict maybe_typeref instrs) 
-    = (fname,) . Just . Gr <$> ((segmentGrp instrs)  >> sequence (map instr2P instrs))
+    = ask >>= \env -> (fname,) . Just . Gr <$> ((segmentGrp instrs (templates env)) >> sequence (map instr2P instrs))
 groupF2P (Group fname (Just Optional) maybe_dict maybe_typeref instrs) 
     = notPresent *> return (fname, Nothing)
-    <|> (fname,) . Just . Gr <$> ((segmentGrp instrs)  >> sequence (map instr2P instrs))
+    <|> (ask >>= \env -> (fname,) . Just . Gr <$> ((segmentGrp instrs (templates env)) >> sequence (map instr2P instrs)))
 
 -- *Previous value related functions.
 
 -- |Get previous value.
 -- TODO: Is the default key the full uri, or just the local name?
 -- TODO: Do I look up values by the name of the key or by namespace/name uri?
--- TODO: Should we have global, template dicts separatly in state, so we don't have to look them up?
-
 prevValue::NsName -> OpContext -> FParser DictValue
 prevValue (NsName (NameAttr name) _ _) (OpContext (Just (DictionaryAttr dname)) Nothing Nothing) 
     = pv dname name
@@ -1047,12 +1045,24 @@ segment'::FParser (NsName, Maybe FValue)
 segment' = presenceMap >> templateIdentifier
 
 -- |Returns newSegment | id, depending on presence bit usage of a group of fields.
-segmentDep::[Instruction] -> FParser ()
-segmentDep = undefined
+segmentDep::[Instruction] -> M.Map String Template -> FParser ()
+segmentDep ins ts = case any (needsPm ts) ins of
+    True -> segment
+    False -> return ()
 
 -- |New segment depending on the instructions in the group, creates a presence map for the group.
-segmentGrp::[Instruction] -> FParser ()
-segmentGrp = undefined
+segmentGrp::[Instruction] -> M.Map String Template -> FParser ()
+segmentGrp ins ts = case any (needsPm ts) ins of
+    True -> do
+        st <- get
+        put (FState pm' (dict st))
+        where pm' = replicate (length ins) True
+    False -> return ()
+
+-- |Decides wether an instruction uses the presence map or not. We need to know all the templates,
+-- to recurivly process template reference instructions.
+needsPm::M.Map String Template -> Instruction -> Bool
+needsPm = undefined
 
 -- |Parses template identifier and returns the corresponding parser.
 -- template identifier is considered a mandatory copy operator UIn32 field.
