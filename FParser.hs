@@ -1060,7 +1060,7 @@ segmentGrp ins ts = case any (needsPm ts) ins of
     False -> return ()
 
 -- |Decides wether an instruction uses the presence map or not. We need to know all the templates,
--- to recurivly process template reference instructions.
+-- to process template reference instructions recursiv.
 needsPm::M.Map String Template -> Instruction -> Bool
 needsPm = undefined
 
