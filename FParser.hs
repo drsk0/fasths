@@ -7,7 +7,6 @@ import Prelude as P
 import qualified Data.ByteString as B
 import qualified Data.ByteString.UTF8 as U
 import Data.ByteString.Internal (c2w, w2c)
-import Data.Char (ord)
 import qualified Data.Attoparsec.Char8 as A
 import Control.Monad.State
 import Control.Monad.Reader
