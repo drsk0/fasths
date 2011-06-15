@@ -51,6 +51,7 @@ p2FValue (UInt64 i) = I i
 p2FValue (Ascii s) = S s
 p2FValue (Unicode s) = S s
 p2FValue (Decimal (Int32 e) (Int64 m)) = D (10^e * fromIntegral m)
+p2FValue (Decimal _ _) = error "Decimal is defined only for Int32 exponent, Int64 mantissa."
 p2FValue (Bytevector bs) = BS bs
 
 -- |The initial state of the parser depending on the templates.
