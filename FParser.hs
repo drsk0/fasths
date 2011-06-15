@@ -1,3 +1,5 @@
+{-# LANGUAGE TupleSections #-}
+
 -- |A FAST protocoll parser.
 module FParser where 
 
