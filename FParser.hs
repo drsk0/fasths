@@ -52,7 +52,14 @@ p2FValue (Unicode s) = S s
 p2FValue (Decimal (Int32 e) (Int64 m)) = D (10^e * fromIntegral m)
 p2FValue (Bytevector bs) = BS bs
 
+-- |The initial state of the parser depending on the templates.
+initState::Templates -> FState
+initState = undefined
 
+-- |The environment of the parser depneding on the templates and
+-- the tid2temp function provided by the application.
+initEnv::Templates -> (Int -> String) -> FEnv
+initEnv = undefined
 
 -- |Maps several templates to a list of corresponding parsers.
 templates2P::Templates -> [(TemplateNsName, FParser (NsName, Maybe FValue))]
