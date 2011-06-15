@@ -41,6 +41,7 @@ data FValue = I Int
               |Sq Int [[(NsName, Maybe FValue)]]
               |Gr [(NsName, Maybe FValue)]
 
+-- |Maps a fast primitive to its corresponding fast value.
 p2FValue::Primitive -> FValue
 p2FValue (Int32 i) = I i
 p2FValue (UInt32 i) = I i
