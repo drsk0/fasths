@@ -2,3 +2,5 @@ doc/*
 tags
 *.swp
 *.swo
+*.hi
+*.o
