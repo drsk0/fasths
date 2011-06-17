@@ -58,10 +58,10 @@ p2FValue (Bytevector bs) = BS bs
 initState::Templates -> FState
 initState = undefined
 
--- |The environment of the parser depneding on the templates and
+-- |The environment of the parser depending on the templates and
 -- the tid2temp function provided by the application.
 initEnv::Templates -> (Int -> String) -> FEnv
-initEnv = undefined
+initEnv ts f = FEnv (M.fromList [(k,t) | (TemplateNsName (NameAttr k) _ _) <- map t_name (ts_templates ts), t <- ts_templates ts]) f
 
 -- |Maps several templates to a list of corresponding parsers.
 templates2P::Templates -> [(TemplateNsName, FParser (NsName, Maybe FValue))]
