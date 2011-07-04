@@ -211,7 +211,7 @@ data DictionaryAttr = DictionaryAttr String
 -- |nsKey attribute.
 data NsKey = NsKey {
     key     ::KeyAttr,
-    k_ns      ::Maybe NsAttr
+    k_ns    ::Maybe NsAttr
     }
 
 -- |Key attribute.
