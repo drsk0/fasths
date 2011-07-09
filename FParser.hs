@@ -60,16 +60,19 @@ p2FValue (Bytevector bs) = BS bs
 initState::Templates -> FState
 initState ts = FState [] (M.fromList [(k,d) | d@(Dictionary k _) <- concat $ map initDicts (ts_templates ts)])
 
+-- |Creates a list of dictionaries depending on the fields of a template.
 initDicts::Template -> [Dictionary]
 initDicts t = createDicts . catMaybes. concat $ map h (t_instructions t)
     where   h (TemplateReference _) = []
             h (Instruction f) = dictOfField f
 
+-- |Maps triples of the form (DictionaryName, Key, Value) to a list of dictionaries.
 createDicts::[(String, String, DictValue)] -> [Dictionary]
 createDicts es =  map h (groupBy (\ (d, _ , _) (d', _ , _) -> d == d') es)
     where   h xs = Dictionary name (M.fromList (map (\(x,y,z) -> (y,z)) xs))
                 where (name, _, _) = head xs
 
+-- |Maps a field to a triple (DictionaryName, Key, Value).
 dictOfField::Field -> [Maybe (String, String, DictValue)]
 dictOfField (IntField (Int32Field (FieldInstrContent fname maybePr maybeOp))) = [dictOfIntField $ FieldInstrContent fname maybePr maybeOp] 
 dictOfField (IntField (Int64Field (FieldInstrContent fname maybePr maybeOp))) = [dictOfIntField $ FieldInstrContent fname maybePr maybeOp]
@@ -134,6 +137,7 @@ dictOfField (Grp g) = concat $ map h (g_instructions g)
     where   h (TemplateReference _) = [Nothing]
             h (Instruction f) = dictOfField f
 
+-- |Maps a integer field to a triple (DictionaryName, Key, Value).
 dictOfIntField::FieldInstrContent -> Maybe (String, String, DictValue)
 dictOfIntField (FieldInstrContent fname Nothing maybeOp) = dictOfIntField $ FieldInstrContent fname (Just Mandatory) maybeOp
 dictOfIntField (FieldInstrContent _ (Just Mandatory) Nothing) =  Nothing
@@ -151,6 +155,8 @@ dictOfIntField (FieldInstrContent fname (Just Optional) (Just (Increment oc))) =
 dictOfIntField (FieldInstrContent fname (Just Optional) (Just (Delta oc))) = Just $ dictOfOpContext oc fname
 dictOfIntField (FieldInstrContent fname (Just Optional) (Just (Tail oc))) = error "S2: Tail operator can not be applied on an integer type field." 
 
+-- |Outputs a triple (DictionaryName, Key, Value) depending on OpContext and 
+-- the NsName of a field.
 dictOfOpContext::OpContext -> NsName -> (String, String, DictValue)
 dictOfOpContext (OpContext Nothing Nothing _) (NsName (NameAttr n) _ _)= ("global", n, Empty)
 dictOfOpContext (OpContext (Just (DictionaryAttr d)) Nothing _) (NsName (NameAttr n) _ _)= (d, n, Empty)
