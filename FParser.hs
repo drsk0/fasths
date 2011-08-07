@@ -192,7 +192,8 @@ instr2P (TemplateReference (Just trc)) = do
     template2P ((templates env) M.! name) 
     where (TemplateReferenceContent (NameAttr name) _) = trc
 
--- Dynamic template reference.  instr2P (TemplateReference Nothing) = segment'
+-- Dynamic template reference.  
+instr2P (TemplateReference Nothing) = segment'
 
 -- |Constructs a parser out of a field. The FParser monad has underlying type
 -- Maybe Primitive, the Nothing constructor represents a field that was not
@@ -1175,9 +1176,94 @@ segmentGrp ins ts = case any (needsPm ts) ins of
     False -> return ()
 
 -- |Decides wether an instruction uses the presence map or not. We need to know all the templates,
--- to process template reference instructions recursiv.
+-- to process template reference instructions recursivly.
 needsPm::M.Map String Template -> Instruction -> Bool
-needsPm = undefined
+-- static template reference
+needsPm ts (TemplateReference (Just (TemplateReferenceContent (NameAttr n) _))) = and $ map (needsPm ts) (t_instructions t) where t = ts M.! n
+-- dynamic template reference
+needsPm ts (TemplateReference Nothing) = False
+needsPm _ (Instruction (IntField (Int32Field fic))) = intFieldNeedsPm fic
+needsPm _ (Instruction (IntField (Int64Field fic))) = intFieldNeedsPm fic
+needsPm _ (Instruction (IntField (UInt32Field fic))) = intFieldNeedsPm fic
+needsPm _ (Instruction (IntField (UInt64Field fic))) = intFieldNeedsPm fic
+needsPm ts (Instruction (DecField (DecimalField fname Nothing eitherOp))) = needsPm ts (Instruction(DecField (DecimalField fname (Just Mandatory) eitherOp)))
+needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) (Left (Constant _))))) = False
+needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) (Left (Default _))))) = True
+needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) (Left (Copy _))))) = True
+needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) (Left (Increment _))))) = error "S2:Increment operator is only applicable to integer fields." 
+needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) (Left (Delta _))))) = False
+needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) (Left (Tail _))))) = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields." 
+needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) (Left (Constant _))))) = True
+needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) (Left (Default _))))) = True 
+needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) (Left (Copy _))))) = True
+needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) (Left (Increment _))))) = error "S2:Increment operator is only applicable to integer fields." 
+needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) (Left (Delta _))))) = False
+needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) (Left (Tail _))))) = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields." 
+needsPm ts (Instruction (DecField (DecimalField fname (Just Mandatory) (Right (DecFieldOp opE opM))))) = needsPm ts insE && needsPm ts insM 
+    where   insE = Instruction (IntField (Int32Field (FieldInstrContent fname (Just Mandatory) (Just opE))))
+            insM =  Instruction (IntField (Int64Field (FieldInstrContent fname (Just Mandatory) (Just opM))))
+needsPm ts (Instruction (DecField (DecimalField fname (Just Optional) (Right (DecFieldOp opE opM))))) = needsPm ts insE && needsPm ts insM 
+    where   insE = Instruction (IntField (Int32Field (FieldInstrContent fname (Just Optional) (Just opE))))
+            insM =  Instruction (IntField (Int64Field (FieldInstrContent fname (Just Mandatory) (Just opM))))
+needsPm ts (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent fname Nothing maybeOp)))) = needsPm ts (Instruction(AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Mandatory) maybeOp))))
+needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) Nothing)))) = False
+needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Constant _)))))) = False
+needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Default _)))))) = True
+needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Copy _)))))) = True
+needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Increment _)))))) = error "S2:Increment operator is only applicable to integer fields." 
+needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Delta _)))))) =  False
+needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Tail _)))))) = True
+needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) Nothing)))) = False
+needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Constant _)))))) = True
+needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Default _)))))) = True
+needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Copy _)))))) = True
+needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Increment _)))))) = error "S2:Increment operator is only applicable to integer fields." 
+needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Delta _)))))) = False
+needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Tail _)))))) = True
+needsPm ts (Instruction (ByteVecField (ByteVectorField (FieldInstrContent fname Nothing maybeOp) maybe_length))) = needsPm ts (Instruction(ByteVecField (ByteVectorField (FieldInstrContent fname (Just Mandatory) maybeOp) maybe_length)))
+needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) Nothing) _))) = False
+needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) Nothing) _))) = False
+needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Constant _))) _))) = False
+needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just (Constant _))) _))) = True
+needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))) _))) = error "S5: No initial value given for mandatory default operator."
+needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Default (Just _)))) _))) = True
+needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just (Default Nothing))) _))) = True
+needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Default (Just _)))) _))) = True
+needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Copy oc))) _))) = True
+needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Copy oc))) _))) = True
+needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Increment _))) _))) = error "S2:Increment operator is only applicable to integer fields." 
+needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Increment _))) _))) = error "S2:Increment operator is only applicable to integer fields." 
+needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Delta _))) _))) = False
+needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Delta _))) _))) = False
+needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Tail _))) _))) = True
+needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Tail _))) _))) = True
+needsPm ts (Instruction (UnicodeStrField (UnicodeStringField (FieldInstrContent fname maybe_presence maybe_op) maybe_length))) = needsPm ts (Instruction(ByteVecField (ByteVectorField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)))
+needsPm ts (Instruction (Seq s)) = and $ map h (s_instructions s)
+    where   h (TemplateReference Nothing) = False
+            h (TemplateReference (Just (TemplateReferenceContent (NameAttr tname) _))) = and $ map (needsPm ts) (t_instructions (ts M.! tname))
+            h f = needsPm ts f
+needsPm ts (Instruction (Grp g)) = and $ map h (g_instructions g)
+    where   h (TemplateReference Nothing) = False
+            h (TemplateReference (Just (TemplateReferenceContent (NameAttr tname) _))) = and $ map (needsPm ts) (t_instructions (ts M.! tname))
+            h f = needsPm ts f
+
+-- |Maps a integer field to a triple (DictionaryName, Key, Value).
+intFieldNeedsPm::FieldInstrContent -> Bool
+intFieldNeedsPm (FieldInstrContent fname Nothing maybeOp) = intFieldNeedsPm $ FieldInstrContent fname (Just Mandatory) maybeOp
+intFieldNeedsPm (FieldInstrContent _ (Just Mandatory) Nothing) = False
+intFieldNeedsPm (FieldInstrContent _ (Just Mandatory) (Just (Constant _))) = False
+intFieldNeedsPm (FieldInstrContent _ (Just Mandatory) (Just (Default _))) = True
+intFieldNeedsPm (FieldInstrContent _ (Just Mandatory) (Just (Copy _))) = True
+intFieldNeedsPm (FieldInstrContent _ (Just Mandatory) (Just (Increment _))) = True
+intFieldNeedsPm (FieldInstrContent _ (Just Mandatory) (Just (Delta _))) = False
+intFieldNeedsPm (FieldInstrContent _ (Just Mandatory) (Just (Tail _))) = error "S2: Tail operator can not be applied on an integer type field." 
+intFieldNeedsPm (FieldInstrContent _ (Just Optional) Nothing) = False
+intFieldNeedsPm (FieldInstrContent _ (Just Optional) (Just (Constant _))) = True
+intFieldNeedsPm (FieldInstrContent _ (Just Optional) (Just (Default _))) = True
+intFieldNeedsPm (FieldInstrContent _ (Just Optional) (Just (Copy _))) = True
+intFieldNeedsPm (FieldInstrContent _ (Just Optional) (Just (Increment _))) = True
+intFieldNeedsPm (FieldInstrContent _ (Just Optional) (Just (Delta _))) = False
+intFieldNeedsPm (FieldInstrContent _ (Just Optional) (Just (Tail _))) = error "S2: Tail operator can not be applied on an integer type field." 
 
 -- |Parses template identifier and returns the corresponding parser.
 -- template identifier is considered a mandatory copy operator UIn32 field.
