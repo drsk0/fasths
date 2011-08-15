@@ -47,13 +47,13 @@ getTemplate = proc l -> do
 getTemplateNsName::IOStateArrow TPState XmlTree TemplateNsName 
 getTemplateNsName = atTag "templateNsName" >>> 
     proc l -> do
-       name <- getName'     -< l
-       tNs  <- getTempNs    -< l
-       id   <- getId        -< l
+       name <- getName'                                 -< l
+       tNs  <- getTempNs                                -< l
+       id   <- (getId >>> arr Just) <+> constA Nothing  -< l
        returnA -< (TemplateNsName name tNs id)
 
-getId::IOStateArrow TPState XmlTree (Maybe IdAttr)
-getId = (getAttrValue "id" >>> arr (Just . IdAttr . Token)) <+> constA Nothing 
+getId::IOStateArrow TPState XmlTree IdAttr
+getId = getAttrValue "id" >>> arr (IdAttr . Token) 
 
 getTypeRef::IOStateArrow TPState XmlTree (Maybe TypeRef)
 getTypeRef = (atTag "typeRef" >>> 
@@ -88,31 +88,105 @@ getIntField s = hasName s >>> getFieldInstrContent
 
 getFieldInstrContent::IOStateArrow TPState XmlTree FieldInstrContent 
 getFieldInstrContent = proc l -> do
-    op      <- getFieldOp   -< l
-    name    <- getNsName    -< l
-    presence<- getPresence  -< l
+    op      <- (getFieldOp >>> arr Just) <+> constA Nothing -< l
+    name    <- getNsName                                    -< l
+    presence<- (getPresence >>> arr Just) <+> constA Nothing-< l
     returnA -< (FieldInstrContent name presence op)
     
-getFieldOp::IOStateArrow TPState XmlTree (Maybe FieldOp)
-getFieldOp = undefined
+getFieldOp::IOStateArrow TPState XmlTree FieldOp
+getFieldOp = getConstantOp <+> getDefaultOp <+> getCopyOp <+> getIncrementOp <+> getDeltaOp <+> getTailOp
+
+getConstantOp::IOStateArrow TPState XmlTree FieldOp
+getConstantOp = hasName "constant" >>> getInitialValue >>> arr Constant
+
+getInitialValue::IOStateArrow TPState XmlTree InitialValueAttr
+getInitialValue = getAttrValue "value" >>> arr InitialValueAttr 
+
+getDefaultOp::IOStateArrow TPState XmlTree FieldOp
+getDefaultOp = (getInitialValue >>> arr (Default . Just)) <+> constA (Default Nothing)
+
+getCopyOp::IOStateArrow TPState XmlTree FieldOp
+getCopyOp = getOp "copy" >>> arr Copy
+
+getIncrementOp::IOStateArrow TPState XmlTree FieldOp
+getIncrementOp = getOp "increment" >>> arr Increment
+
+getDeltaOp::IOStateArrow TPState XmlTree FieldOp
+getDeltaOp = getOp "delta" >>> arr Delta
+
+getTailOp::IOStateArrow TPState XmlTree FieldOp
+getTailOp = getOp "tail" >>> arr Tail
+
+getOp::String -> IOStateArrow TPState XmlTree OpContext
+getOp s = hasName s >>> getOpContext
+
+getOpContext::IOStateArrow TPState XmlTree OpContext
+getOpContext = proc l -> do 
+    d   <- getDict                                           -< l
+    nk  <- (getNsKey >>> arr Just) <+> constA Nothing        -< l
+    iv  <- (getInitialValue >>> arr Just) <+> constA Nothing -< l
+    returnA -< (OpContext d nk iv)
+
+getNsKey::IOStateArrow TPState XmlTree NsKey
+getNsKey = proc l -> do 
+    k <- getKey -< l
+    ns<- getNs  -< l
+    returnA -< (NsKey k ns)
+
+getKey::IOStateArrow TPState XmlTree KeyAttr
+getKey = getAttrValue "key" >>> arr (KeyAttr . Token)
 
 getNsName::IOStateArrow TPState XmlTree NsName
-getNsName = undefined
+getNsName = proc l -> do
+    n  <- getName'                                  -< l
+    ns <- getNs                                     -< l
+    id <- (getId >>> arr Just) <+> constA Nothing   -< l
+    returnA -< (NsName n ns id)
 
-getPresence::IOStateArrow TPState XmlTree (Maybe PresenceAttr)
-getPresence = undefined
+getPresence::IOStateArrow TPState XmlTree PresenceAttr
+getPresence = getAttrValue "presence" >>> (isA (\s -> s == "mandatory") >>> constA Mandatory) <+> constA Optional
 
 getDecimalField::IOStateArrow TPState XmlTree DecimalField
-getDecimalField = undefined
+getDecimalField = hasName "decimal" >>> proc l -> do
+   n <- getNsName                                                   -< l
+   p <- (getPresence >>> arr Just) <+> constA Nothing               -< l
+   op<- (getFieldOp >>> arr Left) <+> (getDecFieldOp >>> arr Right) -< l
+   returnA -< (DecimalField n p op)
+
+getDecFieldOp::IOStateArrow TPState XmlTree DecFieldOp 
+getDecFieldOp = proc l -> do
+    e <- getExponent -< l
+    m <- getMantissa -< l
+    returnA -< (DecFieldOp e m) 
+
+getExponent::IOStateArrow TPState XmlTree FieldOp
+getExponent = hasName "exponent" >>> getFieldOp
+
+getMantissa::IOStateArrow TPState XmlTree FieldOp
+getMantissa = hasName "mantissa" >>> getFieldOp
 
 getAsciiStringField::IOStateArrow TPState XmlTree AsciiStringField
-getAsciiStringField = undefined
+getAsciiStringField = ifA (hasName "string" >>> getAttrValue "charset" >>> isA (\s -> s == "ascii")) (getFieldInstrContent >>> arr AsciiStringField) zeroArrow
 
 getUnicodeStringField::IOStateArrow TPState XmlTree UnicodeStringField
-getUnicodeStringField = undefined
+getUnicodeStringField = 
+    ifA 
+    (hasName "string" >>> getAttrValue "charset" >>> isA (\s -> s == "unicode"))
+    (proc l -> do 
+        fic     <- getFieldInstrContent                                 -< l
+        length  <- (getByteVectorLength >>> arr Just) <+> constA Nothing-< l
+        returnA -< (UnicodeStringField fic length)) 
+    zeroArrow
+
+getByteVectorLength::IOStateArrow TPState XmlTree ByteVectorLength
+getByteVectorLength = hasName "length" >>> getNsName >>> arr ByteVectorLength
 
 getByteVector::IOStateArrow TPState XmlTree ByteVectorField
-getByteVector = undefined
+getByteVector = hasName "byteVector" >>> 
+    (proc l -> do 
+    fic     <- getFieldInstrContent                                 -< l
+    length  <- (getByteVectorLength >>> arr Just) <+> constA Nothing-< l
+    returnA -< (ByteVectorField fic length))
 
 getSequence::IOStateArrow TPState XmlTree Sequence
 getSequence = undefined
