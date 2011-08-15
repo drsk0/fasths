@@ -154,7 +154,7 @@ data Group = Group {
 -- and it is not physically present in the stream. Obviously no field operator 
 -- is needed.
 data ByteVectorLength = ByteVectorLength {
-    bvl_nsName::String
+    bvl_nsName::NsName
     }
 
 -- |SeqLength is logically a uInt32. The name maybe 'implicit' or 'explicit' 
