@@ -58,11 +58,11 @@ p2FValue (Bytevector bs) = BS bs
 
 -- |The initial state of the parser depending on the templates.
 initState::Templates -> FState
-initState ts = FState [] (M.fromList [(k,d) | d@(Dictionary k _) <- concat $ map initDicts (tsTemplates ts)])
+initState ts = FState [] (M.fromList [(k,d) | d@(Dictionary k _) <- concatMap initDicts (tsTemplates ts)])
 
 -- |Creates a list of dictionaries depending on the fields of a template.
 initDicts::Template -> [Dictionary]
-initDicts t = createDicts . catMaybes. concat $ map h (tInstructions t)
+initDicts t = createDicts $ catMaybes $ concatMap h (tInstructions t)
     where   h (TemplateReference _) = []
             h (Instruction f) = dictOfField f
 
@@ -130,10 +130,10 @@ dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Option
 dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail oc))) _)) = [Just $ dictOfOpContext oc fname] 
 dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Tail oc))) _)) = [Just $ dictOfOpContext oc fname]
 dictOfField (UnicodeStrField (UnicodeStringField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)) = dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname maybe_presence maybe_op) maybe_length))
-dictOfField (Seq s) = concat $ map h (sInstructions s)
+dictOfField (Seq s) = concatMap h (sInstructions s)
     where   h (TemplateReference _) = [Nothing]
             h (Instruction f) = dictOfField f
-dictOfField (Grp g) = concat $ map h (gInstructions g)
+dictOfField (Grp g) = concatMap h (gInstructions g)
     where   h (TemplateReference _) = [Nothing]
             h (Instruction f) = dictOfField f
 
@@ -166,16 +166,16 @@ dictOfOpContext (OpContext (Just (DictionaryAttr d)) (Just (NsKey (KeyAttr (Toke
 -- |The environment of the parser depending on the templates and
 -- the tid2temp function provided by the application.
 initEnv::Templates -> (Int -> String) -> FEnv
-initEnv ts f = FEnv (M.fromList [(k,t) | (TemplateNsName (NameAttr k) _ _) <- map tName (tsTemplates ts), t <- tsTemplates ts]) f
+initEnv ts = FEnv (M.fromList [(k,t) | (TemplateNsName (NameAttr k) _ _) <- map tName (tsTemplates ts), t <- tsTemplates ts])
 
 -- |Maps several templates to a list of corresponding parsers.
 templates2P::Templates -> [(TemplateNsName, FParser (NsName, Maybe FValue))]
-templates2P t = [(n, p) | n <- (fmap tName (tsTemplates t)), p <- (fmap template2P (tsTemplates t))]
+templates2P t = [(n, p) | n <- fmap tName (tsTemplates t), p <- fmap template2P (tsTemplates t)]
 
 -- |Maps a template to its corresponding parser.
 -- We treat a template as a group with NsName equal the TemplateNsName.
 template2P::Template -> FParser (NsName, Maybe FValue)
-template2P t = (tname2fname (tName t), ) <$> Just . Gr <$> sequence (map instr2P (tInstructions t))
+template2P t = (tname2fname (tName t), ) <$> Just . Gr <$> mapM instr2P (tInstructions t)
 
 -- |Translates a TemplateNsName into a NsName. Its the same anyway.
 tname2fname::TemplateNsName -> NsName
@@ -189,7 +189,7 @@ instr2P (Instruction f) = field2Parser f
 -- Static template reference.
 instr2P (TemplateReference (Just trc)) = do
     env <- ask
-    template2P ((templates env) M.! name) 
+    template2P (templates env M.! name) 
     where (TemplateReferenceContent (NameAttr name) _) = trc
 
 -- Dynamic template reference.  
@@ -199,14 +199,14 @@ instr2P (TemplateReference Nothing) = segment'
 -- Maybe Primitive, the Nothing constructor represents a field that was not
 -- present in the stream.
 field2Parser::Field -> FParser (NsName, Maybe FValue)
-field2Parser (IntField f@(Int32Field (FieldInstrContent fname _ _))) = (fname, ) <$> (fmap p2FValue) <$> intF2P f
-field2Parser (IntField f@(Int64Field (FieldInstrContent fname _ _))) = (fname, ) <$> (fmap p2FValue) <$> intF2P f
-field2Parser (IntField f@(UInt32Field (FieldInstrContent fname _ _))) = (fname, ) <$> (fmap p2FValue) <$> intF2P f
-field2Parser (IntField f@(UInt64Field (FieldInstrContent fname _ _))) = (fname, ) <$> (fmap p2FValue) <$> intF2P f
-field2Parser (DecField f@(DecimalField fname _ _ )) = (fname, ) <$> (fmap p2FValue) <$> decF2P f
-field2Parser (AsciiStrField f@(AsciiStringField(FieldInstrContent fname _ _ ))) = (fname, ) <$> (fmap p2FValue) <$> asciiStrF2P f
-field2Parser (UnicodeStrField f@(UnicodeStringField (FieldInstrContent fname _ _ ) _ )) = (fname, ) <$> (fmap p2FValue) <$> unicodeF2P f
-field2Parser (ByteVecField f@(ByteVectorField (FieldInstrContent fname _ _ ) _ )) = (fname, ) <$> (fmap p2FValue) <$> bytevecF2P f
+field2Parser (IntField f@(Int32Field (FieldInstrContent fname _ _))) = (fname, ) <$> fmap p2FValue <$> intF2P f
+field2Parser (IntField f@(Int64Field (FieldInstrContent fname _ _))) = (fname, ) <$> fmap p2FValue <$> intF2P f
+field2Parser (IntField f@(UInt32Field (FieldInstrContent fname _ _))) = (fname, ) <$> fmap p2FValue <$> intF2P f
+field2Parser (IntField f@(UInt64Field (FieldInstrContent fname _ _))) = (fname, ) <$> fmap p2FValue <$> intF2P f
+field2Parser (DecField f@(DecimalField fname _ _ )) = (fname, ) <$> fmap p2FValue <$> decF2P f
+field2Parser (AsciiStrField f@(AsciiStringField(FieldInstrContent fname _ _ ))) = (fname, ) <$> fmap p2FValue <$> asciiStrF2P f
+field2Parser (UnicodeStrField f@(UnicodeStringField (FieldInstrContent fname _ _ ) _ )) = (fname, ) <$> fmap p2FValue <$> unicodeF2P f
+field2Parser (ByteVecField f@(ByteVectorField (FieldInstrContent fname _ _ ) _ )) = (fname, ) <$> fmap p2FValue <$> bytevecF2P f
 field2Parser (Seq s) = seqF2P s
 field2Parser (Grp g) = groupF2P g
 
@@ -251,11 +251,11 @@ intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Constant iv))) intParser iv
 
 -- pm: Yes, Nullable: No
 intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Default (Just iv)))) intParser ivToInt _
-    = (notPresent *> (return $ Just(ivToInt iv))) 
+    = (notPresent *> return (Just(ivToInt iv)))
         <|> Just <$> intParser
 
 -- pm: Yes, Nullable: No
-intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Default (Nothing)))) _ _ _
+intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))) _ _ _
     = error "S5: No initial value given for mandatory default operator."
 
 -- pm: Yes, Nullable: No
@@ -270,7 +270,7 @@ intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Copy oc))) intParser iv
                                                               \value."
                 h (Empty) = error "D6: Previous value is empty in madatory copy operator."
             in 
-                (prevValue fname oc) >>= return . h 
+                fmap h (prevValue fname oc)
             )
         )
         <|> (((Assigned <$> p) >>= updatePrevValue fname oc) >> Just <$> p) where p = intParser
@@ -279,15 +279,15 @@ intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Copy oc))) intParser iv
 intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Increment oc))) intParser ivToInt _
     = (notPresent *> 
         (let 
-            h (Assigned p) = ((return (Assigned p')) >>= (updatePrevValue fname oc )) >> (return (Just p')) where p' = inc p
+            h (Assigned p) = updatePrevValue fname oc (Assigned p') >> return (Just p') where p' = inc p
             h (Undefined) = h' oc
-                where   h' (OpContext _ _ (Just iv)) = ((return $ Assigned $ i) >>= (updatePrevValue fname oc)) >> (return $ Just $ i) where i =ivToInt iv
+                where   h' (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned i) >> return (Just i) where i =ivToInt iv
                         h' (OpContext _ _ Nothing) = error "D5: No initial value in operator context given for\
                                                         \mandatory increment operator with undefined dictionary\
                                                         \value."
             h (Empty) = error "D6: Previous value is empty in mandatory increment operator."
           in
-            (prevValue fname oc) >>= h
+            prevValue fname oc >>= h
         )
     )
     <|> (((Assigned <$> p) >>= updatePrevValue fname oc) >> (Just <$> p)) where p = intParser
@@ -300,12 +300,12 @@ intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Tail iv))) _ _ _
 
 -- pm: Yes, Nullable: No
 intF2P' (FieldInstrContent _ (Just Optional) (Just (Constant iv))) _ ivToInt _
-    = (notPresent *> (return $ Nothing))
-    <|> (return $ Just(ivToInt iv))
+    = (notPresent *> return Nothing)
+    <|> return (Just(ivToInt iv))
 
 -- pm: Yes, Nullable: Yes
 intF2P' (FieldInstrContent _ (Just Optional) (Just (Default (Just iv)))) intParser ivToInt _
-    = (notPresent *> (return $ Just $ (ivToInt iv)))
+    = (notPresent *> return (Just $ ivToInt iv))
     <|> nULL
     <|> (Just <$> intParser)
 
@@ -322,10 +322,10 @@ intF2P' (FieldInstrContent fname (Just Optional) (Just (Copy oc))) intParser ivT
                 h (Assigned p) = return $ Just p
                 h (Undefined) = h' oc
                     where   h' (OpContext _ _ (Just iv)) = return $ Just (ivToInt iv)
-                            h' (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> (return $ Nothing)  
-                h (Empty) = return $ Nothing
+                            h' (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> return Nothing  
+                h (Empty) = return Nothing
             in 
-                (prevValue fname oc) >>= h 
+                prevValue fname oc >>= h 
             )
         )
         <|> nULL <* updatePrevValue fname oc Empty
@@ -335,13 +335,13 @@ intF2P' (FieldInstrContent fname (Just Optional) (Just (Copy oc))) intParser ivT
 intF2P' (FieldInstrContent fname (Just Optional) (Just (Increment oc))) intParser ivToInt _
     = (notPresent *> 
         (let 
-            h (Assigned p) = (return (Assigned p') >>= (updatePrevValue fname oc)) >> Just <$> (return $ p') where p' = inc p
+            h (Assigned p) = updatePrevValue fname oc (Assigned p') >> Just <$> return p' where p' = inc p
             h (Undefined) = h' oc
-                where   h' (OpContext _ _ (Just iv)) = ((return (Assigned $ i) >>= (updatePrevValue fname oc)) >> (Just <$> (return $ i))) where i = ivToInt iv
-                        h' (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> (return $ Nothing) 
+                where   h' (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned i) >> (Just <$> return i) where i = ivToInt iv
+                        h' (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> return Nothing
             h (Empty) = return Nothing
          in
-            (prevValue fname oc) >>= h
+            prevValue fname oc >>= h
         )
     )
     <|> nULL <* (updatePrevValue fname oc Empty >> return Nothing)
@@ -372,7 +372,7 @@ intF2P'' (FieldInstrContent fname (Just Mandatory) (Just (Delta oc))) deltaParse
     in
         do 
             d <- deltaParser
-            Just <$> (((flip  delta) d) <$> (baseValue <$> (prevValue fname oc)))
+            Just <$> (flip  delta d <$> (baseValue <$> prevValue fname oc))
 
 -- pm: No, Nullable: Yes
 intF2P'' (FieldInstrContent fname (Just Optional) (Just (Delta oc))) deltaParser ivToInt defaultBaseValue
@@ -386,7 +386,7 @@ intF2P'' (FieldInstrContent fname (Just Optional) (Just (Delta oc))) deltaParser
         in
             do 
                 d <- deltaParser
-                Just <$> (((flip  delta) d) <$> (baseValue <$> (prevValue fname oc)))
+                Just <$> (flip delta d <$> (baseValue <$> prevValue fname oc))
 
 -- |Maps an decimal field to its parser.
 decF2P::DecimalField -> FParser (Maybe Primitive)
@@ -405,7 +405,7 @@ decF2P (DecimalField _ (Just Mandatory) (Left (Default Nothing)))
 
 -- pm: Yes, Nullable: No
 decF2P (DecimalField _ (Just Mandatory) (Left (Default (Just iv)))) 
-    = (notPresent *> (return $ Just(ivToDec iv)))
+    = (notPresent *> return(Just(ivToDec iv)))
     <|> (Just <$> dec)
 
 -- pm: Yes, Nullable: No
@@ -420,7 +420,7 @@ decF2P (DecimalField fname (Just Mandatory) (Left (Copy oc)))
                                                               \value."
                 h (Empty) = error "D6: Previous value is empty in madatory copy operator."
             in 
-                (prevValue fname oc) >>= return . h 
+                fmap h (prevValue fname oc)
             )
         )
         <|> (((Assigned <$> dec) >>= updatePrevValue fname oc) >> Just <$> dec)
@@ -440,15 +440,15 @@ decF2P (DecimalField fname (Just Mandatory) (Left (Delta oc)))
     in
         do 
             d <- decDelta
-            Just <$> (((flip  delta) d) <$> (baseValue <$> (prevValue fname oc)))
+            Just <$> (flip  delta d <$> (baseValue <$> prevValue fname oc))
 
 decF2P (DecimalField _ (Just Mandatory) (Left (Tail oc))) 
     = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields." 
 
 -- pm: Yes, Nullable: No
 decF2P (DecimalField _ (Just Optional) (Left (Constant iv))) 
-    = (notPresent *> (return $ Nothing))
-    <|> (return $ Just(ivToDec iv))
+    = (notPresent *> return Nothing)
+    <|> return(Just(ivToDec iv))
 
 -- pm: Yes, Nullable: Yes
 decF2P (DecimalField _ (Just Optional) (Left (Default Nothing))) 
@@ -458,7 +458,7 @@ decF2P (DecimalField _ (Just Optional) (Left (Default Nothing)))
 
 -- pm: Yes, Nullable: Yes
 decF2P (DecimalField _ (Just Optional) (Left (Default (Just iv)))) 
-    = (notPresent *> (return $ Just $ (ivToDec iv)))
+    = (notPresent *> return (Just $ ivToDec iv))
     <|> nULL
     <|> (Just <$> dec)
 
@@ -469,10 +469,10 @@ decF2P (DecimalField fname (Just Optional) (Left (Copy oc)))
                 h (Assigned p) = return $ Just p
                 h (Undefined) = h' oc
                     where   h' (OpContext _ _ (Just iv)) = return $ Just (ivToDec iv)
-                            h' (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> (return $ Nothing)  
-                h (Empty) = return $ Nothing
+                            h' (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> return Nothing  
+                h (Empty) = return Nothing
             in 
-                (prevValue fname oc) >>= h 
+                prevValue fname oc >>= h 
             )
         )
         <|> nULL <* updatePrevValue fname oc Empty
@@ -494,7 +494,7 @@ decF2P (DecimalField fname (Just Optional) (Left (Delta oc)))
         in
             do 
                 d <- decDelta
-                Just <$> (((flip  delta) d) <$> (baseValue <$> (prevValue fname oc)))
+                Just <$> (flip delta d <$> (baseValue <$> prevValue fname oc))
 
 -- pm: No, Nullable: Yes
 decF2P (DecimalField _ (Just Optional) (Left (Tail oc))) 
@@ -506,8 +506,8 @@ decF2P (DecimalField fname (Just Mandatory) (Right (DecFieldOp ex_op ma_op)))
     = let fname' = uniqueFName fname "e"
           fname'' = uniqueFName fname "m"
     in do 
-        e <- (intF2P (Int32Field (FieldInstrContent (fname') (Just Mandatory) (Just ex_op))))
-        m <- (intF2P (Int64Field (FieldInstrContent (fname'') (Just Mandatory) (Just ma_op))))
+        e <- (intF2P (Int32Field (FieldInstrContent fname' (Just Mandatory) (Just ex_op))))
+        m <- (intF2P (Int64Field (FieldInstrContent fname'' (Just Mandatory) (Just ma_op))))
         return (h e m) where   
                         h Nothing _ = Nothing
                         h _ Nothing = Nothing
@@ -552,7 +552,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Defaul
 
 -- pm: Yes, Nullable: No
 asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Default (Just iv)))))
-    = notPresent *> (return $ Just (ivToAscii iv))
+    = notPresent *> return (Just (ivToAscii iv))
     <|> do
         str <- asciiString 
         return $ Just (rmPreamble str)
@@ -563,13 +563,13 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Co
             (let 
                 h (Assigned p) = return (Just p)
                 h (Undefined) = h' oc
-                    where   h' (OpContext _ _ (Just iv)) =  (updatePrevValue fname oc (Assigned i)) >> (return $ Just i) where i = ivToAscii iv
+                    where   h' (OpContext _ _ (Just iv)) =  updatePrevValue fname oc (Assigned i) >> return (Just i) where i = ivToAscii iv
                             h' (OpContext _ _ Nothing) = error "D5: No initial value in operator context\
                                                               \for mandatory copy operator with undefined dictionary\
                                                               \value."
                 h (Empty) = error "D6: Previous value is empty in madatory copy operator."
             in 
-                (prevValue fname oc) >>= h 
+                prevValue fname oc >>= h 
             )
         )
         <|> (((Assigned <$> byteVector) >>= updatePrevValue fname oc) >> (Just <$> byteVector))
@@ -588,19 +588,19 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (De
     in
         do 
             str <- asciiDelta
-            Just <$> (((flip  delta) str) <$> (baseValue <$> (prevValue fname oc)))
+            Just <$> (flip delta str <$> (baseValue <$> prevValue fname oc))
 
 -- pm: Yes, Nullable: No
 asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Tail oc))))
     = notPresent *> (let    baseValue (Assigned p) = return (Just p)
                             baseValue (Undefined) = h oc
-                                where   h (OpContext _ _ (Just iv)) = (updatePrevValue fname oc (Assigned i)) >> (return $ Just i) where i = ivToAscii iv
+                                where   h (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned i) >> return (Just i) where i = ivToAscii iv
                                         h (OpContext _ _ Nothing) = error "D6: No initial value in operator context\
                                                               \for mandatory tail operator with undefined dictionary\
                                                               \value."
                             baseValue (Empty) = error "D7: previous value in a mandatory tail operator can not be empty."
                     in
-                        (prevValue fname oc) >>= baseValue)
+                        prevValue fname oc >>= baseValue)
     <|> (let    baseValue (Assigned p) = p
                 baseValue (Undefined) = h oc
                     where   h (OpContext _ _ (Just iv)) = ivToAscii iv
@@ -613,22 +613,22 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Ta
             do
                 pv <- (prevValue fname oc)
                 t <- asciiTail
-                return (Just((baseValue pv) `FAST.tail` t)))
+                return (Just (baseValue pv `FAST.tail` t)))
 
 -- pm: Yes, Nullable: No
 asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Constant iv)))) 
-    = (notPresent *> (return $ Nothing))
-    <|> (return $ Just(ivToAscii iv))
+    = (notPresent *> return Nothing)
+    <|> return (Just (ivToAscii iv))
 
 -- pm: Yes, Nullable: Yes
 asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Default Nothing))))
-    = (notPresent *> (return Nothing))
+    = (notPresent *> return Nothing)
     <|> nULL
     <|> (Just <$> asciiString')
 
 -- pm: Yes, Nullable: Yes
 asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Default (Just iv)))))
-    = notPresent *> (return $ Just (ivToAscii iv))
+    = notPresent *> return (Just (ivToAscii iv))
     <|> nULL
     <|> Just <$> asciiString'
 
@@ -638,11 +638,11 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Cop
             (let 
                 h (Assigned p) = return (Just p)
                 h (Undefined) = h' oc
-                    where   h' (OpContext _ _ (Just iv)) = (updatePrevValue fname oc (Assigned i)) >> (return $ Just i) where i =ivToAscii iv
-                            h' (OpContext _ _ Nothing) = (updatePrevValue fname oc Empty) >> return Nothing
+                    where   h' (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned i) >> return (Just i) where i =ivToAscii iv
+                            h' (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> return Nothing
                 h (Empty) = return Nothing
             in 
-                (prevValue fname oc) >>= h 
+                prevValue fname oc >>= h 
             )
         )
         <|> (nULL *> (updatePrevValue fname oc Empty >> return Nothing))
@@ -663,17 +663,17 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Del
         in
             do 
                 str <- asciiDelta'
-                Just <$> (((flip  delta) str) <$> (baseValue <$> (prevValue fname oc))))
+                Just <$> (flip delta str <$> (baseValue <$> prevValue fname oc)))
 
 -- pm: Yes, Nullable: Yes
 asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Tail oc))))
     = notPresent *> (let    baseValue (Assigned p) = return (Just p)
                             baseValue (Undefined) = h oc
-                                where   h (OpContext _ _ (Just iv)) = (updatePrevValue fname oc (Assigned i)) >> (return $ Just i) where i = ivToAscii iv
-                                        h (OpContext _ _ Nothing) = (updatePrevValue fname oc Empty) >> return Nothing
+                                where   h (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned i) >> return (Just i) where i = ivToAscii iv
+                                        h (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> return Nothing
                             baseValue (Empty) = return Nothing
                     in
-                        (prevValue fname oc) >>= baseValue)
+                        prevValue fname oc >>= baseValue)
     <|> (nULL >> updatePrevValue fname oc Empty >> return Nothing)
     <|> let baseValue (Assigned p) = return p
             baseValue (Undefined) = h oc
@@ -684,9 +684,9 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Tai
                         h (OpContext _ _ Nothing) = return dfbAscii
         in
             do
-                bv <- (prevValue fname oc) >>= baseValue
+                bv <- prevValue fname oc >>= baseValue
                 t <- asciiString'
-                return (Just (bv `FAST.tail` (AsciiTail t)))
+                return (Just (bv `FAST.tail` AsciiTail t))
 
 -- |Maps a bytevector field to its parser.
 bytevecF2P::ByteVectorField -> FParser (Maybe Primitive)
@@ -710,8 +710,8 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just (Con
 
 -- pm: Yes, Nullable: No
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Constant iv))) length) 
-    = (notPresent *> (return $ Nothing))
-    <|> (return $ Just(ivToByteVector iv))
+    = (notPresent *> return Nothing)
+    <|> return (Just (ivToByteVector iv))
 
 -- pm: Yes, Nullable: No
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Default Nothing))) length) 
@@ -719,20 +719,20 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Defa
 
 -- pm: Yes, Nullable: No
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Default (Just iv)))) length) 
-    = notPresent *> (return $ Just (ivToByteVector iv))
+    = notPresent *> return (Just (ivToByteVector iv))
     <|> do
         bv <- byteVector
-        return $ Just (bv)
+        return (Just bv)
 
 -- pm: Yes, Nullable: Yes
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Default Nothing))) length) 
-    = (notPresent *> (return Nothing))
+    = (notPresent *> return Nothing)
     <|> nULL
     <|> (Just <$> byteVector)
 
 -- pm: Yes, Nullable: Yes
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Default (Just iv)))) length) 
-    = notPresent *> (return $ Just (ivToByteVector iv))
+    = notPresent *> return (Just (ivToByteVector iv))
     <|> nULL
     <|> Just <$> byteVector
 
@@ -742,13 +742,13 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Copy
             (let 
                 h (Assigned p) = return (Just p)
                 h (Undefined) = h' oc
-                    where   h' (OpContext _ _ (Just iv)) = (updatePrevValue fname oc (Assigned bv)) >> (return $ (Just bv)) where bv = ivToByteVector iv 
+                    where   h' (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned bv) >> return (Just bv) where bv = ivToByteVector iv 
                             h' (OpContext _ _ Nothing) = error "D5: No initial value in operator context\
                                                               \for mandatory copy operator with undefined dictionary\
                                                               \value."
                 h (Empty) = error "D6: Previous value is empty in madatory copy operator."
             in 
-                (prevValue fname oc) >>= h 
+                prevValue fname oc >>= h 
             )
         )
         <|> (((Assigned <$> byteVector) >>= updatePrevValue fname oc) >> (Just <$> byteVector))
@@ -759,11 +759,11 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Copy 
             (let 
                 h (Assigned p) = return (Just p)
                 h (Undefined) = h' oc
-                    where   h' (OpContext _ _ (Just iv)) = (updatePrevValue fname oc (Assigned bv)) >> (return $ Just bv) where bv = ivToByteVector iv
-                            h' (OpContext _ _ Nothing) = (updatePrevValue fname oc Empty) >> return Nothing
+                    where   h' (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned bv) >> return (Just bv) where bv = ivToByteVector iv
+                            h' (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> return Nothing
                 h (Empty) = return Nothing
             in 
-                (prevValue fname oc) >>= h 
+                prevValue fname oc >>= h 
             )
         )
         <|> (nULL *> (updatePrevValue fname oc Empty >> return Nothing))
@@ -786,7 +786,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Delt
     in
         do 
             bv <- byteVectorDelta
-            Just <$> (((flip  delta) bv) <$> (baseValue <$> (prevValue fname oc)))
+            Just <$> (flip delta bv <$> (baseValue <$> prevValue fname oc))
 
 -- pm: No, Nullable: Yes
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Delta oc))) length) 
@@ -799,19 +799,19 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Delta
         in
             do 
                 bv <- byteVectorDelta
-                Just <$> (((flip  delta) bv) <$> (baseValue <$> (prevValue fname oc))))
+                Just <$> (flip delta bv <$> (baseValue <$> prevValue fname oc)))
 
 -- pm: Yes, Nullable: No
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail oc))) length) 
     = notPresent *> (let    baseValue (Assigned p) = return (Just p)
                             baseValue (Undefined) = h oc
-                                where   h (OpContext _ _ (Just iv)) = (updatePrevValue fname oc (Assigned bv)) >> (return $ Just bv) where bv = ivToByteVector iv
+                                where   h (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned bv) >> return (Just bv) where bv = ivToByteVector iv
                                         h (OpContext _ _ Nothing) = error "D6: No initial value in operator context\
                                                               \for mandatory tail operator with undefined dictionary\
                                                               \value."
                             baseValue (Empty) = error "D7: previous value in a mandatory tail operator can not be empty."
                     in
-                        (prevValue fname oc) >>= baseValue)
+                        prevValue fname oc >>= baseValue)
     <|> (let    baseValue (Assigned p) = p
                 baseValue (Undefined) = h oc
                     where   h (OpContext _ _ (Just iv)) = ivToByteVector iv
@@ -824,17 +824,17 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail
             do
                 pv <- prevValue fname oc
                 t <- bytevectorTail
-                return (Just((baseValue pv) `FAST.tail` t)))
+                return (Just(baseValue pv `FAST.tail` t)))
 
 -- pm: Yes, Nullable: Yes
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Tail oc))) length) 
     = notPresent *> (let    baseValue (Assigned p) = return (Just p)
                             baseValue (Undefined) = h oc
-                                where   h (OpContext _ _ (Just iv)) = (updatePrevValue fname oc (Assigned bv)) >> (return $ Just bv) where bv = ivToByteVector iv
-                                        h (OpContext _ _ Nothing) = (updatePrevValue fname oc Empty) >> return Nothing
+                                where   h (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned bv) >> return (Just bv) where bv = ivToByteVector iv
+                                        h (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> return Nothing
                             baseValue (Empty) = return Nothing
                     in
-                        (prevValue fname oc) >>= baseValue)
+                        prevValue fname oc >>= baseValue)
     <|> (nULL >> updatePrevValue fname oc Empty >> return Nothing)
     <|> let baseValue (Assigned p) = return p
             baseValue (Undefined) = h oc
@@ -845,7 +845,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Tail 
                         h (OpContext _ _ Nothing) = return dfbByteVector
         in
             do
-                bv <- (prevValue fname oc) >>= baseValue
+                bv <- prevValue fname oc >>= baseValue
                 t <- bytevectorTail
                 return (Just (bv `FAST.tail` t))
 
@@ -864,7 +864,7 @@ seqF2P (Sequence fname maybe_presence maybe_dict maybe_typeref maybe_length inst
         g i
         where   g Nothing = return (fname, Nothing)
                 g (Just (Int32 i')) = do
-                                        s <- (ask >>= \env -> A.count i' ((segmentDep instrs (templates env)) >> (sequence (map instr2P instrs))))
+                                        s <- (ask >>= \env -> A.count i' (segmentDep instrs (templates env) >> mapM instr2P instrs))
                                         return (fname, Just (Sq i' s))
                 -- get the correct parser for the length field.
                 fname' = uniqueFName fname "l" 
@@ -875,10 +875,10 @@ seqF2P (Sequence fname maybe_presence maybe_dict maybe_typeref maybe_length inst
 -- |Maps a group field to its parser.
 groupF2P::Group -> FParser (NsName, Maybe FValue)
 groupF2P (Group fname (Just Mandatory) maybe_dict maybe_typeref instrs) 
-    = ask >>= \env -> (fname,) . Just . Gr <$> ((segmentGrp instrs (templates env)) >> sequence (map instr2P instrs))
+    = ask >>= \env -> (fname,) . Just . Gr <$> (segmentGrp instrs (templates env) >> mapM instr2P instrs)
 groupF2P (Group fname (Just Optional) maybe_dict maybe_typeref instrs) 
     = notPresent *> return (fname, Nothing)
-    <|> (ask >>= \env -> (fname,) . Just . Gr <$> ((segmentGrp instrs (templates env)) >> sequence (map instr2P instrs)))
+    <|> (ask >>= \env -> (fname,) . Just . Gr <$> (segmentGrp instrs (templates env) >> mapM instr2P instrs))
 
 -- *Previous value related functions.
 
@@ -979,10 +979,10 @@ dec = do
 uint::FParser Int
 uint = do 
     bs <- anySBEEntity
-    return (snd((B.foldl h (0,0) bs)))
+    return (snd (B.foldl h (0,0) bs))
     where
         h::(Int,Int) -> Word8 -> (Int,Int)
-        h (c,r) w = (c + 1, r + fromEnum((clearBit w 8)) * 2^(7*c))
+        h (c,r) w = (c + 1, r + fromEnum (clearBit w 8) * 2^(7*c))
         
 -- |Signed integer parser, doesn't check for bounds.
 int::FParser Int
@@ -992,11 +992,11 @@ int = do
     where 
         h::(Int,Int) -> Word8 -> (Int,Int)
         h (c,r) w = (c + 1, r') 
-            where  r' = case (testBit w 8) of
-                            True -> case testBit w 7 of
-                                        True -> -1 * (r + fromEnum(w .&. 0xc0) * 2^(7*c)) 
-                                        False -> r + fromEnum((clearBit w 8)) * 2^(7*c)
-                            False -> r + (fromEnum w) * 2^(7*c)
+            where  r' = if testBit w 8 
+                        then (  if testBit w 7 
+                                then -1 * (r + fromEnum(w .&. 0xc0) * 2^(7*c)) 
+                                else r + fromEnum(clearBit w 8) * 2^(7*c))
+                        else r + fromEnum w * 2^(7*c)
 
 -- |Check wether parsed integer is in given range.
 checkBounds::(Int,Int) -> FParser Int -> FParser Int
@@ -1008,29 +1008,29 @@ checkBounds r p = do
 asciiString::FParser Primitive
 asciiString = do
     bs <- anySBEEntity
-    let bs' = (B.init bs) `B.append` B.singleton (clearBit (B.last bs) 8) in
+    let bs' = B.init bs `B.append` B.singleton (clearBit (B.last bs) 8) in
         return (rmPreamble(Ascii (map w2c (B.unpack bs'))))
 
 -- |ASCII string field parser, Nullable.
 asciiString'::FParser Primitive
 asciiString' = do
     bs <- anySBEEntity
-    let bs' = (B.init bs) `B.append` B.singleton (clearBit (B.last bs) 8) in
-        return (rmPreamble'(Ascii ((map w2c (B.unpack bs')))))
+    let bs' = B.init bs `B.append` B.singleton (clearBit (B.last bs) 8) in
+        return (rmPreamble'(Ascii (map w2c (B.unpack bs'))))
     
 -- |Remove Preamble of an ascii string, non-Nullable situation.
 rmPreamble::Primitive -> Primitive
 rmPreamble (Ascii ['\0']) = Ascii []
-rmPreamble (Ascii ['\0', '\0']) = Ascii ['\0']
+rmPreamble (Ascii ['\0', '\0']) = Ascii "\NUL"
 -- overlong string.
-rmPreamble (Ascii x) = Ascii (filter (\c -> (c /= '\0')) x)
+rmPreamble (Ascii x) = Ascii (filter (/= '\0') x)
 
 -- |Remove preamble of an ascii string, NULLable situation.
 rmPreamble'::Primitive -> Primitive
 rmPreamble' (Ascii ['\0','\0']) = Ascii []
-rmPreamble' (Ascii ['\0','\0','\0']) = Ascii ['\0']
+rmPreamble' (Ascii ['\0','\0','\0']) = Ascii "\NUL"
 -- overlong string.
-rmPreamble' (Ascii x) = Ascii (filter (\c -> (c /= '\0')) x)
+rmPreamble' (Ascii x) = Ascii (filter (/= '\0') x)
 
 -- |Unicode string field parser. The first argument is the size of the string.
 unicodeString::FParser Primitive
@@ -1050,7 +1050,7 @@ byteVector = do
 -- |Bytevector field parser. The first argument is the size of the bytevector.
 byteVector'::Int -> FParser Primitive
 byteVector' c = lift $ lift p
-    where p = Bytevector <$> (A.take c)
+    where p = Bytevector <$> A.take c
 
 -- * Delta parsers.
 -- |Int32 delta parser.
@@ -1118,7 +1118,7 @@ presenceMap = do
 
 -- |Convert a bytestring into a presence map.
 bsToPm::B.ByteString -> [Bool]
-bsToPm bs = concat (map h (B.unpack bs)) 
+bsToPm bs = concatMap h (B.unpack bs) 
     where   h::Word8 -> [Bool]
             h w = map (testBit w) [1..7] 
 
@@ -1129,9 +1129,9 @@ notPresent = do
     s <- get
     put (FState (P.tail (pm s)) (dict s))
     let pmap = pm s in
-        case head pmap of
-            True -> fail "Presence bit set."
-            False -> return Nothing
+        if head pmap 
+        then fail "Presence bit set."
+        else return Nothing
 
 -- |Get a Stopbit encoded entity.
 anySBEEntity::FParser B.ByteString
@@ -1162,9 +1162,7 @@ segment' = presenceMap >> templateIdentifier
 
 -- |Returns newSegment | id, depending on presence bit usage of a group of fields.
 segmentDep::[Instruction] -> M.Map String Template -> FParser ()
-segmentDep ins ts = case any (needsPm ts) ins of
-    True -> segment
-    False -> return ()
+segmentDep ins ts = when (any (needsPm ts) ins) segment
 
 -- |New segment depending on the instructions in the group, creates a presence map for the group.
 segmentGrp::[Instruction] -> M.Map String Template -> FParser ()
@@ -1179,7 +1177,7 @@ segmentGrp ins ts = case any (needsPm ts) ins of
 -- to process template reference instructions recursivly.
 needsPm::M.Map String Template -> Instruction -> Bool
 -- static template reference
-needsPm ts (TemplateReference (Just (TemplateReferenceContent (NameAttr n) _))) = and $ map (needsPm ts) (tInstructions t) where t = ts M.! n
+needsPm ts (TemplateReference (Just (TemplateReferenceContent (NameAttr n) _))) = all (needsPm ts) (tInstructions t) where t = ts M.! n
 -- dynamic template reference
 needsPm ts (TemplateReference Nothing) = False
 needsPm _ (Instruction (IntField (Int32Field fic))) = intFieldNeedsPm fic
@@ -1238,13 +1236,13 @@ needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just
 needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Tail _))) _))) = True
 needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Tail _))) _))) = True
 needsPm ts (Instruction (UnicodeStrField (UnicodeStringField (FieldInstrContent fname maybe_presence maybe_op) maybe_length))) = needsPm ts (Instruction(ByteVecField (ByteVectorField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)))
-needsPm ts (Instruction (Seq s)) = and $ map h (sInstructions s)
+needsPm ts (Instruction (Seq s)) = all h (sInstructions s)
     where   h (TemplateReference Nothing) = False
-            h (TemplateReference (Just (TemplateReferenceContent (NameAttr tname) _))) = and $ map (needsPm ts) (tInstructions (ts M.! tname))
+            h (TemplateReference (Just (TemplateReferenceContent (NameAttr tname) _))) = all (needsPm ts) (tInstructions (ts M.! tname))
             h f = needsPm ts f
-needsPm ts (Instruction (Grp g)) = and $ map h (gInstructions g)
+needsPm ts (Instruction (Grp g)) = all h (gInstructions g)
     where   h (TemplateReference Nothing) = False
-            h (TemplateReference (Just (TemplateReferenceContent (NameAttr tname) _))) = and $ map (needsPm ts) (tInstructions (ts M.! tname))
+            h (TemplateReference (Just (TemplateReferenceContent (NameAttr tname) _))) = all (needsPm ts) (tInstructions (ts M.! tname))
             h f = needsPm ts f
 
 -- |Maps a integer field to a triple (DictionaryName, Key, Value).
@@ -1275,7 +1273,7 @@ templateIdentifier = do
     case maybe_i of
         (Just (I i')) -> do 
             env <- ask
-            template2P $ (templates env) M.! ((tid2temp env) i')
+            template2P $ templates env M.! tid2temp env i'
         Nothing -> error "Failed to parse template identifier."
 
     where p = field2Parser (IntField (UInt32Field (FieldInstrContent 
