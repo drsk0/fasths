@@ -1,5 +1,7 @@
 {-# LANGUAGE Arrows #-}
 
+module TemplateParser (getTemplateXML) where
+
 import Text.XML.HXT.Core
 import Data.Maybe (listToMaybe)
 import FAST
