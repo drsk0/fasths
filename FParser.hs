@@ -58,11 +58,11 @@ p2FValue (Bytevector bs) = BS bs
 
 -- |The initial state of the parser depending on the templates.
 initState::Templates -> FState
-initState ts = FState [] (M.fromList [(k,d) | d@(Dictionary k _) <- concat $ map initDicts (ts_templates ts)])
+initState ts = FState [] (M.fromList [(k,d) | d@(Dictionary k _) <- concat $ map initDicts (tsTemplates ts)])
 
 -- |Creates a list of dictionaries depending on the fields of a template.
 initDicts::Template -> [Dictionary]
-initDicts t = createDicts . catMaybes. concat $ map h (t_instructions t)
+initDicts t = createDicts . catMaybes. concat $ map h (tInstructions t)
     where   h (TemplateReference _) = []
             h (Instruction f) = dictOfField f
 
@@ -130,10 +130,10 @@ dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Option
 dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail oc))) _)) = [Just $ dictOfOpContext oc fname] 
 dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Tail oc))) _)) = [Just $ dictOfOpContext oc fname]
 dictOfField (UnicodeStrField (UnicodeStringField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)) = dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname maybe_presence maybe_op) maybe_length))
-dictOfField (Seq s) = concat $ map h (s_instructions s)
+dictOfField (Seq s) = concat $ map h (sInstructions s)
     where   h (TemplateReference _) = [Nothing]
             h (Instruction f) = dictOfField f
-dictOfField (Grp g) = concat $ map h (g_instructions g)
+dictOfField (Grp g) = concat $ map h (gInstructions g)
     where   h (TemplateReference _) = [Nothing]
             h (Instruction f) = dictOfField f
 
@@ -166,16 +166,16 @@ dictOfOpContext (OpContext (Just (DictionaryAttr d)) (Just (NsKey (KeyAttr (Toke
 -- |The environment of the parser depending on the templates and
 -- the tid2temp function provided by the application.
 initEnv::Templates -> (Int -> String) -> FEnv
-initEnv ts f = FEnv (M.fromList [(k,t) | (TemplateNsName (NameAttr k) _ _) <- map t_name (ts_templates ts), t <- ts_templates ts]) f
+initEnv ts f = FEnv (M.fromList [(k,t) | (TemplateNsName (NameAttr k) _ _) <- map tName (tsTemplates ts), t <- tsTemplates ts]) f
 
 -- |Maps several templates to a list of corresponding parsers.
 templates2P::Templates -> [(TemplateNsName, FParser (NsName, Maybe FValue))]
-templates2P t = [(n, p) | n <- (fmap t_name (ts_templates t)), p <- (fmap template2P (ts_templates t))]
+templates2P t = [(n, p) | n <- (fmap tName (tsTemplates t)), p <- (fmap template2P (tsTemplates t))]
 
 -- |Maps a template to its corresponding parser.
 -- We treat a template as a group with NsName equal the TemplateNsName.
 template2P::Template -> FParser (NsName, Maybe FValue)
-template2P t = (tname2fname (t_name t), ) <$> Just . Gr <$> sequence (map instr2P (t_instructions t))
+template2P t = (tname2fname (tName t), ) <$> Just . Gr <$> sequence (map instr2P (tInstructions t))
 
 -- |Translates a TemplateNsName into a NsName. Its the same anyway.
 tname2fname::TemplateNsName -> NsName
@@ -1179,7 +1179,7 @@ segmentGrp ins ts = case any (needsPm ts) ins of
 -- to process template reference instructions recursivly.
 needsPm::M.Map String Template -> Instruction -> Bool
 -- static template reference
-needsPm ts (TemplateReference (Just (TemplateReferenceContent (NameAttr n) _))) = and $ map (needsPm ts) (t_instructions t) where t = ts M.! n
+needsPm ts (TemplateReference (Just (TemplateReferenceContent (NameAttr n) _))) = and $ map (needsPm ts) (tInstructions t) where t = ts M.! n
 -- dynamic template reference
 needsPm ts (TemplateReference Nothing) = False
 needsPm _ (Instruction (IntField (Int32Field fic))) = intFieldNeedsPm fic
@@ -1238,13 +1238,13 @@ needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just
 needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Tail _))) _))) = True
 needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Tail _))) _))) = True
 needsPm ts (Instruction (UnicodeStrField (UnicodeStringField (FieldInstrContent fname maybe_presence maybe_op) maybe_length))) = needsPm ts (Instruction(ByteVecField (ByteVectorField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)))
-needsPm ts (Instruction (Seq s)) = and $ map h (s_instructions s)
+needsPm ts (Instruction (Seq s)) = and $ map h (sInstructions s)
     where   h (TemplateReference Nothing) = False
-            h (TemplateReference (Just (TemplateReferenceContent (NameAttr tname) _))) = and $ map (needsPm ts) (t_instructions (ts M.! tname))
+            h (TemplateReference (Just (TemplateReferenceContent (NameAttr tname) _))) = and $ map (needsPm ts) (tInstructions (ts M.! tname))
             h f = needsPm ts f
-needsPm ts (Instruction (Grp g)) = and $ map h (g_instructions g)
+needsPm ts (Instruction (Grp g)) = and $ map h (gInstructions g)
     where   h (TemplateReference Nothing) = False
-            h (TemplateReference (Just (TemplateReferenceContent (NameAttr tname) _))) = and $ map (needsPm ts) (t_instructions (ts M.! tname))
+            h (TemplateReference (Just (TemplateReferenceContent (NameAttr tname) _))) = and $ map (needsPm ts) (tInstructions (ts M.! tname))
             h f = needsPm ts f
 
 -- |Maps a integer field to a triple (DictionaryName, Key, Value).

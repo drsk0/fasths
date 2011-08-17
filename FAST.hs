@@ -56,25 +56,25 @@ local = ""
 
 -- |A collection of templates, i.e. a template file.
 data Templates = Templates {
-    ts_ns           ::Maybe NsAttr,
-    ts_templateNs   ::Maybe TemplateNsAttr,
-    ts_dictionary   ::Maybe DictionaryAttr,
-    ts_templates    ::[Template]
+    tsNs           ::Maybe NsAttr,
+    tsTemplateNs   ::Maybe TemplateNsAttr,
+    tsDictionary   ::Maybe DictionaryAttr,
+    tsTemplates    ::[Template]
     }
 
 -- |FAST template.
 data Template = Template {
-    t_name          ::TemplateNsName,
-    t_ns            ::Maybe NsAttr,
-    t_dictionary    ::Maybe DictionaryAttr,
-    t_typeRef       ::Maybe TypeRef,
-    t_instructions  ::[Instruction]
+    tName          ::TemplateNsName,
+    tNs            ::Maybe NsAttr,
+    tDictionary    ::Maybe DictionaryAttr,
+    tTypeRef       ::Maybe TypeRef,
+    tInstructions  ::[Instruction]
     }
 
 -- |A typeRef element of a template.
 data TypeRef = TypeRef {
-    trf_name    ::NameAttr,
-    trf_ns      ::Maybe NsAttr 
+    trName    ::NameAttr,
+    trNs      ::Maybe NsAttr 
     }
 
 -- |An Instruction in a template is either a field instruction or a template reference.
@@ -83,15 +83,15 @@ data Instruction = Instruction Field
 
 -- |This is a helper data structure, NOT defined in the reference.
 data TemplateReferenceContent = TemplateReferenceContent {
-        trc_name        ::NameAttr,
-        trc_templateNs  ::Maybe TemplateNsAttr 
+        trcName        ::NameAttr,
+        trcTemplateNs  ::Maybe TemplateNsAttr 
         }
 
 -- |Field Instruction content.
 data FieldInstrContent = FieldInstrContent {
-    fic_fname       ::NsName,
-    fic_presence    ::Maybe PresenceAttr,
-    fieldOp         ::Maybe FieldOp
+    ficFName       ::NsName,
+    ficPresence    ::Maybe PresenceAttr,
+    ficFieldOp         ::Maybe FieldOp
     }
 
 -- |FAST field instructions.
@@ -111,9 +111,9 @@ data IntegerField = Int32Field FieldInstrContent
 
 -- |Decimal Field.
 data DecimalField = DecimalField {
-        dfi_fname           ::NsName, 
-        dfi_presence        ::Maybe PresenceAttr,
-        dfi_fieldOp         ::Either FieldOp DecFieldOp
+        dfiFName           ::NsName, 
+        dfiPresence        ::Maybe PresenceAttr,
+        dfiFieldOp         ::Either FieldOp DecFieldOp
         }
 
 -- |Ascii string field.
@@ -121,40 +121,40 @@ data AsciiStringField = AsciiStringField FieldInstrContent
 
 -- |Unicode string field.
 data UnicodeStringField = UnicodeStringField {
-        usf_content         ::FieldInstrContent, 
-        usf_length          ::Maybe ByteVectorLength
+        usfContent         ::FieldInstrContent, 
+        usfLength          ::Maybe ByteVectorLength
         }
 
 -- |Bytevector field.
 data ByteVectorField = ByteVectorField {
-        bvf_content         ::FieldInstrContent, 
-        bvf_length          ::Maybe ByteVectorLength
+        bvfContent         ::FieldInstrContent, 
+        bvfLength          ::Maybe ByteVectorLength
         } 
 
 -- |Sequence field.
 data Sequence = Sequence {
-        s_fname             ::NsName,
-        s_presence          ::Maybe PresenceAttr,
-        s_dictionary        ::Maybe DictionaryAttr,
-        s_typeRef           ::Maybe TypeRef,
-        s_length            ::Maybe Length,
-        s_instructions      ::[Instruction]
+        sFName             ::NsName,
+        sPresence          ::Maybe PresenceAttr,
+        sDictionary        ::Maybe DictionaryAttr,
+        sTypeRef           ::Maybe TypeRef,
+        sLength            ::Maybe Length,
+        sInstructions      ::[Instruction]
         }
 
 -- |Group field.
 data Group = Group {
-        g_fname             ::NsName,
-        g_presence          ::Maybe PresenceAttr,
-        g_dictionary        ::Maybe DictionaryAttr,
-        g_typeRef           ::Maybe TypeRef,
-        g_instructions      ::[Instruction]
+        gFName             ::NsName,
+        gPresence          ::Maybe PresenceAttr,
+        gDictionary        ::Maybe DictionaryAttr,
+        gTypeRef           ::Maybe TypeRef,
+        gInstructions      ::[Instruction]
         }
 
 -- |ByteVectorLenght is logically a uInt32, but it is not a field instruction 
 -- and it is not physically present in the stream. Obviously no field operator 
 -- is needed.
 data ByteVectorLength = ByteVectorLength {
-    bvl_nsName::NsName
+    bvlNsName::NsName
     }
 
 -- |SeqLength is logically a uInt32. The name maybe 'implicit' or 'explicit' 
@@ -166,8 +166,8 @@ data ByteVectorLength = ByteVectorLength {
 -- implicit name and the length of the sequence is not present in the stream 
 -- and therefore the length field neither contains a field operator.
 data Length = Length {
-    sl_fname    ::Maybe NsName,
-    sl_fieldOp  ::Maybe FieldOp
+    lFName    ::Maybe NsName,
+    lFieldOp  ::Maybe FieldOp
     }
 
 
@@ -184,8 +184,8 @@ data FieldOp = Constant InitialValueAttr
  
 -- |The decimal field operator consists of two standart operators.
 data DecFieldOp = DecFieldOp {
-    do_exponent    ::FieldOp,
-    do_mantissa    ::FieldOp
+    dfoExponent    ::FieldOp,
+    dfoMantissa    ::FieldOp
     }
 
 -- |Dictionary consists of a name and a list of key value pairs.
@@ -199,9 +199,9 @@ data DictValue = Undefined
 
 -- |Operator context.
 data OpContext = OpContext {
-    dictionary      ::Maybe DictionaryAttr,
-    nsKey           ::Maybe NsKey,
-    initialValue    ::Maybe InitialValueAttr
+    ocDictionary      ::Maybe DictionaryAttr,
+    ocNsKey           ::Maybe NsKey,
+    ocInitialValue    ::Maybe InitialValueAttr
     }
 
 -- |Dictionary attribute. Three predefined dictionaries are "template", "type" 
@@ -210,13 +210,13 @@ data DictionaryAttr = DictionaryAttr String
 
 -- |nsKey attribute.
 data NsKey = NsKey {
-    key     ::KeyAttr,
-    k_ns    ::Maybe NsAttr
+    nkKey     ::KeyAttr,
+    nkNs    ::Maybe NsAttr
     }
 
 -- |Key attribute.
 data KeyAttr = KeyAttr {
-    token::Token
+    kaToken::Token
     }
 
 -- |Initial value attribute. The value is a string of unicode characters and needs to 
@@ -271,10 +271,10 @@ delta (UInt64 b) (UInt64Delta (Int64 d)) = UInt64 (checkRange ui64Range (b + d))
 -- delta for decimal type is addition of exponents and mantissas.
 delta (Decimal (Int32 b) (Int64 b')) (DecimalDelta (Decimal (Int32 d) (Int64 d'))) 
     = Decimal (Int32 (checkRange decExpRange (b + d))) (Int64 (checkRange i64Range (b' + d')))
-delta (Ascii str) (AsciiDelta (Int32 l) (Ascii str')) | (l < 0) = Ascii (str' ++ str'') where str'' = drop (l + 1) str
-delta (Ascii str) (AsciiDelta (Int32 l) (Ascii str')) | (l >= 0) = Ascii (str'' ++ str') where str'' = take ((length str) - l) str
-delta (Bytevector bv) (ByteVectorDelta (Int32 l) (Bytevector bv')) | (l < 0) = Bytevector (bv'' `B.append` bv') where bv'' = B.drop (l + 1) bv
-delta (Bytevector bv) (ByteVectorDelta (Int32 l) (Bytevector bv')) | (l >= 0) = Bytevector (bv'' `B.append` bv') where bv'' = B.take ((B.length bv) - l) bv
+delta (Ascii str) (AsciiDelta (Int32 l) (Ascii str')) | l < 0 = Ascii (str' ++ str'') where str'' = drop (l + 1) str
+delta (Ascii str) (AsciiDelta (Int32 l) (Ascii str')) | l >= 0 = Ascii (str'' ++ str') where str'' = take (length str - l) str
+delta (Bytevector bv) (ByteVectorDelta (Int32 l) (Bytevector bv')) | l < 0 = Bytevector (bv'' `B.append` bv') where bv'' = B.drop (l + 1) bv
+delta (Bytevector bv) (ByteVectorDelta (Int32 l) (Bytevector bv')) | l >= 0 = Bytevector (bv'' `B.append` bv') where bv'' = B.take (B.length bv - l) bv
 delta _ _ = undefined
 
 -- |Tail data. Not present in the FAT specification.
@@ -284,8 +284,8 @@ data Tail = AsciiTail Primitive
 
 -- |Tail operation.
 tail::Primitive -> Tail -> Primitive
-tail (Ascii str) (AsciiTail (Ascii str')) | (length str' < length str) = Ascii ((take (length str - length str') str) ++ str')
-tail (Bytevector bv) (ByteVectorTail (Bytevector bv')) = Bytevector ((B.take (B.length bv - B.length bv') bv) `B.append` bv')
+tail (Ascii str) (AsciiTail (Ascii str')) | length str' < length str = Ascii (take (length str - length str') str ++ str')
+tail (Bytevector bv) (ByteVectorTail (Bytevector bv')) = Bytevector (B.take (B.length bv - B.length bv') bv `B.append` bv')
 tail _ _ = undefined
 
 
@@ -323,13 +323,13 @@ dfbDecimal = Decimal (Int32 0) (Int64 0)
 
 -- |Increment an integer in an increment operator.
 inc::Primitive -> Primitive
-inc (Int32 i) | i == (snd i32Range) = Int32 $ fst i32Range
+inc (Int32 i) | i == snd i32Range = Int32 $ fst i32Range
 inc (Int32 i) = Int32(i + 1)
-inc (Int64 i) | i == (snd i64Range) = Int64 $ fst i64Range 
+inc (Int64 i) | i == snd i64Range = Int64 $ fst i64Range 
 inc (Int64 i) = Int64(i + 1)
-inc (UInt32 i) | i == (snd i32Range) = UInt32 $ fst ui32Range
+inc (UInt32 i) | i == snd i32Range = UInt32 $ fst ui32Range
 inc (UInt32 i) = UInt32(i + 1)
-inc (UInt64 i) | i == (snd ui64Range) = UInt64 $ fst ui64Range
+inc (UInt64 i) | i == snd ui64Range = UInt64 $ fst ui64Range
 inc (UInt64 i) = UInt64(i + 1)
 inc _ = error "S2: Impossible to increment an non-integer type field."
 
@@ -363,6 +363,5 @@ ivToByteVector = undefined
 
 -- |Check wether a value is in a given range.
 checkRange::(Int,Int) -> Int -> Int
-checkRange r x = case (inRange r x) of
-                    True -> x
-                    False -> error "R4: Integer type can not be represented in the target integer type."
+checkRange r x = if inRange r x then x else 
+    error "R4: Integer type can not be represented in the target integer type."
