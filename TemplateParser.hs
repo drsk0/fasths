@@ -68,14 +68,14 @@ getName'::IOStateArrow TPState XmlTree NameAttr
 getName' = getAttrValue  "name" >>> arr NameAttr
 
 getInstructions::IOStateArrow TPState XmlTree [Instruction]
-getInstructions = listA ((atTag "templateRef" >>> getTemplateRef) <+> (atTag "field" >>> getField >>> (arr Instruction)))
+getInstructions = listA ((atTag "templateRef" >>> getTemplateRef) <+> (atTag "field" >>> getField >>> arr Instruction))
 
 getTemplateRef::IOStateArrow TPState XmlTree Instruction
 getTemplateRef = (proc l -> do
     name    <- getName'     -< l
     tNs     <- getTempNs    -< l
-    returnA -< (TemplateReference $ Just $ (TemplateReferenceContent name tNs))) 
-    <+> constA (TemplateReference $ Nothing)
+    returnA -< (TemplateReference $ Just $ TemplateReferenceContent name tNs)) 
+    <+> constA (TemplateReference Nothing)
 
 getField::IOStateArrow TPState XmlTree Field
 getField = (getIntegerField >>> arr IntField) <+> (getDecimalField >>> arr DecField) <+> (getAsciiStringField >>> arr AsciiStrField) 
@@ -145,7 +145,7 @@ getNsName = proc l -> do
     returnA -< (NsName n ns id)
 
 getPresence::IOStateArrow TPState XmlTree PresenceAttr
-getPresence = getAttrValue "presence" >>> (isA (\s -> s == "mandatory") >>> constA Mandatory) <+> constA Optional
+getPresence = getAttrValue "presence" >>> (isA ( == "mandatory") >>> constA Mandatory) <+> constA Optional
 
 getDecimalField::IOStateArrow TPState XmlTree DecimalField
 getDecimalField = atTag "decimal" >>> proc l -> do
@@ -167,12 +167,12 @@ getMantissa::IOStateArrow TPState XmlTree FieldOp
 getMantissa = atTag "mantissa" >>> getFieldOp
 
 getAsciiStringField::IOStateArrow TPState XmlTree AsciiStringField
-getAsciiStringField = ifA (atTag "string" >>> getAttrValue "charset" >>> isA (\s -> s == "ascii")) (getFieldInstrContent >>> arr AsciiStringField) zeroArrow
+getAsciiStringField = ifA (atTag "string" >>> getAttrValue "charset" >>> isA ( == "ascii")) (getFieldInstrContent >>> arr AsciiStringField) zeroArrow
 
 getUnicodeStringField::IOStateArrow TPState XmlTree UnicodeStringField
 getUnicodeStringField = 
     ifA 
-    (hasName "string" >>> getAttrValue "charset" >>> isA (\s -> s == "unicode"))
+    (hasName "string" >>> getAttrValue "charset" >>> isA ( == "unicode"))
     (proc l -> do 
         fic     <- getFieldInstrContent       -< l
         length  <- maybeA getByteVectorLength -< l
@@ -215,9 +215,9 @@ getGroup = atTag "group" >>> (proc l -> do
     returnA -< (Group n p d tr is))
 
 parseXML::String -> IOStateArrow TPState () XmlTree
-parseXML s = readString [ withValidate yes
+parseXML = readString [ withValidate yes
 		     	, withRemoveWS yes  -- throw away formating WS
-		     	] s
+		     	]
 
 atTag::ArrowXml a => String -> a XmlTree XmlTree
 atTag tag = deep (isElem >>> hasName tag)
