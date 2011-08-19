@@ -250,7 +250,7 @@ newtype Token = Token String
 -- |Reset all entries of a dictionary to 'Undefined'.
 reset::Dictionary -> Dictionary
 reset (Dictionary name xs) = Dictionary name (M.map h xs)
-    where h value = Undefined
+    where h _ = Undefined
 
 -- |Delta data. Not in the FAST specification.
 data Delta = Int32Delta Primitive
