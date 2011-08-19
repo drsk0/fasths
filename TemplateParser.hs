@@ -1,9 +1,10 @@
 {-# LANGUAGE Arrows #-}
 
-module TemplateParser (getTemplateXML) where
+module TemplateParser (parseTemplateXML) where
 
 import Text.XML.HXT.Core
-import Data.Maybe (listToMaybe)
+import Text.XML.HXT.Arrow.XmlState.RunIOStateArrow
+import Data.Maybe()
 import FAST
 
 
@@ -13,19 +14,20 @@ data TPState = TPState {
     dict        ::Maybe DictionaryAttr
     }
 
-initTPState::TPState
-initTPState = TPState Nothing Nothing Nothing
+parseTemplateXML::String -> IO [Templates]
+parseTemplateXML s = runXIOState    (initialState (TPState Nothing Nothing Nothing)) 
+                                    (parseXML s >>> getTemplates)
 
-getTemplateXML::String -> IOStateArrow TPState () Templates
-getTemplateXML s = parseXML s >>> atTag "templates" >>>
+getTemplates::IOStateArrow TPState XmlTree Templates
+getTemplates = atTag "templates" >>>
     proc l -> do
-		ns 		<- getNs 		-< l
-		tNs 	<- getTempNs 	-< l
-		dict 	<- getDict 		-< l
-		ts 		<- getTemplates -< l
-		returnA -< (Templates ns tNs dict ts)
+		n  		<- getNs 		-< l
+		tns 	<- getTempNs 	-< l
+		d    	<- getDict 		-< l
+		ts 		<- getTemplateL -< l
+		returnA -< (Templates n tns d ts)
 
-getNs:: IOStateArrow TPState XmlTree (Maybe NsAttr)
+getNs::IOStateArrow TPState XmlTree (Maybe NsAttr)
 getNs = (getAttrValue "ns" >>> isNotEmpty   >>> arr (Just . NsAttr)) <+>  (getUserState >>> arr ns)
 
 getTempNs::IOStateArrow TPState XmlTree (Maybe TemplateNsAttr)
@@ -34,25 +36,25 @@ getTempNs = (getAttrValue "templateNs" >>> isNotEmpty   >>> arr (Just . Template
 getDict::IOStateArrow TPState XmlTree (Maybe DictionaryAttr)
 getDict = (getAttrValue "dictionary" >>> isNotEmpty >>> arr (Just . DictionaryAttr)) <+>  (getUserState >>> arr dict)
 
-getTemplates::IOStateArrow TPState XmlTree [Template]
-getTemplates = listA (atTag "template" >>> getTemplate) 
+getTemplateL::IOStateArrow TPState XmlTree [Template]
+getTemplateL = listA (atTag "template" >>> getTemplate) 
 
 getTemplate::IOStateArrow TPState XmlTree Template
 getTemplate = proc l -> do
   tnn   <- getTemplateNsName -< l
-  ns    <- getNs             -< l
-  dict  <- getDict           -< l
+  n     <- getNs             -< l
+  d     <- getDict           -< l
   tr    <- maybeA getTypeRef -< l
   ins   <- getInstructions   -< l
-  returnA -< (Template tnn ns dict tr ins)
+  returnA -< (Template tnn n d tr ins)
 
 getTemplateNsName::IOStateArrow TPState XmlTree TemplateNsName 
 getTemplateNsName = atTag "templateNsName" >>> 
     proc l -> do
        name <- getName'     -< l
-       tNs  <- getTempNs    -< l
-       id   <- maybeA getId -< l
-       returnA -< (TemplateNsName name tNs id)
+       tns  <- getTempNs    -< l
+       i    <- maybeA getId -< l
+       returnA -< (TemplateNsName name tns i)
 
 getId::IOStateArrow TPState XmlTree IdAttr
 getId = getAttrValue "id" >>> arr (IdAttr . Token) 
@@ -61,8 +63,8 @@ getTypeRef::IOStateArrow TPState XmlTree TypeRef
 getTypeRef = atTag "typeRef" >>> 
     (proc l -> do
         name  <- getName' -< l
-        ns    <- getNs    -< l
-        returnA -< (TypeRef name ns))
+        n     <- getNs    -< l
+        returnA -< (TypeRef name n))
         
 getName'::IOStateArrow TPState XmlTree NameAttr 
 getName' = getAttrValue  "name" >>> arr NameAttr
@@ -73,8 +75,8 @@ getInstructions = listA ((atTag "templateRef" >>> getTemplateRef) <+> (atTag "fi
 getTemplateRef::IOStateArrow TPState XmlTree Instruction
 getTemplateRef = (proc l -> do
     name    <- getName'     -< l
-    tNs     <- getTempNs    -< l
-    returnA -< (TemplateReference $ Just $ TemplateReferenceContent name tNs)) 
+    tns     <- getTempNs    -< l
+    returnA -< (TemplateReference $ Just $ TemplateReferenceContent name tns)) 
     <+> constA (TemplateReference Nothing)
 
 getField::IOStateArrow TPState XmlTree Field
@@ -131,18 +133,18 @@ getOpContext = proc l -> do
 getNsKey::IOStateArrow TPState XmlTree NsKey
 getNsKey = proc l -> do 
     k <- getKey -< l
-    ns<- getNs  -< l
-    returnA -< (NsKey k ns)
+    n <- getNs  -< l
+    returnA -< (NsKey k n)
 
 getKey::IOStateArrow TPState XmlTree KeyAttr
 getKey = getAttrValue "key" >>> arr (KeyAttr . Token)
 
 getNsName::IOStateArrow TPState XmlTree NsName
 getNsName = proc l -> do
-    n  <- getName'     -< l
-    ns <- getNs        -< l
-    id <- maybeA getId -< l
-    returnA -< (NsName n ns id)
+    na <- getName'     -< l
+    n  <- getNs        -< l
+    i  <- maybeA getId -< l
+    returnA -< (NsName na n i)
 
 getPresence::IOStateArrow TPState XmlTree PresenceAttr
 getPresence = getAttrValue "presence" >>> (isA ( == "mandatory") >>> constA Mandatory) <+> constA Optional
@@ -175,8 +177,8 @@ getUnicodeStringField =
     (hasName "string" >>> getAttrValue "charset" >>> isA ( == "unicode"))
     (proc l -> do 
         fic     <- getFieldInstrContent       -< l
-        length  <- maybeA getByteVectorLength -< l
-        returnA -< (UnicodeStringField fic length)) 
+        ln      <- maybeA getByteVectorLength -< l
+        returnA -< (UnicodeStringField fic ln)) 
     zeroArrow
 
 getByteVectorLength::IOStateArrow TPState XmlTree ByteVectorLength
@@ -186,8 +188,8 @@ getByteVector::IOStateArrow TPState XmlTree ByteVectorField
 getByteVector = hasName "byteVector" >>> 
     (proc l -> do 
     fic     <- getFieldInstrContent       -< l
-    length  <- maybeA getByteVectorLength -< l
-    returnA -< (ByteVectorField fic length))
+    ln      <- maybeA getByteVectorLength -< l
+    returnA -< (ByteVectorField fic ln))
 
 getSequence::IOStateArrow TPState XmlTree Sequence
 getSequence = atTag "sequence" >>> (proc l -> do
@@ -214,7 +216,7 @@ getGroup = atTag "group" >>> (proc l -> do
     is<- getInstructions    -< l
     returnA -< (Group n p d tr is))
 
-parseXML::String -> IOStateArrow TPState () XmlTree
+parseXML::String -> IOStateArrow TPState XmlTree XmlTree
 parseXML = readString [ withValidate yes
 		     	, withRemoveWS yes  -- throw away formating WS
 		     	]
