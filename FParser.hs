@@ -69,7 +69,7 @@ initDicts t = createDicts $ catMaybes $ concatMap h (tInstructions t)
 -- |Maps triples of the form (DictionaryName, Key, Value) to a list of dictionaries.
 createDicts::[(String, String, DictValue)] -> [Dictionary]
 createDicts es =  map h (groupBy (\ (d, _ , _) (d', _ , _) -> d == d') es)
-    where   h xs = Dictionary name (M.fromList (map (\(x,y,z) -> (y,z)) xs))
+    where   h xs = Dictionary name (M.fromList (map (\(_,y,z) -> (y,z)) xs))
                 where (name, _, _) = head xs
 
 -- |Maps a field to a triple (DictionaryName, Key, Value).
@@ -93,6 +93,8 @@ dictOfField (DecField (DecimalField fname (Just Optional) (Left (Copy oc)))) = [
 dictOfField (DecField (DecimalField _ (Just Optional) (Left (Increment _)))) = error "S2:Increment operator is only applicable to integer fields." 
 dictOfField (DecField (DecimalField fname (Just Optional) (Left (Delta oc)))) = [Just $ dictOfOpContext oc fname]
 dictOfField (DecField (DecimalField _ (Just Optional) (Left (Tail _)))) = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields." 
+dictOfField (DecField (DecimalField fname (Just Optional) (Right (DecFieldOp opE opM)))) = dictOfField (IntField (Int32Field (FieldInstrContent (uniqueFName fname "e") (Just Optional) (Just opE)))) 
+    ++ dictOfField (IntField (Int64Field (FieldInstrContent (uniqueFName fname "m") (Just Mandatory) (Just opM))))
 dictOfField (DecField (DecimalField fname (Just Mandatory) (Right (DecFieldOp opE opM)))) = dictOfField (IntField (Int32Field (FieldInstrContent (uniqueFName fname "e") (Just Mandatory) (Just opE))))
     ++ dictOfField (IntField (Int64Field (FieldInstrContent (uniqueFName fname "m") (Just Mandatory) (Just opM))))
 dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname Nothing maybeOp))) = dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Mandatory) maybeOp)))
@@ -101,7 +103,7 @@ dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandator
 dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))))) = error "S5: No initial value given for mandatory default operator."
 dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Default (Just _)))))) = [Nothing]
 dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Mandatory) (Just (Copy oc))))) = [Just $ dictOfOpContext oc fname]
-dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Mandatory) (Just (Increment oc))))) = error "S2:Increment operator is only applicable to integer fields." 
+dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Increment _))))) = error "S2:Increment operator is only applicable to integer fields." 
 dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Mandatory) (Just (Delta oc))))) = [Just $ dictOfOpContext oc fname]
 dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Mandatory) (Just (Tail oc))))) = [Just $ dictOfOpContext oc fname]
 dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) Nothing))) = [Nothing]
@@ -109,7 +111,7 @@ dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional
 dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Default Nothing))))) = [Nothing]
 dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Default (Just _)))))) = [Nothing]
 dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Optional) (Just (Copy oc))))) = [Just $ dictOfOpContext oc fname]
-dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Optional) (Just (Increment oc))))) = error "S2:Increment operator is only applicable to integer fields." 
+dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Increment _))))) = error "S2:Increment operator is only applicable to integer fields." 
 dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Optional) (Just (Delta oc))))) = [Just $ dictOfOpContext oc fname]
 dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Optional) (Just (Tail oc))))) = [Just $ dictOfOpContext oc fname]
 dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname Nothing maybeOp) maybe_length)) = dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Mandatory) maybeOp) maybe_length))
@@ -124,7 +126,7 @@ dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) 
 dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Copy oc))) _)) = [Just $ dictOfOpContext oc fname]
 dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Copy oc))) _)) = [Just $ dictOfOpContext oc fname]
 dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Increment _))) _)) = error "S2:Increment operator is only applicable to integer fields." 
-dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Increment oc))) _)) = error "S2:Increment operator is only applicable to integer fields." 
+dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Increment _))) _)) = error "S2:Increment operator is only applicable to integer fields." 
 dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Delta oc))) _)) = [Just $ dictOfOpContext oc fname]
 dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Delta oc))) _)) = [Just $ dictOfOpContext oc fname]
 dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail oc))) _)) = [Just $ dictOfOpContext oc fname] 
@@ -146,14 +148,14 @@ dictOfIntField (FieldInstrContent _ (Just Mandatory) (Just (Default _))) = Nothi
 dictOfIntField (FieldInstrContent fname (Just Mandatory) (Just (Copy oc))) = Just $ dictOfOpContext oc fname
 dictOfIntField (FieldInstrContent fname (Just Mandatory) (Just (Increment oc))) = Just $ dictOfOpContext oc fname
 dictOfIntField (FieldInstrContent fname (Just Mandatory) (Just (Delta oc))) = Just $ dictOfOpContext oc fname
-dictOfIntField (FieldInstrContent fname (Just Mandatory) (Just (Tail oc))) = error "S2: Tail operator can not be applied on an integer type field." 
+dictOfIntField (FieldInstrContent _ (Just Mandatory) (Just (Tail _))) = error "S2: Tail operator can not be applied on an integer type field." 
 dictOfIntField (FieldInstrContent _ (Just Optional) Nothing) =  Nothing
 dictOfIntField (FieldInstrContent _ (Just Optional) (Just (Constant _))) = Nothing
 dictOfIntField (FieldInstrContent _ (Just Optional) (Just (Default _))) = Nothing
 dictOfIntField (FieldInstrContent fname (Just Optional) (Just (Copy oc))) = Just $ dictOfOpContext oc fname
 dictOfIntField (FieldInstrContent fname (Just Optional) (Just (Increment oc))) = Just $ dictOfOpContext oc fname
 dictOfIntField (FieldInstrContent fname (Just Optional) (Just (Delta oc))) = Just $ dictOfOpContext oc fname
-dictOfIntField (FieldInstrContent fname (Just Optional) (Just (Tail oc))) = error "S2: Tail operator can not be applied on an integer type field." 
+dictOfIntField (FieldInstrContent _ (Just Optional) (Just (Tail _))) = error "S2: Tail operator can not be applied on an integer type field." 
 
 -- |Outputs a triple (DictionaryName, Key, Value) depending on OpContext and 
 -- the NsName of a field.
@@ -237,16 +239,16 @@ intF2P'::FieldInstrContent
 intF2P' (FieldInstrContent fname Nothing maybe_op) intParser ivToInt defaultBaseValue 
     = intF2P' (FieldInstrContent fname (Just Mandatory) maybe_op) intParser ivToInt defaultBaseValue
 -- pm: No, Nullable: No
-intF2P' (FieldInstrContent _ (Just Mandatory) Nothing) intParser ivToInt _
+intF2P' (FieldInstrContent _ (Just Mandatory) Nothing) intParser _ _
     = Just <$> intParser
 
 -- pm: No, Nullable: Yes
-intF2P' (FieldInstrContent _ (Just Optional) Nothing) intParser ivToInt _
+intF2P' (FieldInstrContent _ (Just Optional) Nothing) intParser _ _
     = nULL 
     <|> (Just . minusOne) <$> intParser
 
 -- pm: No, Nullable: No
-intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Constant iv))) intParser ivToInt _
+intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Constant iv))) _ ivToInt _
     = return $ Just(ivToInt iv)
 
 -- pm: Yes, Nullable: No
@@ -262,7 +264,7 @@ intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))) _ _ _
 intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Copy oc))) intParser ivToInt _
     =   (notPresent *>  
             (let 
-                h (Assigned p) = Just p
+                h (Assigned v) = Just v
                 h (Undefined) = h' oc
                     where   h' (OpContext _ _ (Just iv)) = Just (ivToInt iv)
                             h' (OpContext _ _ Nothing) = error "D5: No initial value in operator context\
@@ -279,7 +281,7 @@ intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Copy oc))) intParser iv
 intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Increment oc))) intParser ivToInt _
     = (notPresent *> 
         (let 
-            h (Assigned p) = updatePrevValue fname oc (Assigned p') >> return (Just p') where p' = inc p
+            h (Assigned v) = updatePrevValue fname oc (Assigned v') >> return (Just v') where v' = inc v
             h (Undefined) = h' oc
                 where   h' (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned i) >> return (Just i) where i =ivToInt iv
                         h' (OpContext _ _ Nothing) = error "D5: No initial value in operator context given for\
@@ -295,7 +297,7 @@ intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Increment oc))) intPars
 
     
 -- pm: -, Nullable: -
-intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Tail iv))) _ _ _
+intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Tail _))) _ _ _
     = error "S2: Tail operator can not be applied on an integer type field." 
 
 -- pm: Yes, Nullable: No
@@ -319,7 +321,7 @@ intF2P' (FieldInstrContent _ (Just Optional) (Just (Default Nothing))) intParser
 intF2P' (FieldInstrContent fname (Just Optional) (Just (Copy oc))) intParser ivToInt _
     =   (notPresent *>  
             (let 
-                h (Assigned p) = return $ Just p
+                h (Assigned v) = return (Just v)
                 h (Undefined) = h' oc
                     where   h' (OpContext _ _ (Just iv)) = return $ Just (ivToInt iv)
                             h' (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> return Nothing  
@@ -335,7 +337,7 @@ intF2P' (FieldInstrContent fname (Just Optional) (Just (Copy oc))) intParser ivT
 intF2P' (FieldInstrContent fname (Just Optional) (Just (Increment oc))) intParser ivToInt _
     = (notPresent *> 
         (let 
-            h (Assigned p) = updatePrevValue fname oc (Assigned p') >> Just <$> return p' where p' = inc p
+            h (Assigned v) = updatePrevValue fname oc (Assigned v') >> Just <$> return v' where v' = inc v
             h (Undefined) = h' oc
                 where   h' (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned i) >> (Just <$> return i) where i = ivToInt iv
                         h' (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> return Nothing
@@ -349,8 +351,12 @@ intF2P' (FieldInstrContent fname (Just Optional) (Just (Increment oc))) intParse
 
 
 -- pm: -, Nullable: -
-intF2P' (FieldInstrContent _ (Just Optional) (Just (Tail iv))) _ _ _
+intF2P' (FieldInstrContent _ (Just Optional) (Just (Tail _))) _ _ _
     = error "S2: Tail operator can not be applied on an integer type field." 
+
+-- Don't use intF2P' for delta operators.
+intF2P' (FieldInstrContent _ _ (Just (Delta _))) _ _ _ 
+    = error "Coding Error: intF2P' can not be applied on delta operatos, use intF2P''."
 
 -- |Maps an integer field with delta operator to a parser, given the field instruction context, the 
 -- integer delta parser,a function to convert initial values to the given 
@@ -387,6 +393,9 @@ intF2P'' (FieldInstrContent fname (Just Optional) (Just (Delta oc))) deltaParser
             do 
                 d <- deltaParser
                 Just <$> (flip delta d <$> (baseValue <$> prevValue fname oc))
+
+intF2P'' _ _ _ _
+    = error "Coding Error: intF2P'' can only be used for delta operatos."
 
 -- |Maps an decimal field to its parser.
 decF2P::DecimalField -> FParser (Maybe Primitive)
@@ -426,7 +435,7 @@ decF2P (DecimalField fname (Just Mandatory) (Left (Copy oc)))
         <|> (((Assigned <$> dec) >>= updatePrevValue fname oc) >> Just <$> dec)
 
 -- pm: Yes, Nullable: No
-decF2P (DecimalField fname (Just Mandatory) (Left (Increment oc))) 
+decF2P (DecimalField _ (Just Mandatory) (Left (Increment _))) 
     = error "S2:Increment operator is only applicable to integer fields." 
 
 -- pm: No, Nullable: No
@@ -442,7 +451,7 @@ decF2P (DecimalField fname (Just Mandatory) (Left (Delta oc)))
             d <- decDelta
             Just <$> (flip  delta d <$> (baseValue <$> prevValue fname oc))
 
-decF2P (DecimalField _ (Just Mandatory) (Left (Tail oc))) 
+decF2P (DecimalField _ (Just Mandatory) (Left (Tail _))) 
     = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields." 
 
 -- pm: Yes, Nullable: No
@@ -479,7 +488,7 @@ decF2P (DecimalField fname (Just Optional) (Left (Copy oc)))
         <|> ((Assigned <$> dec >>= updatePrevValue fname oc) >> Just <$> dec)
 
 -- pm: Yes, Nullable: Yes
-decF2P (DecimalField fname (Just Optional) (Left (Increment oc))) 
+decF2P (DecimalField _ (Just Optional) (Left (Increment _))) 
     = error "S2: Increment operator is applicable only to integer fields."
 
 -- pm: No, Nullable: Yes
@@ -497,7 +506,7 @@ decF2P (DecimalField fname (Just Optional) (Left (Delta oc)))
                 Just <$> (flip delta d <$> (baseValue <$> prevValue fname oc))
 
 -- pm: No, Nullable: Yes
-decF2P (DecimalField _ (Just Optional) (Left (Tail oc))) 
+decF2P (DecimalField _ (Just Optional) (Left (Tail _))) 
     = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields." 
 
 -- Both operators are handled individually as mandatory operators.
@@ -512,6 +521,7 @@ decF2P (DecimalField fname (Just Mandatory) (Right (DecFieldOp ex_op ma_op)))
                         h Nothing _ = Nothing
                         h _ Nothing = Nothing
                         h (Just (Int32 e')) (Just m') = Just (Decimal (Int32 (checkRange decExpRange e')) m')
+                        h _ _ = error "Coding error: expontent must always be of type Int32."
 
 
 -- The exponent field is considered as an optional field, the mantissa field as a mandatory field.
@@ -526,6 +536,7 @@ decF2P (DecimalField fname (Just Optional) (Right (DecFieldOp ex_op ma_op)))
                         h Nothing _ = Nothing
                         h _ Nothing = Nothing
                         h (Just (Int32 e')) (Just m') = Just (Decimal (Int32 (checkRange decExpRange e')) m')
+                        h _ _ = error "Coding error: expontent must always be of type Int32."
 
 -- |Maps an ascii field to its parser.
 asciiStrF2P::AsciiStringField -> FParser (Maybe Primitive)
@@ -575,7 +586,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Co
         <|> (((Assigned <$> byteVector) >>= updatePrevValue fname oc) >> (Just <$> byteVector))
 
 -- pm: Yes, Nullable: No
-asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Increment oc))))
+asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Increment _))))
     = error "S2:Increment operator is only applicable to integer fields." 
 
 -- pm: No, Nullable: No
@@ -611,9 +622,9 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Ta
                             h (OpContext _ _ Nothing) = dfbAscii
         in
             do
-                pv <- (prevValue fname oc)
+                pva <- (prevValue fname oc)
                 t <- asciiTail
-                return (Just (baseValue pv `FAST.tail` t)))
+                return (Just (baseValue pva `FAST.tail` t)))
 
 -- pm: Yes, Nullable: No
 asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Constant iv)))) 
@@ -649,7 +660,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Cop
         <|> (((Assigned <$> asciiString') >>= updatePrevValue fname oc) >> (Just <$> asciiString'))
 
 -- pm: Yes, Nullable: Yes
-asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Increment oc))))
+asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Increment _ ))))
     = error "S2:Increment operator is only applicable to integer fields." 
 
 -- pm: No, Nullable: Yes
@@ -690,54 +701,54 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Tai
 
 -- |Maps a bytevector field to its parser.
 bytevecF2P::ByteVectorField -> FParser (Maybe Primitive)
-bytevecF2P (ByteVectorField (FieldInstrContent fname Nothing maybe_op) length) 
-    = bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) maybe_op) length)
+bytevecF2P (ByteVectorField (FieldInstrContent fname Nothing maybe_op) len) 
+    = bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) maybe_op) len)
 
 -- pm: No, Nullable: No
-bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) Nothing ) length) 
+bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Mandatory) Nothing ) _ ) 
     = Just <$> byteVector
 
 -- pm: No, Nullable: Yes
-bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) Nothing ) length) 
+bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Optional) Nothing ) _ ) 
     = nULL
     <|> do
         bv <- byteVector
         return $ Just bv
 
 -- pm: No, Nullable: No
-bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just (Constant iv))) length) 
+bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Constant iv))) _ ) 
     = return $ Just (ivToByteVector iv)
 
 -- pm: Yes, Nullable: No
-bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Constant iv))) length) 
+bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Constant iv))) _ ) 
     = (notPresent *> return Nothing)
     <|> return (Just (ivToByteVector iv))
 
 -- pm: Yes, Nullable: No
-bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Default Nothing))) length) 
+bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Default Nothing))) _ ) 
     = error "S5: No initial value given for mandatory default operator."
 
 -- pm: Yes, Nullable: No
-bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Default (Just iv)))) length) 
+bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Default (Just iv)))) _ ) 
     = notPresent *> return (Just (ivToByteVector iv))
     <|> do
         bv <- byteVector
         return (Just bv)
 
 -- pm: Yes, Nullable: Yes
-bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Default Nothing))) length) 
+bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Default Nothing))) _ ) 
     = (notPresent *> return Nothing)
     <|> nULL
     <|> (Just <$> byteVector)
 
 -- pm: Yes, Nullable: Yes
-bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Default (Just iv)))) length) 
+bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Default (Just iv)))) _ ) 
     = notPresent *> return (Just (ivToByteVector iv))
     <|> nULL
     <|> Just <$> byteVector
 
 -- pm: Yes, Nullable: No
-bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Copy oc))) length) 
+bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Copy oc))) _ ) 
     =   (notPresent *>  
             (let 
                 h (Assigned p) = return (Just p)
@@ -754,7 +765,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Copy
         <|> (((Assigned <$> byteVector) >>= updatePrevValue fname oc) >> (Just <$> byteVector))
 
 -- pm: Yes, Nullable: Yes
-bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Copy oc))) length) 
+bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Copy oc))) _ ) 
     =   (notPresent *>  
             (let 
                 h (Assigned p) = return (Just p)
@@ -770,14 +781,14 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Copy 
         <|> (((Assigned <$> byteVector) >>= updatePrevValue fname oc) >> (Just <$> byteVector))
 
 -- pm: Yes, Nullable: No
-bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Increment oc))) length) 
+bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Increment _ ))) _ ) 
     = error "S2:Increment operator is only applicable to integer fields." 
 -- pm: Yes, Nullable: Yes
-bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Increment oc))) length) 
+bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Increment _ ))) _ ) 
     = error "S2:Increment operator is only applicable to integer fields." 
 
 -- pm: No, Nullable: No
-bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Delta oc))) length) 
+bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Delta oc))) _ ) 
     = let   baseValue (Assigned p) = p
             baseValue (Undefined) = h oc
                 where   h (OpContext _ _ (Just iv)) = ivToByteVector iv
@@ -789,7 +800,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Delt
             Just <$> (flip delta bv <$> (baseValue <$> prevValue fname oc))
 
 -- pm: No, Nullable: Yes
-bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Delta oc))) length) 
+bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Delta oc))) _ ) 
     = nULL
     <|> (let    baseValue (Assigned p) = p
                 baseValue (Undefined) = h oc
@@ -802,7 +813,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Delta
                 Just <$> (flip delta bv <$> (baseValue <$> prevValue fname oc)))
 
 -- pm: Yes, Nullable: No
-bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail oc))) length) 
+bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail oc))) _ ) 
     = notPresent *> (let    baseValue (Assigned p) = return (Just p)
                             baseValue (Undefined) = h oc
                                 where   h (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned bv) >> return (Just bv) where bv = ivToByteVector iv
@@ -822,12 +833,12 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail
                             h (OpContext _ _ Nothing) = dfbByteVector
         in
             do
-                pv <- prevValue fname oc
+                pva <- prevValue fname oc
                 t <- bytevectorTail
-                return (Just(baseValue pv `FAST.tail` t)))
+                return (Just(baseValue pva `FAST.tail` t)))
 
 -- pm: Yes, Nullable: Yes
-bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Tail oc))) length) 
+bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Tail oc))) _ ) 
     = notPresent *> (let    baseValue (Assigned p) = return (Just p)
                             baseValue (Undefined) = h oc
                                 where   h (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned bv) >> return (Just bv) where bv = ivToByteVector iv
@@ -854,11 +865,12 @@ unicodeF2P::UnicodeStringField -> FParser (Maybe Primitive)
 unicodeF2P (UnicodeStringField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)
     = h <$> bytevecF2P (ByteVectorField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)
         where   h (Just (Bytevector bv)) = Just (Unicode (U.toString bv))
+                h (Just _ ) = error "Coding error: Bytevector parser must parse a bytevector."
                 h (Nothing) = Nothing
 
 -- |Maps a sequence field to its parser.
 seqF2P::Sequence -> FParser (NsName, Maybe FValue)
-seqF2P (Sequence fname maybe_presence maybe_dict maybe_typeref maybe_length instrs) 
+seqF2P (Sequence fname maybe_presence _ _ maybe_length instrs) 
     = do 
         i <- (h maybe_presence maybe_length)
         g i
@@ -866,6 +878,7 @@ seqF2P (Sequence fname maybe_presence maybe_dict maybe_typeref maybe_length inst
                 g (Just (Int32 i')) = do
                                         s <- (ask >>= \env -> A.count i' (segmentDep instrs (templates env) >> mapM instr2P instrs))
                                         return (fname, Just (Sq i' s))
+                g (Just _) = error "Coding error: Length field for sequences must return an Int32."
                 -- get the correct parser for the length field.
                 fname' = uniqueFName fname "l" 
                 h p Nothing = intF2P (Int32Field (FieldInstrContent fname' p Nothing))
@@ -874,9 +887,13 @@ seqF2P (Sequence fname maybe_presence maybe_dict maybe_typeref maybe_length inst
                 
 -- |Maps a group field to its parser.
 groupF2P::Group -> FParser (NsName, Maybe FValue)
-groupF2P (Group fname (Just Mandatory) maybe_dict maybe_typeref instrs) 
+groupF2P (Group fname Nothing maybe_dict maybe_typeref instrs)
+    = groupF2P (Group fname (Just Mandatory) maybe_dict maybe_typeref instrs)
+
+groupF2P (Group fname (Just Mandatory) _ _ instrs) 
     = ask >>= \env -> (fname,) . Just . Gr <$> (segmentGrp instrs (templates env) >> mapM instr2P instrs)
-groupF2P (Group fname (Just Optional) maybe_dict maybe_typeref instrs) 
+
+groupF2P (Group fname (Just Optional) _ _ instrs) 
     = notPresent *> return (fname, Nothing)
     <|> (ask >>= \env -> (fname,) . Just . Gr <$> (segmentGrp instrs (templates env) >> mapM instr2P instrs))
 
@@ -886,16 +903,16 @@ groupF2P (Group fname (Just Optional) maybe_dict maybe_typeref instrs)
 -- TODO: Is the default key the full uri, or just the local name?
 -- TODO: Do I look up values by the name of the key or by namespace/name uri?
 prevValue::NsName -> OpContext -> FParser DictValue
-prevValue (NsName (NameAttr name) _ _) (OpContext (Just (DictionaryAttr dname)) Nothing Nothing) 
+prevValue (NsName (NameAttr name) _ _) (OpContext (Just (DictionaryAttr dname)) Nothing _ ) 
     = pv dname name
 
-prevValue _ (OpContext (Just (DictionaryAttr dname)) (Just(NsKey (KeyAttr (Token name)) _)) Nothing) 
+prevValue _ (OpContext (Just (DictionaryAttr dname)) (Just(NsKey (KeyAttr (Token name)) _)) _ ) 
     = pv dname name
 
-prevValue (NsName (NameAttr name) _ _) (OpContext Nothing Nothing Nothing) 
+prevValue (NsName (NameAttr name) _ _) (OpContext Nothing Nothing _ ) 
     = pv "global" name
 
-prevValue _ (OpContext Nothing (Just(NsKey (KeyAttr (Token name)) _)) Nothing) 
+prevValue _ (OpContext Nothing (Just(NsKey (KeyAttr (Token name)) _)) _ ) 
     = pv "global" name
 
 pv::String -> String -> FParser DictValue
@@ -907,16 +924,16 @@ pv d k = do
 
 -- |Update the previous value.
 updatePrevValue::NsName -> OpContext -> DictValue -> FParser ()
-updatePrevValue (NsName (NameAttr name) _ _) (OpContext (Just (DictionaryAttr dname)) Nothing Nothing) dvalue
+updatePrevValue (NsName (NameAttr name) _ _) (OpContext (Just (DictionaryAttr dname)) Nothing _ ) dvalue
     = uppv dname name dvalue
 
-updatePrevValue _ (OpContext (Just (DictionaryAttr dname)) (Just(NsKey (KeyAttr (Token name)) _)) Nothing) dvalue
+updatePrevValue _ (OpContext (Just (DictionaryAttr dname)) (Just(NsKey (KeyAttr (Token name)) _)) _ ) dvalue
     = uppv dname name dvalue
 
-updatePrevValue (NsName (NameAttr name) _ _) (OpContext Nothing Nothing Nothing) dvalue
+updatePrevValue (NsName (NameAttr name) _ _) (OpContext Nothing Nothing _ ) dvalue
     = uppv "global" name dvalue
 
-updatePrevValue _ (OpContext Nothing (Just(NsKey (KeyAttr (Token name)) _)) Nothing) dvalue
+updatePrevValue _ (OpContext Nothing (Just(NsKey (KeyAttr (Token name)) _)) _ ) dvalue
     = uppv "global" name dvalue
 
 uppv::String -> String -> DictValue -> FParser ()
@@ -931,7 +948,8 @@ uppv d k v = do
 nULL::FParser (Maybe Primitive)
 nULL = lift $ lift nULL'
     where nULL' = do 
-            A.char (w2c 0x80)
+            -- discard result.
+            _ <- A.char (w2c 0x80)
             return Nothing
 
 -- |UInt32 field parser.
@@ -1024,6 +1042,7 @@ rmPreamble (Ascii ['\0']) = Ascii []
 rmPreamble (Ascii ['\0', '\0']) = Ascii "\NUL"
 -- overlong string.
 rmPreamble (Ascii x) = Ascii (filter (/= '\0') x)
+rmPreamble _ = error "Coding error: rmPreamble only applicable for Ascii primitives."
 
 -- |Remove preamble of an ascii string, NULLable situation.
 rmPreamble'::Primitive -> Primitive
@@ -1031,6 +1050,7 @@ rmPreamble' (Ascii ['\0','\0']) = Ascii []
 rmPreamble' (Ascii ['\0','\0','\0']) = Ascii "\NUL"
 -- overlong string.
 rmPreamble' (Ascii x) = Ascii (filter (/= '\0') x)
+rmPreamble' _ = error "Coding error: rmPreamble' only applicable for Ascii primitives."
 
 -- |Unicode string field parser. The first argument is the size of the string.
 unicodeString::FParser Primitive
@@ -1179,7 +1199,7 @@ needsPm::M.Map String Template -> Instruction -> Bool
 -- static template reference
 needsPm ts (TemplateReference (Just (TemplateReferenceContent (NameAttr n) _))) = all (needsPm ts) (tInstructions t) where t = ts M.! n
 -- dynamic template reference
-needsPm ts (TemplateReference Nothing) = False
+needsPm _ (TemplateReference Nothing) = False
 needsPm _ (Instruction (IntField (Int32Field fic))) = intFieldNeedsPm fic
 needsPm _ (Instruction (IntField (Int64Field fic))) = intFieldNeedsPm fic
 needsPm _ (Instruction (IntField (UInt32Field fic))) = intFieldNeedsPm fic
@@ -1227,8 +1247,8 @@ needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just
 needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Default (Just _)))) _))) = True
 needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just (Default Nothing))) _))) = True
 needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Default (Just _)))) _))) = True
-needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Copy oc))) _))) = True
-needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Copy oc))) _))) = True
+needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Copy _ ))) _))) = True
+needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Copy _ ))) _))) = True
 needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Increment _))) _))) = error "S2:Increment operator is only applicable to integer fields." 
 needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Increment _))) _))) = error "S2:Increment operator is only applicable to integer fields." 
 needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Delta _))) _))) = False
@@ -1274,6 +1294,7 @@ templateIdentifier = do
         (Just (I i')) -> do 
             env <- ask
             template2P $ templates env M.! tid2temp env i'
+        (Just _) ->  error "Coding error: templateId field must be of type I."
         Nothing -> error "Failed to parse template identifier."
 
     where p = field2Parser (IntField (UInt32Field (FieldInstrContent 
@@ -1287,8 +1308,8 @@ templateIdentifier = do
 
 -- |Create a unique fname out of a given one and a string.
 uniqueFName::NsName -> String -> NsName
-uniqueFName fname s = NsName (NameAttr(n ++ s)) ns id
-    where (NsName (NameAttr n) ns id) = fname
+uniqueFName fname s = NsName (NameAttr(n ++ s)) ns ide
+    where (NsName (NameAttr n) ns ide) = fname
 
 -- |Modify underlying bits of a Char.
 modBits::Char -> (Word8 -> Word8) -> Char
