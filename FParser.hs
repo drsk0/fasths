@@ -67,13 +67,13 @@ initDicts t = createDicts $ catMaybes $ concatMap h (tInstructions t)
             h (Instruction f) = dictOfField f
 
 -- |Maps triples of the form (DictionaryName, Key, Value) to a list of dictionaries.
-createDicts::[(String, String, DictValue)] -> [Dictionary]
-createDicts es =  map h (groupBy (\ (d, _ , _) (d', _ , _) -> d == d') es)
+createDicts::[(String, DictKey, DictValue)] -> [Dictionary]
+createDicts es =  map h (groupBy (\ (d, _ , _) (d', _ , _) -> d P.== d') es)
     where   h xs = Dictionary name (M.fromList (map (\(_,y,z) -> (y,z)) xs))
                 where (name, _, _) = head xs
 
 -- |Maps a field to a triple (DictionaryName, Key, Value).
-dictOfField::Field -> [Maybe (String, String, DictValue)]
+dictOfField::Field -> [Maybe (String, DictKey, DictValue)]
 dictOfField (IntField (Int32Field (FieldInstrContent fname maybePr maybeOp))) = [dictOfIntField $ FieldInstrContent fname maybePr maybeOp] 
 dictOfField (IntField (Int64Field (FieldInstrContent fname maybePr maybeOp))) = [dictOfIntField $ FieldInstrContent fname maybePr maybeOp]
 dictOfField (IntField (UInt32Field (FieldInstrContent fname maybePr maybeOp))) = [dictOfIntField $ FieldInstrContent fname maybePr maybeOp]
@@ -140,7 +140,7 @@ dictOfField (Grp g) = concatMap h (gInstructions g)
             h (Instruction f) = dictOfField f
 
 -- |Maps a integer field to a triple (DictionaryName, Key, Value).
-dictOfIntField::FieldInstrContent -> Maybe (String, String, DictValue)
+dictOfIntField::FieldInstrContent -> Maybe (String, DictKey, DictValue)
 dictOfIntField (FieldInstrContent fname Nothing maybeOp) = dictOfIntField $ FieldInstrContent fname (Just Mandatory) maybeOp
 dictOfIntField (FieldInstrContent _ (Just Mandatory) Nothing) =  Nothing
 dictOfIntField (FieldInstrContent _ (Just Mandatory) (Just (Constant _))) = Nothing
@@ -159,11 +159,11 @@ dictOfIntField (FieldInstrContent _ (Just Optional) (Just (Tail _))) = error "S2
 
 -- |Outputs a triple (DictionaryName, Key, Value) depending on OpContext and 
 -- the NsName of a field.
-dictOfOpContext::OpContext -> NsName -> (String, String, DictValue)
-dictOfOpContext (OpContext Nothing Nothing _) (NsName (NameAttr n) _ _)= ("global", n, Empty)
-dictOfOpContext (OpContext (Just (DictionaryAttr d)) Nothing _) (NsName (NameAttr n) _ _)= (d, n, Empty)
-dictOfOpContext (OpContext Nothing (Just (NsKey (KeyAttr (Token k)) _)) _) _ = ("global", k, Empty)
-dictOfOpContext (OpContext (Just (DictionaryAttr d)) (Just (NsKey (KeyAttr (Token k)) _)) _) _ = (d, k, Empty)
+dictOfOpContext::OpContext -> NsName -> (String, DictKey, DictValue)
+dictOfOpContext (OpContext Nothing Nothing _) n = ("global", N n, Empty)
+dictOfOpContext (OpContext (Just (DictionaryAttr d)) Nothing _) n = (d, N n, Empty)
+dictOfOpContext (OpContext Nothing (Just k) _) _ = ("global", K k, Empty)
+dictOfOpContext (OpContext (Just (DictionaryAttr d)) (Just k) _) _ = (d, K k, Empty)
 
 -- |The environment of the parser depending on the templates and
 -- the tid2temp function provided by the application.
@@ -903,19 +903,19 @@ groupF2P (Group fname (Just Optional) _ _ instrs)
 -- TODO: Is the default key the full uri, or just the local name?
 -- TODO: Do I look up values by the name of the key or by namespace/name uri?
 prevValue::NsName -> OpContext -> FParser DictValue
-prevValue (NsName (NameAttr name) _ _) (OpContext (Just (DictionaryAttr dname)) Nothing _ ) 
-    = pv dname name
+prevValue name (OpContext (Just (DictionaryAttr dname)) Nothing _ ) 
+    = pv dname (N name)
 
-prevValue _ (OpContext (Just (DictionaryAttr dname)) (Just(NsKey (KeyAttr (Token name)) _)) _ ) 
-    = pv dname name
+prevValue _ (OpContext (Just (DictionaryAttr dname)) (Just dkey) _ ) 
+    = pv dname (K dkey)
 
-prevValue (NsName (NameAttr name) _ _) (OpContext Nothing Nothing _ ) 
-    = pv "global" name
+prevValue name (OpContext Nothing Nothing _ ) 
+    = pv "global" (N name)
 
-prevValue _ (OpContext Nothing (Just(NsKey (KeyAttr (Token name)) _)) _ ) 
-    = pv "global" name
+prevValue _ (OpContext Nothing (Just dkey) _ ) 
+    = pv "global" (K dkey)
 
-pv::String -> String -> FParser DictValue
+pv::String -> DictKey -> FParser DictValue
 pv d k = do
        st <- get
        case M.lookup d (dict st) >>= \(Dictionary _ xs) -> M.lookup k xs of
@@ -924,19 +924,19 @@ pv d k = do
 
 -- |Update the previous value.
 updatePrevValue::NsName -> OpContext -> DictValue -> FParser ()
-updatePrevValue (NsName (NameAttr name) _ _) (OpContext (Just (DictionaryAttr dname)) Nothing _ ) dvalue
-    = uppv dname name dvalue
+updatePrevValue name (OpContext (Just (DictionaryAttr dname)) Nothing _ ) dvalue
+    = uppv dname (N name) dvalue
 
-updatePrevValue _ (OpContext (Just (DictionaryAttr dname)) (Just(NsKey (KeyAttr (Token name)) _)) _ ) dvalue
-    = uppv dname name dvalue
+updatePrevValue _ (OpContext (Just (DictionaryAttr dname)) (Just dkey) _ ) dvalue
+    = uppv dname (K dkey) dvalue
 
-updatePrevValue (NsName (NameAttr name) _ _) (OpContext Nothing Nothing _ ) dvalue
-    = uppv "global" name dvalue
+updatePrevValue name (OpContext Nothing Nothing _ ) dvalue
+    = uppv "global" (N name) dvalue
 
-updatePrevValue _ (OpContext Nothing (Just(NsKey (KeyAttr (Token name)) _)) _ ) dvalue
-    = uppv "global" name dvalue
+updatePrevValue _ (OpContext Nothing (Just dkey) _ ) dvalue
+    = uppv "global" (K dkey) dvalue
 
-uppv::String -> String -> DictValue -> FParser ()
+uppv::String -> DictKey -> DictValue -> FParser ()
 uppv d k v = do
     st <- get
     put (FState (pm st) (M.adjust (\(Dictionary n xs) -> Dictionary n (M.adjust (\_ -> v) k xs)) d (dict st)))

@@ -189,7 +189,11 @@ data DecFieldOp = DecFieldOp {
     }
 
 -- |Dictionary consists of a name and a list of key value pairs.
-data Dictionary = Dictionary String (M.Map String DictValue)
+data Dictionary = Dictionary String (M.Map DictKey DictValue)
+
+data DictKey = N NsName
+                |K NsKey
+                deriving (Eq, Ord)
 
 
 -- |Entry in a dictionary can be in one of three states.
@@ -212,12 +216,12 @@ data DictionaryAttr = DictionaryAttr String
 data NsKey = NsKey {
     nkKey     ::KeyAttr,
     nkNs    ::Maybe NsAttr
-    }
+    } deriving (Eq, Ord)
 
 -- |Key attribute.
 data KeyAttr = KeyAttr {
     kaToken::Token
-    }
+    } deriving (Eq, Ord)
 
 -- |Initial value attribute. The value is a string of unicode characters and needs to 
 -- be converted to the type of the field in question.
@@ -233,17 +237,17 @@ data InitialValueAttr = InitialValueAttr {
 -- QUESTION: What is the 'idAttribute' for?
 
 -- |A full name for an application type, field or operator key.
-data NsName = NsName NameAttr (Maybe NsAttr) (Maybe IdAttr)
+data NsName = NsName NameAttr (Maybe NsAttr) (Maybe IdAttr) deriving (Eq, Ord)
 
 -- |A full name for a template.
 data TemplateNsName = TemplateNsName NameAttr (Maybe TemplateNsAttr) (Maybe IdAttr)
 
 -- |The very basic name related attributes.
-newtype NameAttr = NameAttr String
-newtype NsAttr = NsAttr String
-newtype TemplateNsAttr = TemplateNsAttr String
-newtype IdAttr = IdAttr Token
-newtype Token = Token String
+newtype NameAttr = NameAttr String deriving (Eq, Ord)
+newtype NsAttr = NsAttr String deriving (Eq, Ord)
+newtype TemplateNsAttr = TemplateNsAttr String deriving (Eq, Ord)
+newtype IdAttr = IdAttr Token deriving (Eq, Ord)
+newtype Token = Token String deriving (Eq, Ord)
 
 -- *FAST maps.
 
