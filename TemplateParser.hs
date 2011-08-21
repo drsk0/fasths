@@ -28,13 +28,20 @@ getTemplates = atTag "templates" >>>
 		returnA -< (Templates n tns d ts)
 
 getNs::IOStateArrow TPState XmlTree (Maybe NsAttr)
-getNs = (getAttrValue "ns" >>> isNotEmpty   >>> arr (Just . NsAttr)) <+>  (getUserState >>> arr ns)
+getNs = (getAttrValue "ns" >>> isNotEmpty  >>> changeUserState updateNs >>> arr (Just . NsAttr)) <+>  (getUserState >>> arr ns)
+    where   updateNs::String -> TPState -> TPState
+            updateNs n s = TPState (Just (NsAttr n)) (templateNs s) (dict s)
+            
 
 getTempNs::IOStateArrow TPState XmlTree (Maybe TemplateNsAttr)
-getTempNs = (getAttrValue "templateNs" >>> isNotEmpty   >>> arr (Just . TemplateNsAttr)) <+> (getUserState >>> arr templateNs)
+getTempNs = (getAttrValue "templateNs" >>> isNotEmpty  >>> changeUserState updateTempNs>>> arr (Just . TemplateNsAttr)) <+> (getUserState >>> arr templateNs)
+    where   updateTempNs::String -> TPState -> TPState
+            updateTempNs tempNs s = TPState (ns s) (Just (TemplateNsAttr tempNs)) (dict s)
 
 getDict::IOStateArrow TPState XmlTree (Maybe DictionaryAttr)
-getDict = (getAttrValue "dictionary" >>> isNotEmpty >>> arr (Just . DictionaryAttr)) <+>  (getUserState >>> arr dict)
+getDict = (getAttrValue "dictionary" >>> isNotEmpty >>> changeUserState updateDict >>> arr (Just . DictionaryAttr)) <+>  (getUserState >>> arr dict)
+    where   updateDict::String -> TPState -> TPState
+            updateDict d s = TPState (ns s) (templateNs s) (Just (DictionaryAttr d))
 
 getTemplateL::IOStateArrow TPState XmlTree [Template]
 getTemplateL = listA (atTag "template" >>> getTemplate) 
