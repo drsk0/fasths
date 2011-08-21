@@ -45,6 +45,7 @@ data Primitive = Int32 Int
                     |Unicode UnicodeString
                     |Decimal {exponent::Primitive, mantissa::Primitive}
                     |Bytevector B.ByteString
+                    deriving (Show)
 
 -- |The default namespace.
 td::Namespace
@@ -60,7 +61,7 @@ data Templates = Templates {
     tsTemplateNs   ::Maybe TemplateNsAttr,
     tsDictionary   ::Maybe DictionaryAttr,
     tsTemplates    ::[Template]
-    }
+    } deriving (Show)
 
 -- |FAST template.
 data Template = Template {
@@ -69,30 +70,31 @@ data Template = Template {
     tDictionary    ::Maybe DictionaryAttr,
     tTypeRef       ::Maybe TypeRef,
     tInstructions  ::[Instruction]
-    }
+    } deriving (Show)
 
 -- |A typeRef element of a template.
 data TypeRef = TypeRef {
     trName    ::NameAttr,
     trNs      ::Maybe NsAttr 
-    }
+    } deriving (Show)
 
 -- |An Instruction in a template is either a field instruction or a template reference.
 data Instruction = Instruction Field
                     |TemplateReference (Maybe TemplateReferenceContent)
+                    deriving (Show)
 
 -- |This is a helper data structure, NOT defined in the reference.
 data TemplateReferenceContent = TemplateReferenceContent {
         trcName        ::NameAttr,
         trcTemplateNs  ::Maybe TemplateNsAttr 
-        }
+        } deriving (Show)
 
 -- |Field Instruction content.
 data FieldInstrContent = FieldInstrContent {
     ficFName       ::NsName,
     ficPresence    ::Maybe PresenceAttr,
     ficFieldOp         ::Maybe FieldOp
-    }
+    } deriving (Show)
 
 -- |FAST field instructions.
 data Field = IntField IntegerField
@@ -102,34 +104,36 @@ data Field = IntField IntegerField
                 |ByteVecField ByteVectorField
                 |Seq Sequence
                 |Grp Group
+                deriving (Show)
 
 -- |Integer Fields.
 data IntegerField = Int32Field FieldInstrContent
                     |UInt32Field FieldInstrContent
                     |Int64Field FieldInstrContent
                     |UInt64Field FieldInstrContent
+                    deriving (Show)
 
 -- |Decimal Field.
 data DecimalField = DecimalField {
         dfiFName           ::NsName, 
         dfiPresence        ::Maybe PresenceAttr,
         dfiFieldOp         ::Either FieldOp DecFieldOp
-        }
+        } deriving (Show)
 
 -- |Ascii string field.
-data AsciiStringField = AsciiStringField FieldInstrContent 
+data AsciiStringField = AsciiStringField FieldInstrContent deriving (Show)
 
 -- |Unicode string field.
 data UnicodeStringField = UnicodeStringField {
         usfContent         ::FieldInstrContent, 
         usfLength          ::Maybe ByteVectorLength
-        }
+        } deriving (Show)
 
 -- |Bytevector field.
 data ByteVectorField = ByteVectorField {
         bvfContent         ::FieldInstrContent, 
         bvfLength          ::Maybe ByteVectorLength
-        } 
+        } deriving (Show)
 
 -- |Sequence field.
 data Sequence = Sequence {
@@ -139,7 +143,7 @@ data Sequence = Sequence {
         sTypeRef           ::Maybe TypeRef,
         sLength            ::Maybe Length,
         sInstructions      ::[Instruction]
-        }
+        } deriving (Show)
 
 -- |Group field.
 data Group = Group {
@@ -148,14 +152,14 @@ data Group = Group {
         gDictionary        ::Maybe DictionaryAttr,
         gTypeRef           ::Maybe TypeRef,
         gInstructions      ::[Instruction]
-        }
+        } deriving (Show)
 
 -- |ByteVectorLenght is logically a uInt32, but it is not a field instruction 
 -- and it is not physically present in the stream. Obviously no field operator 
 -- is needed.
 data ByteVectorLength = ByteVectorLength {
     bvlNsName::NsName
-    }
+    } deriving (Show)
 
 -- |SeqLength is logically a uInt32. The name maybe 'implicit' or 'explicit' 
 -- in the template.
@@ -168,11 +172,11 @@ data ByteVectorLength = ByteVectorLength {
 data Length = Length {
     lFName    ::Maybe NsName,
     lFieldOp  ::Maybe FieldOp
-    }
+    } deriving (Show)
 
 
 -- |Presence of a field value is either mandatory or optional.
-data PresenceAttr = Mandatory | Optional
+data PresenceAttr = Mandatory | Optional deriving (Show)
 
 -- |FAST field operators.
 data FieldOp = Constant InitialValueAttr
@@ -181,53 +185,55 @@ data FieldOp = Constant InitialValueAttr
                 |Increment OpContext
                 |Delta OpContext
                 |Tail OpContext
+                deriving (Show)
  
 -- |The decimal field operator consists of two standart operators.
 data DecFieldOp = DecFieldOp {
     dfoExponent    ::FieldOp,
     dfoMantissa    ::FieldOp
-    }
+    } deriving (Show)
 
 -- |Dictionary consists of a name and a list of key value pairs.
-data Dictionary = Dictionary String (M.Map DictKey DictValue)
+data Dictionary = Dictionary String (M.Map DictKey DictValue) deriving (Show)
 
 data DictKey = N NsName
                 |K NsKey
-                deriving (Eq, Ord)
+                deriving (Eq, Ord, Show)
 
 
 -- |Entry in a dictionary can be in one of three states.
 data DictValue = Undefined 
                     | Empty 
                     | Assigned Primitive
+                    deriving (Show)
 
 -- |Operator context.
 data OpContext = OpContext {
     ocDictionary      ::Maybe DictionaryAttr,
     ocNsKey           ::Maybe NsKey,
     ocInitialValue    ::Maybe InitialValueAttr
-    }
+    } deriving (Show)
 
 -- |Dictionary attribute. Three predefined dictionaries are "template", "type" 
 -- and "global".
-data DictionaryAttr = DictionaryAttr String
+data DictionaryAttr = DictionaryAttr String deriving (Show)
 
 -- |nsKey attribute.
 data NsKey = NsKey {
     nkKey     ::KeyAttr,
     nkNs    ::Maybe NsAttr
-    } deriving (Eq, Ord)
+    } deriving (Eq, Ord, Show)
 
 -- |Key attribute.
 data KeyAttr = KeyAttr {
     kaToken::Token
-    } deriving (Eq, Ord)
+    } deriving (Eq, Ord, Show)
 
 -- |Initial value attribute. The value is a string of unicode characters and needs to 
 -- be converted to the type of the field in question.
 data InitialValueAttr = InitialValueAttr {
     text::UnicodeString
-    }
+    } deriving (Show)
 
 -- |A full name in a template is given by a namespace URI and localname. For 
 -- application types, fields and operator keys the namespace URI is given by 
@@ -237,17 +243,17 @@ data InitialValueAttr = InitialValueAttr {
 -- QUESTION: What is the 'idAttribute' for?
 
 -- |A full name for an application type, field or operator key.
-data NsName = NsName NameAttr (Maybe NsAttr) (Maybe IdAttr) deriving (Eq, Ord)
+data NsName = NsName NameAttr (Maybe NsAttr) (Maybe IdAttr) deriving (Eq, Ord, Show)
 
 -- |A full name for a template.
-data TemplateNsName = TemplateNsName NameAttr (Maybe TemplateNsAttr) (Maybe IdAttr)
+data TemplateNsName = TemplateNsName NameAttr (Maybe TemplateNsAttr) (Maybe IdAttr) deriving (Show)
 
 -- |The very basic name related attributes.
-newtype NameAttr = NameAttr String deriving (Eq, Ord)
-newtype NsAttr = NsAttr String deriving (Eq, Ord)
-newtype TemplateNsAttr = TemplateNsAttr String deriving (Eq, Ord)
-newtype IdAttr = IdAttr Token deriving (Eq, Ord)
-newtype Token = Token String deriving (Eq, Ord)
+newtype NameAttr = NameAttr String deriving (Eq, Ord, Show)
+newtype NsAttr = NsAttr String deriving (Eq, Ord, Show)
+newtype TemplateNsAttr = TemplateNsAttr String deriving (Eq, Ord, Show)
+newtype IdAttr = IdAttr Token deriving (Eq, Ord, Show)
+newtype Token = Token String deriving (Eq, Ord, Show)
 
 -- *FAST maps.
 
