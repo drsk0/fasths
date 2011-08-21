@@ -14,9 +14,9 @@ data TPState = TPState {
     dict        ::Maybe DictionaryAttr
     }
 
-parseTemplateXML::String -> IO [Templates]
-parseTemplateXML s = runXIOState    (initialState (TPState Nothing Nothing Nothing)) 
-                                    (parseXML s >>> getTemplates)
+parseTemplateXML::IOStateArrow TPState XmlTree XmlTree -> IO [Templates]
+parseTemplateXML ar = runXIOState    (initialState (TPState Nothing Nothing Nothing)) 
+                                    (ar >>> getTemplates)
 
 getTemplates::IOStateArrow TPState XmlTree Templates
 getTemplates = atTag "templates" >>>
@@ -222,11 +222,6 @@ getGroup = atTag "group" >>> (proc l -> do
     tr<- maybeA getTypeRef  -< l
     is<- getInstructions    -< l
     returnA -< (Group n p d tr is))
-
-parseXML::String -> IOStateArrow TPState XmlTree XmlTree
-parseXML = readString [ withValidate yes
-		     	, withRemoveWS yes  -- throw away formating WS
-		     	]
 
 atTag::ArrowXml a => String -> a XmlTree XmlTree
 atTag tag = deep (isElem >>> hasName tag)
