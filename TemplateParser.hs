@@ -1,6 +1,6 @@
 {-# LANGUAGE Arrows #-}
 
-module TemplateParser (parseTemplateXML) where
+module TemplateParser  where
 
 import Text.XML.HXT.Core
 import Text.XML.HXT.Arrow.XmlState.RunIOStateArrow
@@ -56,8 +56,7 @@ getTemplate = proc l -> do
   returnA -< (Template tnn n d tr ins)
 
 getTemplateNsName::IOStateArrow TPState XmlTree TemplateNsName 
-getTemplateNsName = atTag "templateNsName" >>> 
-    proc l -> do
+getTemplateNsName = proc l -> do
        name <- getName'     -< l
        tns  <- getTempNs    -< l
        i    <- maybeA getId -< l
