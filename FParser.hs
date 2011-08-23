@@ -43,6 +43,7 @@ data FValue = I Int
               |BS B.ByteString
               |Sq Int [[(NsName, Maybe FValue)]]
               |Gr [(NsName, Maybe FValue)]
+              deriving (Show)
 
 -- |Maps a fast primitive to its corresponding fast value.
 p2FValue::Primitive -> FValue
