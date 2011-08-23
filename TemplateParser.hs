@@ -14,9 +14,12 @@ data TPState = TPState {
     dict        ::Maybe DictionaryAttr
     }
 
-parseTemplateXML::IOStateArrow TPState XmlTree XmlTree -> IO [Templates]
-parseTemplateXML ar = runXIOState    (initialState (TPState Nothing Nothing Nothing)) 
-                                    (ar >>> deep (isElem >>> hasName "templates") >>> getTemplates)
+parseTemplateXML::IOStateArrow TPState XmlTree XmlTree -> IO Templates
+parseTemplateXML ar = fmap safehead (runXIOState (initialState (TPState Nothing Nothing Nothing)) (ar >>> deep (isElem >>> hasName "templates") >>> getTemplates))
+
+safehead::[a] -> a
+safehead xs | null xs = error "Template file could not be parsed."
+safehead xs = head xs
 
 getTemplates::IOStateArrow TPState XmlTree Templates
 getTemplates = proc l -> do
