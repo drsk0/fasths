@@ -1169,7 +1169,7 @@ takeTill' f = do
 -- Word8's. 
 -- TODO: Is this unsafe?
 stopBitSet::Char -> Bool
-stopBitSet c = testBit (c2w c) 8
+stopBitSet c = testBit (c2w c) 7
 
 -- *Stream parsers.
 
