@@ -62,7 +62,7 @@ getTemplateNsName = proc l -> do
        returnA -< (TemplateNsName name tns i)
 
 getId::IOStateArrow TPState XmlTree IdAttr
-getId = getAttrValue "id" >>> arr (IdAttr . Token) 
+getId = getAttrValue' "id" >>> arr (IdAttr . Token) 
 
 getTypeRef::IOStateArrow TPState XmlTree TypeRef
 getTypeRef =  proc l -> do
@@ -71,7 +71,7 @@ getTypeRef =  proc l -> do
         returnA -< (TypeRef name n)
         
 getName'::IOStateArrow TPState XmlTree NameAttr 
-getName' = getAttrValue "name" >>> arr NameAttr
+getName' = getAttrValue' "name" >>> arr NameAttr
 
 getInstruction::IOStateArrow TPState XmlTree Instruction
 getInstruction = ((hasName "templateRef" >>> getTemplateRef) <+> (getField >>> arr Instruction))
@@ -107,7 +107,7 @@ getConstantOp::IOStateArrow TPState XmlTree FieldOp
 getConstantOp = hasName "constant" >>> getInitialValue >>> arr Constant
 
 getInitialValue::IOStateArrow TPState XmlTree InitialValueAttr
-getInitialValue = getAttrValue "value" >>> arr InitialValueAttr 
+getInitialValue = getAttrValue' "value" >>> arr InitialValueAttr 
 
 getDefaultOp::IOStateArrow TPState XmlTree FieldOp
 getDefaultOp = hasName "default" >>> ((getInitialValue >>> arr (Default . Just)) <+> constA (Default Nothing))
@@ -141,7 +141,7 @@ getNsKey = proc l -> do
     returnA -< (NsKey k n)
 
 getKey::IOStateArrow TPState XmlTree KeyAttr
-getKey = getAttrValue "key" >>> arr (KeyAttr . Token)
+getKey = getAttrValue' "key" >>> arr (KeyAttr . Token)
 
 getNsName::IOStateArrow TPState XmlTree NsName
 getNsName = proc l -> do
@@ -151,7 +151,7 @@ getNsName = proc l -> do
     returnA -< (NsName na n i)
 
 getPresence::IOStateArrow TPState XmlTree PresenceAttr
-getPresence = getAttrValue "presence" >>> (isA ( == "mandatory") >>> constA Mandatory) <+> constA Optional
+getPresence = getAttrValue' "presence" >>> (isA ( == "mandatory") >>> constA Mandatory) <+> constA Optional
 
 getDecimalField::IOStateArrow TPState XmlTree DecimalField
 getDecimalField = hasName "decimal" >>> proc l -> do
@@ -173,11 +173,11 @@ getMantissa::IOStateArrow TPState XmlTree FieldOp
 getMantissa = childrenWithName "mantissa" >>> getFieldOp
 
 getAsciiStringField::IOStateArrow TPState XmlTree AsciiStringField
-getAsciiStringField = hasName "string" >>> (((getAttrValue "charset" >>> isA ( == "ascii")) `guards` (getFieldInstrContent >>> arr AsciiStringField)) <+> (getFieldInstrContent >>> arr AsciiStringField))
+getAsciiStringField = hasName "string" >>> (((getAttrValue' "charset" >>> isA ( == "ascii")) `guards` (getFieldInstrContent >>> arr AsciiStringField)) <+> (getFieldInstrContent >>> arr AsciiStringField))
 
 getUnicodeStringField::IOStateArrow TPState XmlTree UnicodeStringField
 getUnicodeStringField = 
-    hasName "string" >>> (getAttrValue "charset" >>> isA ( == "unicode")) `guards`
+    hasName "string" >>> (getAttrValue' "charset" >>> isA ( == "unicode")) `guards`
     (proc l -> do 
         fic     <- getFieldInstrContent       -< l
         ln      <- maybeA (childrenWithName "length" >>> getByteVectorLength) -< l
@@ -223,6 +223,9 @@ childrenWithName tag = getChildren >>> isElem >>> hasName tag
 
 atTag::ArrowXml a => String -> a XmlTree XmlTree
 atTag tag = deep (isElem >>> hasName tag)
+
+getAttrValue'::ArrowXml a => String -> a XmlTree String
+getAttrValue' s = hasAttr s >>> getAttrValue s
 
 maybeA::IOStateArrow TPState XmlTree a -> IOStateArrow TPState XmlTree (Maybe a)
 maybeA ar = (listA ar) >>> arr listToMaybe 
