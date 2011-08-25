@@ -1141,7 +1141,7 @@ presenceMap = do
 bsToPm::B.ByteString -> [Bool]
 bsToPm bs = concatMap h (B.unpack bs) 
     where   h::Word8 -> [Bool]
-            h w = map (testBit w) [1..7] 
+            h w = map (testBit w) [6,5..0] 
 
 -- |Checks wether a field is NOT present according to presence map.
 -- TODO: unsafe head usage here.
