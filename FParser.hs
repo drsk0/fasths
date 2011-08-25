@@ -25,7 +25,7 @@ data FState = FState {
     pm          ::[Bool],
     -- |Dictionaries.
     dict        ::M.Map String Dictionary
-    }
+    } deriving (Show)
 
 -- |Environment of the parser.
 data FEnv = FEnv {
