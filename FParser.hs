@@ -1001,7 +1001,7 @@ uint = do
     return (snd (B.foldl h (0,0) bs))
     where
         h::(Int,Int) -> Word8 -> (Int,Int)
-        h (c,r) w = (c + 1, r + fromEnum (clearBit w 8) * 2^(7*c))
+        h (c,r) w = (c + 1, r + fromEnum (clearBit w 7) * 2^(7*c))
         
 -- |Signed integer parser, doesn't check for bounds.
 int::FParser Int
@@ -1011,10 +1011,10 @@ int = do
     where 
         h::(Int,Int) -> Word8 -> (Int,Int)
         h (c,r) w = (c + 1, r') 
-            where  r' = if testBit w 8 
-                        then (  if testBit w 7 
-                                then -1 * (r + fromEnum(w .&. 0xc0) * 2^(7*c)) 
-                                else r + fromEnum(clearBit w 8) * 2^(7*c))
+            where  r' = if testBit w 7 
+                        then (  if testBit w 6 
+                                then -1 * (r + fromEnum(w .&. 0x3f) * 2^(7*c)) 
+                                else r + fromEnum(clearBit w 7) * 2^(7*c))
                         else r + fromEnum w * 2^(7*c)
 
 -- |Check wether parsed integer is in given range.
