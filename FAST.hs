@@ -10,19 +10,23 @@ import qualified Data.Map as M
 
 -- |int32 range.
 i32Range::(Int,Int)
-i32Range = (-2147483648, 2147483647)
+i32Range = (minBound::Int, maxBound::Int)
+--i32Range = (-2147483648, 2147483647)
 
 -- |uint32 range.
 ui32Range::(Int,Int)
-ui32Range = (0, 4294967295)
+ui32Range = (0, maxBound::Int)
+-- ui32Range = (0, 4294967295)
 
 -- |int64 range.
 i64Range::(Int,Int)
-i64Range = (-9223372036854775808, 9223372036854775807)
+i64Range = (minBound::Int, maxBound::Int)
+-- i64Range = (-9223372036854775808, 9223372036854775807)
 
 -- |uint64 range.
 ui64Range::(Int,Int)
-ui64Range = (0,18446744073709551615)
+ui64Range = (0, maxBound::Int)
+--ui64Range = (0,18446744073709551615)
 
 decExpRange::(Int,Int)
 decExpRange = (-63,63)
