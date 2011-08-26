@@ -276,7 +276,10 @@ intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Copy oc))) intParser iv
                 fmap h (prevValue fname oc)
             )
         )
-        <|> (((Assigned <$> p) >>= updatePrevValue fname oc) >> Just <$> p) where p = intParser
+        <|> do 
+                i <- intParser
+                updatePrevValue fname oc (Assigned i)
+                return (Just i)
                             
 -- pm: Yes, Nullable: No
 intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Increment oc))) intParser ivToInt _
@@ -293,7 +296,10 @@ intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Increment oc))) intPars
             prevValue fname oc >>= h
         )
     )
-    <|> (((Assigned <$> p) >>= updatePrevValue fname oc) >> (Just <$> p)) where p = intParser
+    <|> do 
+            i <- intParser
+            updatePrevValue fname oc (Assigned i)
+            return (Just i)
 
 
     
@@ -332,7 +338,10 @@ intF2P' (FieldInstrContent fname (Just Optional) (Just (Copy oc))) intParser ivT
             )
         )
         <|> nULL <* updatePrevValue fname oc Empty
-        <|> ((Assigned <$> p >>= updatePrevValue fname oc) >> (Just <$> p)) where p = intParser
+        <|> do 
+            i <- intParser
+            updatePrevValue fname oc (Assigned i)
+            return (Just i)
 
 -- pm: Yes, Nullable: Yes
 intF2P' (FieldInstrContent fname (Just Optional) (Just (Increment oc))) intParser ivToInt _
@@ -348,7 +357,10 @@ intF2P' (FieldInstrContent fname (Just Optional) (Just (Increment oc))) intParse
         )
     )
     <|> nULL <* (updatePrevValue fname oc Empty >> return Nothing)
-    <|> (((Assigned <$> p) >>= updatePrevValue fname oc) >> Just <$> p ) where p = intParser
+    <|> do 
+        i <- intParser
+        updatePrevValue fname oc (Assigned i)
+        return (Just i)
 
 
 -- pm: -, Nullable: -
@@ -433,7 +445,10 @@ decF2P (DecimalField fname (Just Mandatory) (Left (Copy oc)))
                 fmap h (prevValue fname oc)
             )
         )
-        <|> (((Assigned <$> dec) >>= updatePrevValue fname oc) >> Just <$> dec)
+        <|> do
+                d <- dec
+                updatePrevValue fname oc (Assigned d)
+                return (Just d)
 
 -- pm: Yes, Nullable: No
 decF2P (DecimalField _ (Just Mandatory) (Left (Increment _))) 
@@ -486,7 +501,10 @@ decF2P (DecimalField fname (Just Optional) (Left (Copy oc)))
             )
         )
         <|> nULL <* updatePrevValue fname oc Empty
-        <|> ((Assigned <$> dec >>= updatePrevValue fname oc) >> Just <$> dec)
+        <|> do
+                d <- dec
+                updatePrevValue fname oc (Assigned d)
+                return (Just d)
 
 -- pm: Yes, Nullable: Yes
 decF2P (DecimalField _ (Just Optional) (Left (Increment _))) 
@@ -584,7 +602,10 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Co
                 prevValue fname oc >>= h 
             )
         )
-        <|> (((Assigned <$> byteVector) >>= updatePrevValue fname oc) >> (Just <$> byteVector))
+        <|> do
+                bv <- byteVector
+                updatePrevValue fname oc (Assigned bv)
+                return (Just bv)
 
 -- pm: Yes, Nullable: No
 asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Increment _))))
@@ -658,7 +679,11 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Cop
             )
         )
         <|> (nULL *> (updatePrevValue fname oc Empty >> return Nothing))
-        <|> (((Assigned <$> asciiString') >>= updatePrevValue fname oc) >> (Just <$> asciiString'))
+        <|>
+            do 
+                s <- asciiString'
+                updatePrevValue fname oc (Assigned s)
+                return (Just s)
 
 -- pm: Yes, Nullable: Yes
 asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Increment _ ))))
@@ -763,7 +788,10 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Copy
                 prevValue fname oc >>= h 
             )
         )
-        <|> (((Assigned <$> byteVector) >>= updatePrevValue fname oc) >> (Just <$> byteVector))
+        <|> do
+                bv <- byteVector
+                updatePrevValue fname oc (Assigned bv)
+                return (Just bv)
 
 -- pm: Yes, Nullable: Yes
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Copy oc))) _ ) 
@@ -779,7 +807,10 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Copy 
             )
         )
         <|> (nULL *> (updatePrevValue fname oc Empty >> return Nothing))
-        <|> (((Assigned <$> byteVector) >>= updatePrevValue fname oc) >> (Just <$> byteVector))
+        <|> do
+                bv <- byteVector
+                updatePrevValue fname oc (Assigned bv)
+                return (Just bv)
 
 -- pm: Yes, Nullable: No
 bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Increment _ ))) _ ) 
