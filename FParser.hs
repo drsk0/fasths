@@ -169,11 +169,12 @@ dictOfOpContext (OpContext (Just (DictionaryAttr d)) (Just k) _) _ = (d, K k, Em
 -- |The environment of the parser depending on the templates and
 -- the tid2temp function provided by the application.
 initEnv::Templates -> (Int -> String) -> FEnv
-initEnv ts = FEnv (M.fromList [(k,t) | (TemplateNsName (NameAttr k) _ _) <- map tName (tsTemplates ts), t <- tsTemplates ts])
+initEnv ts f = FEnv (M.fromList [(h t,t) | t <- tsTemplates ts]) f
+    where h (Template (TemplateNsName (NameAttr n) _ _) _ _ _ _) = n
 
 -- |Maps several templates to a list of corresponding parsers.
 templates2P::Templates -> [(TemplateNsName, FParser (NsName, Maybe FValue))]
-templates2P t = [(n, p) | n <- fmap tName (tsTemplates t), p <- fmap template2P (tsTemplates t)]
+templates2P ts = [(tName t, template2P t) | t <- tsTemplates ts]
 
 -- |Maps a template to its corresponding parser.
 -- We treat a template as a group with NsName equal the TemplateNsName.
@@ -1325,7 +1326,7 @@ templateIdentifier = do
     case maybe_i of
         (Just (I i')) -> do 
             env <- ask
-            template2P $ templates env M.! tid2temp env i'
+            template2P ((templates env) M.! ((tid2temp env) i')) 
         (Just _) ->  error "Coding error: templateId field must be of type I."
         Nothing -> error "Failed to parse template identifier."
 
