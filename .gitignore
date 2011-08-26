@@ -4,3 +4,4 @@ tags
 *.swo
 *.hi
 *.o
+*.ghci
