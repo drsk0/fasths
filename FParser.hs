@@ -1182,7 +1182,7 @@ notPresent = do
     put (FState (P.tail (pm s)) (dict s))
     let pmap = pm s in
         if head pmap 
-        then fail "Presence bit set."
+        then mzero
         else return Nothing
 
 -- |Get a Stopbit encoded entity.
