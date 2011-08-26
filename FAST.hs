@@ -311,7 +311,7 @@ dfbInt32 = Int32 0
 dfbUInt32::Primitive
 dfbUInt32 = UInt32 0
 
--- |Default base value for Int64.
+-- |Default base value for Int64.  dfbInt64::Primitive
 dfbInt64::Primitive
 dfbInt64 = Int64 0
 
@@ -351,28 +351,46 @@ inc _ = error "S2: Impossible to increment an non-integer type field."
 
 -- |Convert an initial value to an Int32.
 ivToInt32::InitialValueAttr -> Primitive
-ivToInt32 = undefined 
+ivToInt32 = Int32 . (checkRange i32Range) . read . trimWhiteSpace . text 
 
 -- |Convert an initial value to an UInt32
 ivToUInt32::InitialValueAttr -> Primitive
-ivToUInt32 = undefined 
+ivToUInt32 = UInt32 . (checkRange ui32Range) . read . trimWhiteSpace . text
 
 -- |Convert an initial value to an Int64
 ivToInt64::InitialValueAttr -> Primitive
-ivToInt64 = undefined 
+ivToInt64 = Int64 . (checkRange i64Range) . read . trimWhiteSpace . text
 
 -- |Convert an initial value to an UInt64
 ivToUInt64::InitialValueAttr -> Primitive
-ivToUInt64 = undefined 
+ivToUInt64 = UInt64 . (checkRange ui64Range) . read . trimWhiteSpace . text
 
 ivToDec::InitialValueAttr -> Primitive
-ivToDec = undefined
+ivToDec (InitialValueAttr s) = let  s' = trimWhiteSpace s 
+                                    mant = Int64 (checkRange i64Range (read (filter (/= '.') s')))
+                                    expo = Int32 (checkRange decExpRange (h s'))
+                                    h ('-':xs) = h xs
+                                    h ('.':xs) = -1 * (length (takeWhile (=='0') xs) + 1)
+                                    h ('0':'.':xs) = h ('.':xs)
+                                    h xs = length (takeWhile (/= '.') xs)
+                               in Decimal mant expo
 
 ivToAscii::InitialValueAttr -> Primitive
-ivToAscii = undefined
+ivToAscii = Ascii . text
+
+-- TODO: check if characterset is ok?
+ivToUnicode::InitialValueAttr -> Primitive
+ivToUnicode = Unicode . text
 
 ivToByteVector::InitialValueAttr -> Primitive
 ivToByteVector = undefined
+
+trimWhiteSpace::String -> String
+trimWhiteSpace = reverse . (dropWhile whiteSpace) . reverse . (dropWhile whiteSpace)
+
+whiteSpace::Char -> Bool
+whiteSpace c =  c == '\x20' || c == '\x09' || c == '\x0d' || c == '\x0a'
+
 -- *Helper functions
 
 -- |Check wether a value is in a given range.
