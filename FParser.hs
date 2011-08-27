@@ -908,15 +908,15 @@ seqF2P (Sequence fname maybe_presence _ _ maybe_length instrs)
         i <- (h maybe_presence maybe_length)
         g i
         where   g Nothing = return (fname, Nothing)
-                g (Just (Int32 i')) = do
+                g (Just (UInt32 i')) = do
                                         s <- (ask >>= \env -> A.count i' (segmentDep instrs (templates env) >> mapM instr2P instrs))
                                         return (fname, Just (Sq i' s))
                 g (Just _) = error "Coding error: Length field for sequences must return an Int32."
                 -- get the correct parser for the length field.
                 fname' = uniqueFName fname "l" 
-                h p Nothing = intF2P (Int32Field (FieldInstrContent fname' p Nothing))
-                h p (Just (Length Nothing op)) = intF2P (Int32Field (FieldInstrContent fname' p op))
-                h p (Just (Length (Just fn) op)) = intF2P (Int32Field (FieldInstrContent fn p op))
+                h p Nothing = intF2P (UInt32Field (FieldInstrContent fname' p Nothing))
+                h p (Just (Length Nothing op)) = intF2P (UInt32Field (FieldInstrContent fname' p op))
+                h p (Just (Length (Just fn) op)) = intF2P (UInt32Field (FieldInstrContent fn p op))
                 
 -- |Maps a group field to its parser.
 groupF2P::Group -> FParser (NsName, Maybe FValue)
