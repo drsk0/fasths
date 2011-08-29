@@ -1030,19 +1030,19 @@ dec = do
 uint::FParser Int
 uint = do 
     bs <- anySBEEntity
-    return (snd (B.foldl h (0,0) bs))
+    return (snd (B.foldr h (0,0) bs))
     where
-        h::(Int,Int) -> Word8 -> (Int,Int)
-        h (c,r) w = (c + 1, r + fromEnum (clearBit w 7) * 2^(7*c))
+        h:: Word8 -> (Int,Int) -> (Int,Int)
+        h w (c,r) = (c + 1, r + fromEnum (clearBit w 7) * 2^(7*c))
         
 -- |Signed integer parser, doesn't check for bounds.
 int::FParser Int
 int = do
     bs <- anySBEEntity
-    return $ snd(B.foldl h (0,0) bs)
+    return $ snd(B.foldr h (0,0) bs)
     where 
-        h::(Int,Int) -> Word8 -> (Int,Int)
-        h (c,r) w = (c + 1, r') 
+        h::Word8 -> (Int,Int) -> (Int,Int)
+        h w (c,r) = (c + 1, r') 
             where  r' = if testBit w 7 
                         then (  if testBit w 6 
                                 then -1 * (r + fromEnum(w .&. 0x3f) * 2^(7*c)) 
