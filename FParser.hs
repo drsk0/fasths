@@ -5,9 +5,9 @@ module FParser where
 
 import Prelude as P
 import qualified Data.ByteString as B
+import Data.ByteString.Char8 (unpack) 
 import qualified Data.ByteString.UTF8 as U
-import Data.ByteString.Internal (c2w, w2c)
-import qualified Data.Attoparsec.Char8 as A
+import qualified Data.Attoparsec as A
 import Control.Monad.State
 import Control.Monad.Reader
 import Control.Applicative 
@@ -982,7 +982,7 @@ nULL::FParser (Maybe Primitive)
 nULL = lift $ lift nULL'
     where nULL' = do 
             -- discard result.
-            _ <- A.char (w2c 0x80)
+            _ <- A.word8 0x80
             return Nothing
 
 -- |UInt32 field parser.
@@ -1060,14 +1060,14 @@ asciiString::FParser Primitive
 asciiString = do
     bs <- anySBEEntity
     let bs' = B.init bs `B.append` B.singleton (clearBit (B.last bs) 8) in
-        return (rmPreamble(Ascii (map w2c (B.unpack bs'))))
+        return (rmPreamble(Ascii (unpack bs')))
 
 -- |ASCII string field parser, Nullable.
 asciiString'::FParser Primitive
 asciiString' = do
     bs <- anySBEEntity
     let bs' = B.init bs `B.append` B.singleton (clearBit (B.last bs) 8) in
-        return (rmPreamble'(Ascii (map w2c (B.unpack bs'))))
+        return (rmPreamble'(Ascii (unpack bs')))
     
 -- |Remove Preamble of an ascii string, non-Nullable situation.
 rmPreamble::Primitive -> Primitive
@@ -1191,7 +1191,7 @@ anySBEEntity::FParser B.ByteString
 anySBEEntity = lift $ lift (takeTill' stopBitSet)
 
 -- |Like takeTill, but takes the matching byte as well.
-takeTill'::(Char -> Bool) -> A.Parser B.ByteString
+takeTill'::(Word8 -> Bool) -> A.Parser B.ByteString
 takeTill' f = do
     str <- A.takeTill f
     c <- A.take 1
@@ -1200,8 +1200,8 @@ takeTill' f = do
 -- |Test wether the stop bit is set of a Char. (Note: Chars are converted to
 -- Word8's. 
 -- TODO: Is this unsafe?
-stopBitSet::Char -> Bool
-stopBitSet c = testBit (c2w c) 7
+stopBitSet::Word8 -> Bool
+stopBitSet c = testBit c 7
 
 -- *Stream parsers.
 
@@ -1343,10 +1343,6 @@ templateIdentifier = do
 uniqueFName::NsName -> String -> NsName
 uniqueFName fname s = NsName (NameAttr(n ++ s)) ns ide
     where (NsName (NameAttr n) ns ide) = fname
-
--- |Modify underlying bits of a Char.
-modBits::Char -> (Word8 -> Word8) -> Char
-modBits c f = (w2c . f . c2w) c
 
 -- |Decrement the value of an integer, when it is positive.
 minusOne::Primitive -> Primitive
