@@ -9,7 +9,7 @@ import FParser
 -- |Example of a stream. In this case, the stream consists of messages
 -- and the parser is reset when a new message starts.
 stream::Templates -> (Int -> String) -> A.Parser [(NsName, Maybe FValue)]
-stream ts tid2tem = evalStateT (FStream.reset ts >> A.many (message ts tid2tem)) (initState ts)
+stream ts tid2tem = evalStateT (FStream.reset ts >> A.many1 (message ts tid2tem)) (initState ts)
 
 -- |Stateful parser for one message depending on templates and the tid2temp 
 -- converter function.
