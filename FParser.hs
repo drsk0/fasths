@@ -12,7 +12,9 @@ import Control.Monad.State
 import Control.Monad.Reader
 import Control.Applicative 
 import Data.Bits
-import Data.Word (Word8)
+import Data.Int
+import Data.Word 
+import Data.Ix (Ix)
 import qualified Data.Map as M
 import Data.Maybe (catMaybes)
 import Data.List (groupBy)
@@ -32,25 +34,28 @@ data FEnv = FEnv {
     -- |All known templates.
     templates   ::M.Map String Template,
     -- |The application needs to define how uint32 values are mapped to template names.
-    tid2temp   ::Int -> String
+    tid2temp   ::Word32 -> String
     }
 
 type FParser a = ReaderT FEnv (StateT FState A.Parser) a
 
-data FValue = I Int
+data FValue = I32 Int32
+              |I64 Int64
+              |UI32 Word32
+              |UI64 Word64
               |S String
               |D Double
               |BS B.ByteString
-              |Sq Int [[(NsName, Maybe FValue)]]
+              |Sq Word32 [[(NsName, Maybe FValue)]]
               |Gr [(NsName, Maybe FValue)]
               deriving (Show)
 
 -- |Maps a fast primitive to its corresponding fast value.
 p2FValue::Primitive -> FValue
-p2FValue (Int32 i) = I i
-p2FValue (UInt32 i) = I i
-p2FValue (Int64 i) = I i
-p2FValue (UInt64 i) = I i
+p2FValue (Int32 i) = I32 i
+p2FValue (UInt32 i) = UI32 i
+p2FValue (Int64 i) = I64 i
+p2FValue (UInt64 i) = UI64 i
 p2FValue (Ascii s) = S s
 p2FValue (Unicode s) = S s
 p2FValue (Decimal (Int32 e) (Int64 m)) = D (10^e * fromIntegral m)
@@ -168,7 +173,7 @@ dictOfOpContext (OpContext (Just (DictionaryAttr d)) (Just k) _) _ = (d, K k, Em
 
 -- |The environment of the parser depending on the templates and
 -- the tid2temp function provided by the application.
-initEnv::Templates -> (Int -> String) -> FEnv
+initEnv::Templates -> (Word32 -> String) -> FEnv
 initEnv ts f = FEnv (M.fromList [(h t,t) | t <- tsTemplates ts]) f
     where h (Template (TemplateNsName (NameAttr n) _ _) _ _ _ _) = n
 
@@ -909,7 +914,7 @@ seqF2P (Sequence fname maybe_presence _ _ maybe_length instrs)
         g i
         where   g Nothing = return (fname, Nothing)
                 g (Just (UInt32 i')) = do
-                                        s <- (ask >>= \env -> A.count i' (segmentDep instrs (templates env) >> mapM instr2P instrs))
+                                        s <- (ask >>= \env -> A.count (fromEnum i') (segmentDep instrs (templates env) >> mapM instr2P instrs))
                                         return (fname, Just (Sq i' s))
                 g (Just _) = error "Coding error: Length field for sequences must return an Int32."
                 -- get the correct parser for the length field.
@@ -1027,30 +1032,30 @@ dec = do
 
 -- |Unsigned integer parser, doesn't check for bounds.
 -- TODO: should we check for R6 errors, i.e overlong fields?
-uint::FParser Int
+uint::(Num a, Integral a) => FParser a
 uint = do 
     bs <- anySBEEntity
     return (snd (B.foldr h (0,0) bs))
     where
-        h:: Word8 -> (Int,Int) -> (Int,Int)
-        h w (c,r) = (c + 1, r + fromEnum (clearBit w 7) * 2^(7*c))
+        h::(Num a, Integral a) => Word8 -> (a,a) -> (a,a)
+        h w (c,r) = (c + 1, r + fromIntegral (clearBit w 7) * 2^(7*c))
         
 -- |Signed integer parser, doesn't check for bounds.
-int::FParser Int
+int::(Num a, Integral a) => FParser a
 int = do
     bs <- anySBEEntity
     return $ snd(B.foldr h (0,0) bs)
     where 
-        h::Word8 -> (Int,Int) -> (Int,Int)
+        h::(Num a, Integral a) => Word8 -> (a, a) -> (a, a)
         h w (c,r) = (c + 1, r') 
             where  r' = if testBit w 7 
                         then (  if testBit w 6 
-                                then -1 * (r + fromEnum(w .&. 0x3f) * 2^(7*c)) 
-                                else r + fromEnum(clearBit w 7) * 2^(7*c))
-                        else r + fromEnum w * 2^(7*c)
+                                then -1 * (r + fromIntegral (w .&. 0x3f) * 2^(7*c)) 
+                                else r + fromIntegral (clearBit w 7) * 2^(7*c))
+                        else r + fromIntegral w * 2^(7*c)
 
 -- |Check wether parsed integer is in given range.
-checkBounds::(Int,Int) -> FParser Int -> FParser Int
+checkBounds::Ix a => (a,a) -> FParser a -> FParser a
 checkBounds r p = do
     x <- p
     return (checkRange r x)
@@ -1101,9 +1106,11 @@ byteVector = do
             byteVector' s'
 
 -- |Bytevector field parser. The first argument is the size of the bytevector.
-byteVector'::Int -> FParser Primitive
+-- If the length of the bytevector is bigger than maxBound::Int an exception 
+-- will be trown.
+byteVector'::Word32 -> FParser Primitive
 byteVector' c = lift $ lift p
-    where p = Bytevector <$> A.take c
+    where p = Bytevector <$> A.take (fromEnum c)
 
 -- * Delta parsers.
 -- |Int32 delta parser.
@@ -1324,7 +1331,7 @@ templateIdentifier::FParser (NsName, Maybe FValue)
 templateIdentifier = do
     (_ , maybe_i) <- p
     case maybe_i of
-        (Just (I i')) -> do 
+        (Just (UI32 i')) -> do 
             env <- ask
             template2P ((templates env) M.! ((tid2temp env) i')) 
         (Just _) ->  error "Coding error: templateId field must be of type I."

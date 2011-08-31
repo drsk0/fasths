@@ -2,33 +2,32 @@
 module FAST where
 
 import Prelude hiding (exponent)
+import Data.ListLike (genericDrop, genericTake, genericLength)
 import qualified Data.ByteString as B
-import Data.Ix (inRange)
+import Data.Ix (Ix, inRange)
+import Data.Int
+import Data.Word
 import qualified Data.Map as M
 
 -- *Ranges of integer types
 
 -- |int32 range.
-i32Range::(Int,Int)
-i32Range = (minBound::Int, maxBound::Int)
---i32Range = (-2147483648, 2147483647)
+i32Range::(Int32,Int32)
+i32Range = (-2147483648, 2147483647)
 
 -- |uint32 range.
-ui32Range::(Int,Int)
-ui32Range = (0, maxBound::Int)
--- ui32Range = (0, 4294967295)
+ui32Range::(Word32,Word32)
+ui32Range = (0, 4294967295)
 
 -- |int64 range.
-i64Range::(Int,Int)
-i64Range = (minBound::Int, maxBound::Int)
--- i64Range = (-9223372036854775808, 9223372036854775807)
+i64Range::(Int64,Int64)
+i64Range = (-9223372036854775808, 9223372036854775807)
 
 -- |uint64 range.
-ui64Range::(Int,Int)
-ui64Range = (0, maxBound::Int)
---ui64Range = (0,18446744073709551615)
+ui64Range::(Word64,Word64)
+ui64Range = (0,18446744073709551615)
 
-decExpRange::(Int,Int)
+decExpRange::(Int32,Int32)
 decExpRange = (-63,63)
 
 -- |Some basic types, renamed for readability.
@@ -41,10 +40,10 @@ type Namespace = String
 --
 
 -- |FAST primitive types and their corresponding Haskell types.
-data Primitive = Int32 Int
-                    |UInt32 Int
-                    |Int64 Int
-                    |UInt64 Int
+data Primitive = Int32 Int32
+                    |UInt32 Word32
+                    |Int64 Int64
+                    |UInt64 Word64
                     |Ascii AsciiString
                     |Unicode UnicodeString
                     |Decimal {exponent::Primitive, mantissa::Primitive}
@@ -280,16 +279,20 @@ delta::Primitive -> Delta -> Primitive
 -- delta for integer types is just addition.
 delta (Int32 b) (Int32Delta (Int32 d)) = Int32 (checkRange i32Range (b + d))
 delta (Int64 b) (Int64Delta (Int64 d)) = Int64 (checkRange i64Range (b + d))
-delta (UInt32 b) (UInt32Delta (Int32 d)) = UInt32 (checkRange ui32Range (b + d))
-delta (UInt64 b) (UInt64Delta (Int64 d)) = UInt64 (checkRange ui64Range (b + d))
+delta (UInt32 b) (UInt32Delta (Int32 d)) = UInt32 (checkRange ui32Range (b `plus` d))
+delta (UInt64 b) (UInt64Delta (Int64 d)) = UInt64 (checkRange ui64Range (b `plus` d))
 -- delta for decimal type is addition of exponents and mantissas.
 delta (Decimal (Int32 b) (Int64 b')) (DecimalDelta (Decimal (Int32 d) (Int64 d'))) 
     = Decimal (Int32 (checkRange decExpRange (b + d))) (Int64 (checkRange i64Range (b' + d')))
-delta (Ascii str) (AsciiDelta (Int32 l) (Ascii str')) | l < 0 = Ascii (str' ++ str'') where str'' = drop (l + 1) str
-delta (Ascii str) (AsciiDelta (Int32 l) (Ascii str')) | l >= 0 = Ascii (str'' ++ str') where str'' = take (length str - l) str
-delta (Bytevector bv) (ByteVectorDelta (Int32 l) (Bytevector bv')) | l < 0 = Bytevector (bv'' `B.append` bv') where bv'' = B.drop (l + 1) bv
-delta (Bytevector bv) (ByteVectorDelta (Int32 l) (Bytevector bv')) | l >= 0 = Bytevector (bv'' `B.append` bv') where bv'' = B.take (B.length bv - l) bv
+delta (Ascii str) (AsciiDelta (Int32 l) (Ascii str')) | l < 0 = Ascii (str' ++ str'') where str'' = genericDrop (l + 1) str
+delta (Ascii str) (AsciiDelta (Int32 l) (Ascii str')) | l >= 0 = Ascii (str'' ++ str') where str'' = genericTake (genericLength str - l) str
+delta (Bytevector bv) (ByteVectorDelta (Int32 l) (Bytevector bv')) | l < 0 = Bytevector (bv'' `B.append` bv') where bv'' = genericDrop (l + 1) bv
+delta (Bytevector bv) (ByteVectorDelta (Int32 l) (Bytevector bv')) | l >= 0 = Bytevector (bv'' `B.append` bv') where bv'' = genericTake (genericLength bv - l) bv
 delta _ _ = undefined
+
+plus::(Num a, Num b , Integral a, Integral b) => a -> b -> a
+plus x y | signum y == -1 = x - fromIntegral y
+plus x y = x + fromIntegral y
 
 -- |Tail data. Not present in the FAT specification.
 data Tail = AsciiTail Primitive
@@ -341,7 +344,7 @@ inc (Int32 i) | i == snd i32Range = Int32 $ fst i32Range
 inc (Int32 i) = Int32(i + 1)
 inc (Int64 i) | i == snd i64Range = Int64 $ fst i64Range 
 inc (Int64 i) = Int64(i + 1)
-inc (UInt32 i) | i == snd i32Range = UInt32 $ fst ui32Range
+inc (UInt32 i) | i == snd ui32Range = UInt32 $ fst ui32Range
 inc (UInt32 i) = UInt32(i + 1)
 inc (UInt64 i) | i == snd ui64Range = UInt64 $ fst ui64Range
 inc (UInt64 i) = UInt64(i + 1)
@@ -370,9 +373,9 @@ ivToDec (InitialValueAttr s) = let  s' = trimWhiteSpace s
                                     mant = Int64 (checkRange i64Range (read (filter (/= '.') s')))
                                     expo = Int32 (checkRange decExpRange (h s'))
                                     h ('-':xs) = h xs
-                                    h ('.':xs) = -1 * (length (takeWhile (=='0') xs) + 1)
+                                    h ('.':xs) = -1 * toEnum ((length (takeWhile (=='0') xs) + 1))
                                     h ('0':'.':xs) = h ('.':xs)
-                                    h xs = length (takeWhile (/= '.') xs)
+                                    h xs = toEnum (length (takeWhile (/= '.') xs))
                                in Decimal mant expo
 
 ivToAscii::InitialValueAttr -> Primitive
@@ -394,6 +397,6 @@ whiteSpace c =  c == '\x20' || c == '\x09' || c == '\x0d' || c == '\x0a'
 -- *Helper functions
 
 -- |Check wether a value is in a given range.
-checkRange::(Int,Int) -> Int -> Int
+checkRange::Ix a => (a,a) -> a -> a
 checkRange r x = if inRange r x then x else 
     error "R4: Integer type can not be represented in the target integer type."
