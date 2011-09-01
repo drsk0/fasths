@@ -193,8 +193,8 @@ data FieldOp = Constant InitialValueAttr
  
 -- |The decimal field operator consists of two standart operators.
 data DecFieldOp = DecFieldOp {
-    dfoExponent    ::FieldOp,
-    dfoMantissa    ::FieldOp
+    dfoExponent    ::Maybe FieldOp,
+    dfoMantissa    ::Maybe FieldOp
     } deriving (Show)
 
 -- |Dictionary consists of a name and a list of key value pairs.

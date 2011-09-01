@@ -151,26 +151,26 @@ getNsName = proc l -> do
     returnA -< (NsName na n i)
 
 getPresence::IOStateArrow TPState XmlTree PresenceAttr
-getPresence = getAttrValue' "presence" >>> (isA ( == "mandatory") >>> constA Mandatory) <+> constA Optional
+getPresence = getAttrValue' "presence" >>> ((isA ( == "mandatory") >>> constA Mandatory) <+> constA Optional)
 
 getDecimalField::IOStateArrow TPState XmlTree DecimalField
 getDecimalField = hasName "decimal" >>> proc l -> do
    n <- getNsName                                                   -< l
    p <- maybeA getPresence                                          -< l
-   op<- (getFieldOp >>> arr Left) <+> (getDecFieldOp >>> arr Right) -< l
+   op<- (ifA (getChildren >>> isElem >>> (hasName "exponent" <+> hasName "mantissa")) (getDecFieldOp >>> arr Right) (getFieldOp >>> arr Left)) -< l
    returnA -< (DecimalField n p op)
 
 getDecFieldOp::IOStateArrow TPState XmlTree DecFieldOp 
 getDecFieldOp = proc l -> do
-    e <- getExponent -< l
-    m <- getMantissa -< l
+    e <- maybeA (getChildren >>> getExponent) -< l
+    m <- maybeA (getChildren >>> getMantissa) -< l
     returnA -< (DecFieldOp e m) 
 
 getExponent::IOStateArrow TPState XmlTree FieldOp
-getExponent = childrenWithName "exponent" >>> getFieldOp
+getExponent = hasName "exponent" >>> getFieldOp
 
 getMantissa::IOStateArrow TPState XmlTree FieldOp
-getMantissa = childrenWithName "mantissa" >>> getFieldOp
+getMantissa = hasName "mantissa" >>> getFieldOp
 
 getAsciiStringField::IOStateArrow TPState XmlTree AsciiStringField
 getAsciiStringField = hasName "string" >>> (((getAttrValue' "charset" >>> isA ( == "ascii")) `guards` (getFieldInstrContent >>> arr AsciiStringField)) <+> (getFieldInstrContent >>> arr AsciiStringField))
@@ -220,9 +220,6 @@ getGroup = hasName "group" >>> proc l -> do
 
 childrenWithName::ArrowXml a => String -> a XmlTree XmlTree
 childrenWithName tag = getChildren >>> isElem >>> hasName tag
-
-atTag::ArrowXml a => String -> a XmlTree XmlTree
-atTag tag = deep (isElem >>> hasName tag)
 
 getAttrValue'::ArrowXml a => String -> a XmlTree String
 getAttrValue' s = hasAttr s >>> getAttrValue s
