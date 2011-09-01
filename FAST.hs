@@ -7,6 +7,7 @@ import qualified Data.ByteString as B
 import Data.Ix (Ix, inRange)
 import Data.Int
 import Data.Word
+import Data.Char (digitToInt)
 import qualified Data.Map as M
 
 -- *Ranges of integer types
@@ -386,7 +387,7 @@ ivToUnicode::InitialValueAttr -> Primitive
 ivToUnicode = Unicode . text
 
 ivToByteVector::InitialValueAttr -> Primitive
-ivToByteVector = undefined
+ivToByteVector (InitialValueAttr s) = Bytevector (B.pack (map (toEnum . digitToInt) (filter whiteSpace s)))
 
 trimWhiteSpace::String -> String
 trimWhiteSpace = reverse . (dropWhile whiteSpace) . reverse . (dropWhile whiteSpace)
