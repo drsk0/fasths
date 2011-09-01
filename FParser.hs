@@ -166,10 +166,10 @@ dictOfIntField (FieldInstrContent _ (Just Optional) (Just (Tail _))) = error "S2
 -- |Outputs a triple (DictionaryName, Key, Value) depending on OpContext and 
 -- the NsName of a field.
 dictOfOpContext::OpContext -> NsName -> (String, DictKey, DictValue)
-dictOfOpContext (OpContext Nothing Nothing _) n = ("global", N n, Empty)
-dictOfOpContext (OpContext (Just (DictionaryAttr d)) Nothing _) n = (d, N n, Empty)
-dictOfOpContext (OpContext Nothing (Just k) _) _ = ("global", K k, Empty)
-dictOfOpContext (OpContext (Just (DictionaryAttr d)) (Just k) _) _ = (d, K k, Empty)
+dictOfOpContext (OpContext Nothing Nothing _) n = ("global", N n, Undefined)
+dictOfOpContext (OpContext (Just (DictionaryAttr d)) Nothing _) n = (d, N n, Undefined)
+dictOfOpContext (OpContext Nothing (Just k) _) _ = ("global", K k, Undefined)
+dictOfOpContext (OpContext (Just (DictionaryAttr d)) (Just k) _) _ = (d, K k, Undefined)
 
 -- |The environment of the parser depending on the templates and
 -- the tid2temp function provided by the application.
@@ -222,13 +222,13 @@ field2Parser (Grp g) = groupF2P g
 -- |Maps an integer field to its parser.
 intF2P::IntegerField -> FParser (Maybe Primitive)
 -- Delta operator needs delta parser!
-intF2P (Int32Field fic@(FieldInstrContent _ _ (Just (Delta _)))) = intF2P'' fic int32Delta ivToUInt32 dfbUInt32
+intF2P (Int32Field fic@(FieldInstrContent _ _ (Just (Delta _)))) = intF2P'' fic int32Delta ivToUInt32 dfbInt32
 intF2P (Int32Field fic) = intF2P' fic int32 ivToInt32 dfbInt32
-intF2P (UInt32Field fic@(FieldInstrContent _ _ (Just (Delta _)))) = intF2P'' fic int32Delta ivToUInt32 dfbUInt32
+intF2P (UInt32Field fic@(FieldInstrContent _ _ (Just (Delta _)))) = intF2P'' fic uint32Delta ivToUInt32 dfbUInt32
 intF2P (UInt32Field fic) = intF2P' fic uint32 ivToUInt32 dfbUInt32
-intF2P (Int64Field fic@(FieldInstrContent _ _ (Just (Delta _)))) = intF2P'' fic int64Delta ivToUInt32 dfbUInt32
+intF2P (Int64Field fic@(FieldInstrContent _ _ (Just (Delta _)))) = intF2P'' fic int64Delta ivToUInt32 dfbInt64
 intF2P (Int64Field fic) = intF2P' fic int64 ivToInt64 dfbInt64
-intF2P (UInt64Field fic@(FieldInstrContent _ _ (Just (Delta _)))) = intF2P'' fic int64Delta ivToUInt32 dfbUInt32
+intF2P (UInt64Field fic@(FieldInstrContent _ _ (Just (Delta _)))) = intF2P'' fic uint64Delta ivToUInt32 dfbUInt64
 intF2P (UInt64Field fic) = intF2P' fic uint64 ivToUInt64 dfbUInt64
 
 -- |Maps an integer field to a parser, given the field instruction context, the 

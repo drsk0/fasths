@@ -289,7 +289,7 @@ delta (Ascii str) (AsciiDelta (Int32 l) (Ascii str')) | l < 0 = Ascii (str' ++ s
 delta (Ascii str) (AsciiDelta (Int32 l) (Ascii str')) | l >= 0 = Ascii (str'' ++ str') where str'' = genericTake (genericLength str - l) str
 delta (Bytevector bv) (ByteVectorDelta (Int32 l) (Bytevector bv')) | l < 0 = Bytevector (bv'' `B.append` bv') where bv'' = genericDrop (l + 1) bv
 delta (Bytevector bv) (ByteVectorDelta (Int32 l) (Bytevector bv')) | l >= 0 = Bytevector (bv'' `B.append` bv') where bv'' = genericTake (genericLength bv - l) bv
-delta _ _ = undefined
+delta _ _ = error "Coding error: delta value and base value must much in delta operator."
 
 plus::(Num a, Num b , Integral a, Integral b) => a -> b -> a
 plus x y | signum y == -1 = x - fromIntegral y
