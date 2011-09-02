@@ -386,6 +386,9 @@ intF2P''::FieldInstrContent
         -> Primitive
         -> FParser (Maybe Primitive)
 
+intF2P'' (FieldInstrContent fname Nothing (Just (Delta oc))) deltaParser ivToInt defaultBaseValue 
+    = intF2P'' (FieldInstrContent fname (Just Mandatory) (Just (Delta oc))) deltaParser ivToInt defaultBaseValue
+
 -- pm: No, Nullable: No
 intF2P'' (FieldInstrContent fname (Just Mandatory) (Just (Delta oc))) deltaParser ivToInt defaultBaseValue
     = let   baseValue (Assigned p) = p
