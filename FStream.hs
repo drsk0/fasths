@@ -1,6 +1,7 @@
 module FStream where 
 
-import qualified Data.Attoparsec.Char8 as A
+import qualified Data.Attoparsec as A
+import Control.Applicative
 import Control.Monad.State
 import Control.Monad.Reader
 import Data.Word (Word32)
@@ -15,12 +16,11 @@ stream1 ts tid2tem = evalStateT (A.many1 (FStream.reset ts >> (message ts tid2te
 -- |Example of a stream. This stream resets the state on every occurence of a message with
 -- name "Reset".
 stream2::Templates -> (Word32 -> String) -> A.Parser [(NsName, Maybe FValue)]
-stream2 ts tid2tem = 
-    let msg = message ts tid2tem 
-        parser = do 
+stream2 ts tid2tem = evalStateT (A.many1 ((resetMsg >> msg) <|> msg)) (initState ts)
+    where    msg = message ts tid2tem
+             resetMsg =  do 
                     ((NsName (NameAttr n) _ _), _) <- msg
-                    if n == "Reset" then (FStream.reset ts >> msg) else msg
-    in evalStateT (A.many1 (parser)) (initState ts)
+                    if n == "Reset" then (FStream.reset ts) else fail "Not reset."
 
 -- |Stateful parser for one message depending on templates and the tid2temp 
 -- converter function.
