@@ -9,8 +9,18 @@ import FParser
 
 -- |Example of a stream. In this case, the stream consists of messages
 -- and the parser is reset when a new message starts.
-stream::Templates -> (Word32 -> String) -> A.Parser [(NsName, Maybe FValue)]
-stream ts tid2tem = evalStateT (A.many1 (FStream.reset ts >> (message ts tid2tem))) (initState ts)
+stream1::Templates -> (Word32 -> String) -> A.Parser [(NsName, Maybe FValue)]
+stream1 ts tid2tem = evalStateT (A.many1 (FStream.reset ts >> (message ts tid2tem))) (initState ts)
+
+-- |Example of a stream. This stream resets the state on every occurence of a message with
+-- name "Reset".
+stream2::Templates -> (Word32 -> String) -> A.Parser [(NsName, Maybe FValue)]
+stream2 ts tid2tem = 
+    let msg = message ts tid2tem 
+        parser = do 
+                    ((NsName (NameAttr n) _ _), _) <- msg
+                    if n == "Reset" then (FStream.reset ts >> msg) else msg
+    in evalStateT (A.many1 (parser)) (initState ts)
 
 -- |Stateful parser for one message depending on templates and the tid2temp 
 -- converter function.
