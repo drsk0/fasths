@@ -320,11 +320,11 @@ intF2P' (FieldInstrContent _ (Just Optional) (Just (Constant iv))) _ ivToInt _
 
 -- pm: Yes, Nullable: Yes
 intF2P' (FieldInstrContent _ (Just Optional) (Just (Default (Just iv)))) intParser ivToInt _
-    = ifPresentElse (nULL <|> (Just <$> intParser)) (return (Just $ ivToInt iv))
+    = ifPresentElse (nULL <|> ((Just . minusOne) <$> intParser)) (return (Just $ ivToInt iv))
 
 -- pm: Yes, Nullable: Yes
 intF2P' (FieldInstrContent _ (Just Optional) (Just (Default Nothing))) intParser _ _
-    = ifPresentElse (nULL <|> (Just <$> intParser)) (return Nothing)
+    = ifPresentElse (nULL <|> ((Just . minusOne) <$> intParser)) (return Nothing)
 
 -- pm: Yes, Nullable: Yes
 intF2P' (FieldInstrContent fname (Just Optional) (Just (Copy oc))) intParser ivToInt _
@@ -334,7 +334,7 @@ intF2P' (FieldInstrContent fname (Just Optional) (Just (Copy oc))) intParser ivT
     <|> do 
         i <- intParser
         updatePrevValue fname oc (Assigned i)
-        return (Just i)
+        return (Just $ minusOne i)
     )
     (
     let 
@@ -355,7 +355,7 @@ intF2P' (FieldInstrContent fname (Just Optional) (Just (Increment oc))) intParse
     <|> do 
         i <- intParser
         updatePrevValue fname oc (Assigned i)
-        return (Just i)
+        return (Just $ minusOne i)
     )
     (
     let 
@@ -414,7 +414,7 @@ intF2P'' (FieldInstrContent fname (Just Optional) (Just (Delta oc))) deltaParser
         in
             do 
                 d <- deltaParser
-                Just <$> (flip delta d <$> (baseValue <$> prevValue fname oc))
+                Just <$> (flip delta (minusOne' d) <$> (baseValue <$> prevValue fname oc))
 
 intF2P'' _ _ _ _
     = error "Coding Error: intF2P'' can only be used for delta operatos."
@@ -1047,6 +1047,7 @@ int64 = do
     x <- p
     return $ Int64 x
     where p = checkBounds i64Range int
+
 -- |Dec field parser.
 dec::FParser Primitive
 dec = do
@@ -1375,8 +1376,15 @@ uniqueFName fname s = NsName (NameAttr(n ++ s)) ns ide
 
 -- |Decrement the value of an integer, when it is positive.
 minusOne::Primitive -> Primitive
-minusOne (Int32 x) | x > 0 = Int32(x - 1)
-minusOne (Int64 x) | x > 0 = Int64(x - 1)
-minusOne (UInt32 x)| x > 0 = UInt32(x - 1)
-minusOne (UInt64 x)| x > 0 = UInt64(x - 1)
+minusOne (Int32 x) | x > 0 = Int32 (x - 1)
+minusOne (Int64 x) | x > 0 = Int64 (x - 1)
+minusOne (UInt32 x)| x > 0 = UInt32 (x - 1)
+minusOne (UInt64 x)| x > 0 = UInt64 (x - 1)
 minusOne x = x
+
+minusOne'::Delta -> Delta
+minusOne' (Int32Delta (Int32 x)) | x > 0 = Int32Delta (Int32 (x - 1))
+minusOne' (Int64Delta (Int64 x)) | x > 0 = Int64Delta (Int64 (x - 1))
+minusOne' (UInt32Delta (UInt32 x))| x > 0 = UInt32Delta (UInt32 (x - 1))
+minusOne' (UInt64Delta (UInt64 x))| x > 0 = UInt64Delta (UInt64 (x - 1))
+minusOne' x = x
