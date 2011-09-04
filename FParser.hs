@@ -1033,20 +1033,20 @@ int32::FParser Primitive
 int32 = do
     x <- p
     return $ Int32 x
-    where p = checkBounds i32Range uint
+    where p = checkBounds i32Range int
     
 exint32::FParser Primitive 
 exint32 = do 
     x <- p
     return $ Int32 x
-    where p = checkBounds decExpRange uint
+    where p = checkBounds decExpRange int
 
 -- |Int64 field parser.
 int64::FParser Primitive
 int64 = do
     x <- p
     return $ Int64 x
-    where p = checkBounds i64Range uint
+    where p = checkBounds i64Range int
 -- |Dec field parser.
 dec::FParser Primitive
 dec = do
