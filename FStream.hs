@@ -8,6 +8,10 @@ import Data.Word (Word32)
 import FAST
 import FParser 
 
+-- |Example of a stream. This stream never resets its context.
+stream0::Templates -> (Word32 -> String) -> A.Parser [(NsName, Maybe FValue)]
+stream0 ts tid2tem = evalStateT (A.many1 (message ts tid2tem)) (initState ts)
+
 -- |Example of a stream. In this case, the stream consists of messages
 -- and the parser is reset when a new message starts.
 stream1::Templates -> (Word32 -> String) -> A.Parser [(NsName, Maybe FValue)]
