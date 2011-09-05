@@ -1381,6 +1381,6 @@ minusOne x = x
 minusOne'::Delta -> Delta
 minusOne' (Int32Delta (Int32 x)) | x > 0 = Int32Delta (Int32 (x - 1))
 minusOne' (Int64Delta (Int64 x)) | x > 0 = Int64Delta (Int64 (x - 1))
-minusOne' (UInt32Delta (UInt32 x))| x > 0 = UInt32Delta (UInt32 (x - 1))
-minusOne' (UInt64Delta (UInt64 x))| x > 0 = UInt64Delta (UInt64 (x - 1))
+minusOne' (UInt32Delta (Int32 x))| x > 0 = UInt32Delta (Int32 (x - 1))
+minusOne' (UInt64Delta (Int64 x))| x > 0 = UInt64Delta (Int64 (x - 1))
 minusOne' x = x
