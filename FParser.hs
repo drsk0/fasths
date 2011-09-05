@@ -1057,27 +1057,23 @@ dec = do
 
 -- |Unsigned integer parser, doesn't check for bounds.
 -- TODO: should we check for R6 errors, i.e overlong fields?
-uint::(Num a, Integral a) => FParser a
+uint::(Bits a, Num a) => FParser a
 uint = do 
     bs <- anySBEEntity
-    return (snd (B.foldr h (0,0) bs))
-    where
-        h::(Num a, Integral a) => Word8 -> (a,a) -> (a,a)
-        h w (c,r) = (c + 1, r + fromIntegral (clearBit w 7) * 2^(7*c))
+    return (B.foldl h 0 bs)
+    where   h::(Bits a, Num a) => a -> Word8 -> a
+            h r w = (fromIntegral (clearBit w 7)) .|. (shiftL r 7)
         
 -- |Signed integer parser, doesn't check for bounds.
-int::(Num a, Integral a) => FParser a
+int::(Bits a, Num a) => FParser a
 int = do
     bs <- anySBEEntity
-    return $ snd(B.foldr h (0,0) bs)
-    where 
-        h::(Num a, Integral a) => Word8 -> (a, a) -> (a, a)
-        h w (c,r) = (c + 1, r') 
-            where  r' = if testBit w 7 
-                        then (  if testBit w 6 
-                                then -1 * (r + fromIntegral (w .&. 0x3f) * 2^(7*c)) 
-                                else r + fromIntegral (clearBit w 7) * 2^(7*c))
-                        else r + fromIntegral w * 2^(7*c)
+    return (if testBit (B.head bs) 6 
+            then (B.foldl h ((shiftL (-1) 7) .|. (fromIntegral (setBit (B.head bs) 7))) (B.tail bs)) 
+            else (B.foldl h 0 bs))
+    where   
+            h::(Bits a, Num a) => a -> Word8 -> a
+            h r w = (fromIntegral (clearBit w 7)) .|. (shiftL r 7)
 
 -- |Check wether parsed integer is in given range.
 checkBounds::Ix a => (a,a) -> FParser a -> FParser a
@@ -1362,7 +1358,7 @@ templateIdentifier = do
 
     where p = field2Parser (IntField (UInt32Field (FieldInstrContent 
                             (NsName (NameAttr "templateId") Nothing Nothing) 
-                            (Just Optional) 
+                            (Just Mandatory) 
                             (Just (Copy (OpContext (Just (DictionaryAttr "global")) (Just (NsKey(KeyAttr (Token "tid")) Nothing)) Nothing)))
                             )))
 
