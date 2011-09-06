@@ -1,7 +1,7 @@
 {-# LANGUAGE TupleSections #-}
 
 -- |A FAST protocoll parser.
-module FParser where 
+module Codec.Fast.Parser where 
 
 import Prelude as P
 import qualified Data.ByteString as B
@@ -18,7 +18,7 @@ import Data.Ix (Ix)
 import qualified Data.Map as M
 import Data.Maybe (catMaybes)
 import Data.List (groupBy)
-import FAST
+import Codec.Fast.Data as F
 
 
 -- |State of the parser.
@@ -652,7 +652,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Ta
         do
             pva <- prevValue fname oc
             t <- asciiTail
-            return (Just (baseValue pva `FAST.tail` t))
+            return (Just (baseValue pva `F.tail` t))
     )
     (
     let baseValue (Assigned p) = return (Just p)
@@ -732,7 +732,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Tai
             do
                 bv <- prevValue fname oc >>= baseValue
                 t <- asciiString'
-                return (Just (bv `FAST.tail` AsciiTail t))
+                return (Just (bv `F.tail` AsciiTail t))
     )
     (
     let baseValue (Assigned p) = return (Just p)
@@ -878,7 +878,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail
         do
             pva <- prevValue fname oc
             t <- bytevectorTail
-            return (Just(baseValue pva `FAST.tail` t))
+            return (Just(baseValue pva `F.tail` t))
     )
     (
     let baseValue (Assigned p) = return (Just p)
@@ -908,7 +908,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Tail 
             do
                 bv <- prevValue fname oc >>= baseValue
                 t <- bytevectorTail
-                return (Just (bv `FAST.tail` t))
+                return (Just (bv `F.tail` t))
     )
     (
     let baseValue (Assigned p) = return (Just p)

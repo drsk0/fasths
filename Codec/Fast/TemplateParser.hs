@@ -1,11 +1,11 @@
 {-# LANGUAGE Arrows #-}
 
-module TemplateParser  where
+module Codec.Fast.TemplateParser  where
 
 import Text.XML.HXT.Core
 import Text.XML.HXT.Arrow.XmlState.RunIOStateArrow
 import Data.Maybe (listToMaybe)
-import FAST
+import Codec.Fast.Data
 
 
 data TPState = TPState {

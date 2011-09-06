@@ -1,5 +1,5 @@
 -- |A FAST protocoll implementation.
-module FAST where
+module Codec.Fast.Data where
 
 import Prelude hiding (exponent)
 import Data.ListLike (genericDrop, genericTake, genericLength)
