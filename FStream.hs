@@ -15,16 +15,16 @@ stream0 ts tid2tem = evalStateT (A.many1 (message ts tid2tem)) (initState ts)
 -- |Example of a stream. In this case, the stream consists of messages
 -- and the parser is reset when a new message starts.
 stream1::Templates -> (Word32 -> String) -> A.Parser [(NsName, Maybe FValue)]
-stream1 ts tid2tem = evalStateT (A.many1 (FStream.reset ts >> (message ts tid2tem))) (initState ts)
+stream1 ts tid2tem = evalStateT (A.many1 (FStream.reset ts >> message ts tid2tem)) (initState ts)
 
 -- |Example of a stream. This stream resets the state on every occurence of a message with
 -- name "Reset".
 stream2::Templates -> (Word32 -> String) -> A.Parser [(NsName, Maybe FValue)]
-stream2 ts tid2tem = evalStateT (A.many1 ((resetMsg) <|> msg)) (initState ts)
+stream2 ts tid2tem = evalStateT (A.many1 (resetMsg <|> msg)) (initState ts)
     where    msg = message ts tid2tem
              resetMsg =  do 
-                    m@((NsName (NameAttr n) _ _), _) <- msg
-                    if n == "Reset" then (FStream.reset ts) >> return m else fail "Not reset."
+                    m@(NsName (NameAttr n) _ _, _) <- msg
+                    if n == "Reset" then FStream.reset ts >> return m else fail "Not reset."
 
 -- |Stateful parser for one message depending on templates and the tid2temp 
 -- converter function.

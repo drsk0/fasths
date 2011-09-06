@@ -74,7 +74,7 @@ getName'::IOStateArrow TPState XmlTree NameAttr
 getName' = getAttrValue' "name" >>> arr NameAttr
 
 getInstruction::IOStateArrow TPState XmlTree Instruction
-getInstruction = ((hasName "templateRef" >>> getTemplateRef) <+> (getField >>> arr Instruction))
+getInstruction = (hasName "templateRef" >>> getTemplateRef) <+> (getField >>> arr Instruction)
 
 getTemplateRef::IOStateArrow TPState XmlTree Instruction
 getTemplateRef = (proc l -> do
@@ -84,8 +84,8 @@ getTemplateRef = (proc l -> do
     <+> constA (TemplateReference Nothing)
 
 getField::IOStateArrow TPState XmlTree Field
-getField = ((getIntegerField >>> arr IntField) <+> (getDecimalField >>> arr DecField) <+> (getAsciiStringField >>> arr AsciiStrField) 
-    <+> (getUnicodeStringField >>> arr UnicodeStrField) <+> (getByteVector >>> arr ByteVecField ) <+> (getSequence >>> arr Seq) <+> (getGroup >>> arr Grp))
+getField = (getIntegerField >>> arr IntField) <+> (getDecimalField >>> arr DecField) <+> (getAsciiStringField >>> arr AsciiStrField) 
+    <+> (getUnicodeStringField >>> arr UnicodeStrField) <+> (getByteVector >>> arr ByteVecField ) <+> (getSequence >>> arr Seq) <+> (getGroup >>> arr Grp)
 
 getIntegerField::IOStateArrow TPState XmlTree IntegerField
 getIntegerField = (getIntField "int32" >>> arr Int32Field) <+> (getIntField "uInt32" >>> arr UInt32Field) <+> (getIntField "int64" >>> arr Int64Field) <+> (getIntField "uInt64" >>> arr UInt64Field)
@@ -225,4 +225,4 @@ getAttrValue'::ArrowXml a => String -> a XmlTree String
 getAttrValue' s = hasAttr s >>> getAttrValue s
 
 maybeA::IOStateArrow TPState XmlTree a -> IOStateArrow TPState XmlTree (Maybe a)
-maybeA ar = (listA ar) >>> arr listToMaybe 
+maybeA ar = listA ar >>> arr listToMaybe 

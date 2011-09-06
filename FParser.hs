@@ -275,7 +275,7 @@ intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Copy oc))) intParser iv
         return (Just i)
     )
     ( 
-        (let 
+        let 
             h (Assigned v) = Just v
             h (Undefined) = h' oc
                 where   h' (OpContext _ _ (Just iv)) = Just (ivToInt iv)
@@ -285,7 +285,6 @@ intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Copy oc))) intParser iv
             h (Empty) = error "D6: Previous value is empty in madatory copy operator."
         in 
             fmap h (prevValue fname oc)
-        )
     )
                             
 -- pm: Yes, Nullable: No
@@ -541,8 +540,8 @@ decF2P (DecimalField fname (Just Mandatory) (Right (DecFieldOp maybe_exOp maybe_
     = let fname' = uniqueFName fname "e"
           fname'' = uniqueFName fname "m"
     in do 
-        e <- (intF2P (Int32Field (FieldInstrContent fname' (Just Mandatory) maybe_exOp)))
-        m <- (intF2P (Int64Field (FieldInstrContent fname'' (Just Mandatory) maybe_maOp)))
+        e <- intF2P (Int32Field (FieldInstrContent fname' (Just Mandatory) maybe_exOp))
+        m <- intF2P (Int64Field (FieldInstrContent fname'' (Just Mandatory) maybe_maOp))
         return (h e m) where   
                         h Nothing _ = Nothing
                         h _ Nothing = Nothing
@@ -556,8 +555,8 @@ decF2P (DecimalField fname (Just Optional) (Right (DecFieldOp maybe_exOp maybe_m
     = let fname' = uniqueFName fname "e"
           fname'' = uniqueFName fname  "m"
     in do 
-        e <- (intF2P (Int32Field (FieldInstrContent fname' (Just Optional) maybe_exOp)))
-        m <- (intF2P (Int64Field (FieldInstrContent fname'' (Just Mandatory) maybe_maOp)))
+        e <- intF2P (Int32Field (FieldInstrContent fname' (Just Optional) maybe_exOp))
+        m <- intF2P (Int64Field (FieldInstrContent fname'' (Just Mandatory) maybe_maOp))
         return (h e m) where   
                         h Nothing _ = Nothing
                         h _ Nothing = Nothing
@@ -651,7 +650,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Ta
                     h (OpContext _ _ Nothing) = dfbAscii
     in
         do
-            pva <- (prevValue fname oc)
+            pva <- prevValue fname oc
             t <- asciiTail
             return (Just (baseValue pva `FAST.tail` t))
     )
@@ -933,11 +932,11 @@ unicodeF2P (UnicodeStringField (FieldInstrContent fname maybe_presence maybe_op)
 seqF2P::Sequence -> FParser (NsName, Maybe FValue)
 seqF2P (Sequence fname maybe_presence _ _ maybe_length instrs) 
     = do 
-        i <- (h maybe_presence maybe_length)
+        i <- h maybe_presence maybe_length
         g i
         where   g Nothing = return (fname, Nothing)
                 g (Just (UInt32 i')) = do
-                                        s <- (ask >>= \env -> A.count (fromEnum i') (segmentDep instrs (templates env) >> mapM instr2P instrs))
+                                        s <- ask >>= \env -> A.count (fromEnum i') (segmentDep instrs (templates env) >> mapM instr2P instrs)
                                         return (fname, Just (Sq i' s))
                 g (Just _) = error "Coding error: Length field for sequences must return an Int32."
                 -- get the correct parser for the length field.
@@ -1062,18 +1061,18 @@ uint = do
     bs <- anySBEEntity
     return (B.foldl h 0 bs)
     where   h::(Bits a, Num a) => a -> Word8 -> a
-            h r w = (fromIntegral (clearBit w 7)) .|. (shiftL r 7)
+            h r w = fromIntegral (clearBit w 7) .|. shiftL r 7
         
 -- |Signed integer parser, doesn't check for bounds.
 int::(Bits a, Num a) => FParser a
 int = do
     bs <- anySBEEntity
     return (if testBit (B.head bs) 6 
-            then (B.foldl h ((shiftL (-1) 7) .|. (fromIntegral (setBit (B.head bs) 7))) (B.tail bs)) 
-            else (B.foldl h 0 bs))
+            then B.foldl h (shiftL (-1) 7 .|. fromIntegral (setBit (B.head bs) 7)) (B.tail bs)
+            else B.foldl h 0 bs)
     where   
             h::(Bits a, Num a) => a -> Word8 -> a
-            h r w = (fromIntegral (clearBit w 7)) .|. (shiftL r 7)
+            h r w = fromIntegral (clearBit w 7) .|. shiftL r 7
 
 -- |Check wether parsed integer is in given range.
 checkBounds::Ix a => (a,a) -> FParser a -> FParser a
@@ -1352,7 +1351,7 @@ templateIdentifier = do
     case maybe_i of
         (Just (UI32 i')) -> do 
             env <- ask
-            template2P ((templates env) M.! ((tid2temp env) i')) 
+            template2P (templates env M.! tid2temp env i')
         (Just _) ->  error "Coding error: templateId field must be of type I."
         Nothing -> error "Failed to parse template identifier."
 
