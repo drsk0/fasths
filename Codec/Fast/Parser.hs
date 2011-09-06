@@ -1,7 +1,14 @@
 {-# LANGUAGE TupleSections #-}
 
--- |A FAST protocoll parser.
-module Codec.Fast.Parser where 
+module Codec.Fast.Parser 
+(
+FState (..),
+initState,
+FValue (..),
+initEnv,
+segment'
+)
+where 
 
 import Prelude as P
 import qualified Data.ByteString as B

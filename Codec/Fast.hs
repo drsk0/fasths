@@ -1,12 +1,23 @@
-module Codec.Fast (message, Codec.Fast.reset) where
+module Codec.Fast 
+(
+message, 
+Codec.Fast.reset,
+Templates, 
+NsName (..), 
+NameAttr (..),
+FValue (..),
+parseTemplateXML,
+initState
+) 
+where
 
 import qualified Data.Attoparsec as A
-import Control.Applicative
 import Control.Monad.State
 import Control.Monad.Reader
 import Data.Word (Word32)
 import Codec.Fast.Data
 import Codec.Fast.Parser 
+import Codec.Fast.TemplateParser
 
 -- |Stateful parser for one message depending on templates and the tid2temp 
 -- converter function.
