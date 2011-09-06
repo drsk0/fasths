@@ -1,3 +1,12 @@
+-- |
+-- Module      :  Codec.Fast.TemplateParser
+-- Copyright   :  Robin S. Krom 2011
+-- License     :  BSD3
+-- 
+-- Maintainer  :  Robin S. Krom
+-- Stability   :  experimental
+-- Portability :  unknown
+--
 {-# LANGUAGE Arrows #-}
 
 module Codec.Fast.TemplateParser  where

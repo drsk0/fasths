@@ -1,4 +1,12 @@
--- |A FAST protocoll implementation.
+-- |
+-- Module      :  Codec.Fast.Data
+-- Copyright   :  Robin S. Krom 2011
+-- License     :  BSD3
+-- 
+-- Maintainer  :  Robin S. Krom
+-- Stability   :  experimental
+-- Portability :  unknown
+--
 module Codec.Fast.Data 
 (
 Primitive (..),
