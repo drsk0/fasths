@@ -184,10 +184,6 @@ initEnv::Templates -> (Word32 -> String) -> FEnv
 initEnv ts f = FEnv (M.fromList [(h t,t) | t <- tsTemplates ts]) f
     where h (Template (TemplateNsName (NameAttr n) _ _) _ _ _ _) = n
 
--- |Maps several templates to a list of corresponding parsers.
-templates2P::Templates -> [(TemplateNsName, FParser (NsName, Maybe FValue))]
-templates2P ts = [(tName t, template2P t) | t <- tsTemplates ts]
-
 -- |Maps a template to its corresponding parser.
 -- We treat a template as a group with NsName equal the TemplateNsName.
 template2P::Template -> FParser (NsName, Maybe FValue)
@@ -1117,13 +1113,6 @@ rmPreamble' (Ascii ['\0','\0','\0']) = Ascii "\NUL"
 rmPreamble' (Ascii x) = Ascii (filter (/= '\0') x)
 rmPreamble' _ = error "Coding error: rmPreamble' only applicable for Ascii primitives."
 
--- |Unicode string field parser. The first argument is the size of the string.
-unicodeString::FParser Primitive
-unicodeString = do
-    bv <- byteVector
-    let (Bytevector bs) = bv in
-        return (Unicode (U.toString bs))
-    
 -- |Bytevector size preamble parser.
 -- TODO: Is it a UInt32 or a UInt64?
 byteVector::FParser Primitive
@@ -1184,10 +1173,6 @@ byteVectorDelta = do
 -- | Ascii tail parser, non-nullable case.
 asciiTail::FParser Tail
 asciiTail = AsciiTail <$> asciiString
-
--- | Ascii tail parser, nullable case.
-asciiTail'::FParser Tail
-asciiTail' = AsciiTail <$> asciiString'
 
 -- | Bytevector tail parser.
 bytevectorTail::FParser Tail

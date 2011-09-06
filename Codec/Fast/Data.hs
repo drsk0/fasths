@@ -100,7 +100,6 @@ decExpRange = (-63,63)
 -- |Some basic types, renamed for readability.
 type UnicodeString = String
 type AsciiString = String
-type Namespace = String
 
 --
 -- The following definitions follow allmost one to one the FAST specification.
@@ -116,14 +115,6 @@ data Primitive = Int32 Int32
                     |Decimal {exponent::Primitive, mantissa::Primitive}
                     |Bytevector B.ByteString
                     deriving (Show)
-
--- |The default namespace.
-td::Namespace
-td = "http://www.fixprotocol.org/ns/fast/td/1.1"
-
--- |The local namespace.
-local::Namespace
-local = ""
 
 -- |A collection of templates, i.e. a template file.
 data Templates = Templates {
@@ -326,12 +317,6 @@ newtype IdAttr = IdAttr Token deriving (Eq, Ord, Show)
 newtype Token = Token String deriving (Eq, Ord, Show)
 
 -- *FAST maps.
-
--- |Reset all entries of a dictionary to 'Undefined'.
-reset::Dictionary -> Dictionary
-reset (Dictionary name xs) = Dictionary name (M.map h xs)
-    where h _ = Undefined
-
 -- |Delta data. Not in the FAST specification.
 data Delta = Int32Delta Primitive
             |UInt32Delta Primitive
