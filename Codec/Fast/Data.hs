@@ -9,6 +9,7 @@
 --
 module Codec.Fast.Data 
 (
+Value (..),
 Primitive (..),
 Templates (..),
 Template (..),
@@ -104,6 +105,18 @@ ui64Range = (0,18446744073709551615)
 
 decExpRange::(Int32,Int32)
 decExpRange = (-63,63)
+
+-- |The values in a messages.
+data Value = I32 Int32
+              |I64 Int64
+              |UI32 Word32
+              |UI64 Word64
+              |S String
+              |D Double
+              |BS B.ByteString
+              |Sq Word32 [[(NsName, Maybe Value)]]
+              |Gr [(NsName, Maybe Value)]
+              deriving (Show)
 
 -- |Some basic types, renamed for readability.
 type UnicodeString = String

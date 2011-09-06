@@ -11,9 +11,8 @@
 
 module Codec.Fast.Parser 
 (
-FState (..),
+Context (..),
 initState,
-FValue (..),
 initEnv,
 segment'
 )
@@ -28,7 +27,6 @@ import Control.Monad.State
 import Control.Monad.Reader
 import Control.Applicative 
 import Data.Bits
-import Data.Int
 import Data.Word 
 import Data.Ix (Ix)
 import qualified Data.Map as M
@@ -38,7 +36,7 @@ import Codec.Fast.Data as F
 
 
 -- |State of the parser.
-data FState = FState {
+data Context = Context {
     -- |Presence map
     pm          ::[Bool],
     -- |Dictionaries.
@@ -46,28 +44,17 @@ data FState = FState {
     } deriving (Show)
 
 -- |Environment of the parser.
-data FEnv = FEnv {
+data Env = Env {
     -- |All known templates.
     templates   ::M.Map String Template,
     -- |The application needs to define how uint32 values are mapped to template names.
     tid2temp   ::Word32 -> String
     }
 
-type FParser a = ReaderT FEnv (StateT FState A.Parser) a
-
-data FValue = I32 Int32
-              |I64 Int64
-              |UI32 Word32
-              |UI64 Word64
-              |S String
-              |D Double
-              |BS B.ByteString
-              |Sq Word32 [[(NsName, Maybe FValue)]]
-              |Gr [(NsName, Maybe FValue)]
-              deriving (Show)
+type FParser a = ReaderT Env (StateT Context A.Parser) a
 
 -- |Maps a fast primitive to its corresponding fast value.
-p2FValue::Primitive -> FValue
+p2FValue::Primitive -> Value
 p2FValue (Int32 i) = I32 i
 p2FValue (UInt32 i) = UI32 i
 p2FValue (Int64 i) = I64 i
@@ -79,8 +66,8 @@ p2FValue (Decimal _ _) = error "Decimal is defined only for Int32 exponent, Int6
 p2FValue (Bytevector bs) = BS bs
 
 -- |The initial state of the parser depending on the templates.
-initState::Templates -> FState
-initState ts = FState [] (M.fromList [(k,d) | d@(Dictionary k _) <- concatMap initDicts (tsTemplates ts)])
+initState::Templates -> Context
+initState ts = Context [] (M.fromList [(k,d) | d@(Dictionary k _) <- concatMap initDicts (tsTemplates ts)])
 
 -- |Creates a list of dictionaries depending on the fields of a template.
 initDicts::Template -> [Dictionary]
@@ -189,13 +176,13 @@ dictOfOpContext (OpContext (Just (DictionaryAttr d)) (Just k) _) _ = (d, K k, Un
 
 -- |The environment of the parser depending on the templates and
 -- the tid2temp function provided by the application.
-initEnv::Templates -> (Word32 -> String) -> FEnv
-initEnv ts f = FEnv (M.fromList [(h t,t) | t <- tsTemplates ts]) f
+initEnv::Templates -> (Word32 -> String) -> Env
+initEnv ts f = Env (M.fromList [(h t,t) | t <- tsTemplates ts]) f
     where h (Template (TemplateNsName (NameAttr n) _ _) _ _ _ _) = n
 
 -- |Maps a template to its corresponding parser.
 -- We treat a template as a group with NsName equal the TemplateNsName.
-template2P::Template -> FParser (NsName, Maybe FValue)
+template2P::Template -> FParser (NsName, Maybe Value)
 template2P t = (tname2fname (tName t), ) <$> Just . Gr <$> mapM instr2P (tInstructions t)
 
 -- |Translates a TemplateNsName into a NsName. Its the same anyway.
@@ -204,7 +191,7 @@ tname2fname (TemplateNsName n (Just (TemplateNsAttr ns)) maybe_id) = NsName n (J
 tname2fname (TemplateNsName n Nothing maybe_id) = NsName n Nothing maybe_id
 
 -- |Maps an instruction to its corresponding parser.
-instr2P::Instruction -> FParser (NsName, Maybe FValue)
+instr2P::Instruction -> FParser (NsName, Maybe Value)
 instr2P (Instruction f) = field2Parser f
 
 -- Static template reference.
@@ -219,7 +206,7 @@ instr2P (TemplateReference Nothing) = segment'
 -- |Constructs a parser out of a field. The FParser monad has underlying type
 -- Maybe Primitive, the Nothing constructor represents a field that was not
 -- present in the stream.
-field2Parser::Field -> FParser (NsName, Maybe FValue)
+field2Parser::Field -> FParser (NsName, Maybe Value)
 field2Parser (IntField f@(Int32Field (FieldInstrContent fname _ _))) = (fname, ) <$> fmap p2FValue <$> intF2P f
 field2Parser (IntField f@(Int64Field (FieldInstrContent fname _ _))) = (fname, ) <$> fmap p2FValue <$> intF2P f
 field2Parser (IntField f@(UInt32Field (FieldInstrContent fname _ _))) = (fname, ) <$> fmap p2FValue <$> intF2P f
@@ -941,7 +928,7 @@ unicodeF2P (UnicodeStringField (FieldInstrContent fname maybe_presence maybe_op)
                 h (Nothing) = Nothing
 
 -- |Maps a sequence field to its parser.
-seqF2P::Sequence -> FParser (NsName, Maybe FValue)
+seqF2P::Sequence -> FParser (NsName, Maybe Value)
 seqF2P (Sequence fname maybe_presence _ _ maybe_length instrs) 
     = do 
         i <- h maybe_presence maybe_length
@@ -958,7 +945,7 @@ seqF2P (Sequence fname maybe_presence _ _ maybe_length instrs)
                 h p (Just (Length (Just fn) op)) = intF2P (UInt32Field (FieldInstrContent fn p op))
                 
 -- |Maps a group field to its parser.
-groupF2P::Group -> FParser (NsName, Maybe FValue)
+groupF2P::Group -> FParser (NsName, Maybe Value)
 groupF2P (Group fname Nothing maybe_dict maybe_typeref instrs)
     = groupF2P (Group fname (Just Mandatory) maybe_dict maybe_typeref instrs)
 
@@ -1012,7 +999,7 @@ updatePrevValue _ (OpContext Nothing (Just dkey) _ ) dvalue
 uppv::String -> DictKey -> DictValue -> FParser ()
 uppv d k v = do
     st <- get
-    put (FState (pm st) (M.adjust (\(Dictionary n xs) -> Dictionary n (M.adjust (\_ -> v) k xs)) d (dict st)))
+    put (Context (pm st) (M.adjust (\(Dictionary n xs) -> Dictionary n (M.adjust (\_ -> v) k xs)) d (dict st)))
 
 -- *Raw Parsers for basic FAST primitives
 -- These parsers are unaware of nullability, presence map, deltas etc.
@@ -1195,7 +1182,7 @@ presenceMap = do
     bs <- anySBEEntity
     -- update state
     st <- get
-    put (FState (bsToPm bs) (dict st))
+    put (Context (bsToPm bs) (dict st))
 
 -- |Convert a bytestring into a presence map.
 bsToPm::B.ByteString -> [Bool]
@@ -1206,7 +1193,7 @@ bsToPm bs = concatMap h (B.unpack bs)
 ifPresentElse::FParser a -> FParser a -> FParser a
 ifPresentElse p1 p2 = do 
                         s <- get
-                        put (FState (P.tail (pm s)) (dict s))
+                        put (Context (P.tail (pm s)) (dict s))
                         let pmap = pm s in
                             if head pmap 
                             then p1
@@ -1236,7 +1223,7 @@ segment::FParser ()
 segment = presenceMap
 
 -- |Parses presence map and template identifier.
-segment'::FParser (NsName, Maybe FValue)
+segment'::FParser (NsName, Maybe Value)
 segment' = presenceMap >> templateIdentifier
 
 -- |Returns newSegment | id, depending on presence bit usage of a group of fields.
@@ -1248,7 +1235,7 @@ segmentGrp::[Instruction] -> M.Map String Template -> FParser ()
 segmentGrp ins ts = case any (needsPm ts) ins of
     True -> do
         st <- get
-        put (FState pm' (dict st))
+        put (Context pm' (dict st))
         where pm' = replicate (length ins) True
     False -> return ()
 
@@ -1346,7 +1333,7 @@ intFieldNeedsPm (FieldInstrContent _ (Just Optional) (Just (Tail _))) = error "S
 -- template identifier is considered a mandatory copy operator UIn32 field.
 -- TODO: Check wether mandatory is right.
 -- TODO: Which token should this key have, define a policy?
-templateIdentifier::FParser (NsName, Maybe FValue)
+templateIdentifier::FParser (NsName, Maybe Value)
 templateIdentifier = do
     (_ , maybe_i) <- p
     case maybe_i of

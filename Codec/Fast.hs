@@ -14,7 +14,7 @@ Codec.Fast.reset,
 Templates, 
 NsName (..), 
 NameAttr (..),
-FValue (..),
+Value (..),
 parseTemplateXML,
 initState
 ) 
@@ -30,13 +30,13 @@ import Codec.Fast.TemplateParser
 
 -- |Stateful parser for one message depending on templates and the tid2temp 
 -- converter function.
-message::Templates -> (Word32 -> String) -> StateT FState A.Parser (NsName, Maybe FValue)
+message::Templates -> (Word32 -> String) -> StateT Context A.Parser (NsName, Maybe Value)
 message ts tid2tem = let   env = initEnv ts tid2tem 
     in runReaderT segment' env
 
 -- |Resets the state of a parser to the initial state depending on the
 -- templates.
-reset:: Templates -> StateT FState A.Parser ()
+reset:: Templates -> StateT Context A.Parser ()
 reset ts = put (initState ts)
 
 -- NOTE: Blocks are not supported at the time.
