@@ -355,26 +355,26 @@ inc _ = error "S2: Impossible to increment an non-integer type field."
 
 -- |Convert an initial value to an Int32.
 ivToInt32::InitialValueAttr -> Primitive
-ivToInt32 = Int32 . (checkRange i32Range) . read . trimWhiteSpace . text 
+ivToInt32 = Int32 . checkRange i32Range . read . trimWhiteSpace . text 
 
 -- |Convert an initial value to an UInt32
 ivToUInt32::InitialValueAttr -> Primitive
-ivToUInt32 = UInt32 . (checkRange ui32Range) . read . trimWhiteSpace . text
+ivToUInt32 = UInt32 . checkRange ui32Range . read . trimWhiteSpace . text
 
 -- |Convert an initial value to an Int64
 ivToInt64::InitialValueAttr -> Primitive
-ivToInt64 = Int64 . (checkRange i64Range) . read . trimWhiteSpace . text
+ivToInt64 = Int64 . checkRange i64Range . read . trimWhiteSpace . text
 
 -- |Convert an initial value to an UInt64
 ivToUInt64::InitialValueAttr -> Primitive
-ivToUInt64 = UInt64 . (checkRange ui64Range) . read . trimWhiteSpace . text
+ivToUInt64 = UInt64 . checkRange ui64Range . read . trimWhiteSpace . text
 
 ivToDec::InitialValueAttr -> Primitive
 ivToDec (InitialValueAttr s) = let  s' = trimWhiteSpace s 
                                     mant = Int64 (checkRange i64Range (read (filter (/= '.') s')))
                                     expo = Int32 (checkRange decExpRange (h s'))
                                     h ('-':xs) = h xs
-                                    h ('.':xs) = -1 * toEnum ((length (takeWhile (=='0') xs) + 1))
+                                    h ('.':xs) = -1 * toEnum (length (takeWhile (=='0') xs) + 1)
                                     h ('0':'.':xs) = h ('.':xs)
                                     h xs = toEnum (length (takeWhile (/= '.') xs))
                                in Decimal mant expo
@@ -390,10 +390,10 @@ ivToByteVector::InitialValueAttr -> Primitive
 ivToByteVector (InitialValueAttr s) = Bytevector (B.pack (map (toEnum . digitToInt) (filter whiteSpace s)))
 
 trimWhiteSpace::String -> String
-trimWhiteSpace = reverse . (dropWhile whiteSpace) . reverse . (dropWhile whiteSpace)
+trimWhiteSpace = reverse . dropWhile whiteSpace . reverse . dropWhile whiteSpace
 
 whiteSpace::Char -> Bool
-whiteSpace c =  c == '\x20' || c == '\x09' || c == '\x0d' || c == '\x0a'
+whiteSpace c =  c `elem` " \t\r\n"
 
 -- *Helper functions
 
