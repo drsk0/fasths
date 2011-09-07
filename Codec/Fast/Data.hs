@@ -64,14 +64,7 @@ ivToUnicode,
 ivToByteVector,
 ivToDec,
 Tail (..),
-Codec.Fast.Data.tail,
-i32Range,
-ui32Range,
-i64Range,
-ui64Range,
-decExpRange,
-checkRange,
-inc
+Codec.Fast.Data.tail
 )
 
 where
@@ -84,27 +77,6 @@ import Data.Int
 import Data.Word
 import Data.Char (digitToInt)
 import qualified Data.Map as M
-
--- *Ranges of integer types
-
--- |int32 range.
-i32Range::(Int32,Int32)
-i32Range = (-2147483648, 2147483647)
-
--- |uint32 range.
-ui32Range::(Word32,Word32)
-ui32Range = (0, 4294967295)
-
--- |int64 range.
-i64Range::(Int64,Int64)
-i64Range = (-9223372036854775808, 9223372036854775807)
-
--- |uint64 range.
-ui64Range::(Word64,Word64)
-ui64Range = (0,18446744073709551615)
-
-decExpRange::(Int32,Int32)
-decExpRange = (-63,63)
 
 -- |The values in a messages.
 data Value = I32 Int32
@@ -350,13 +322,13 @@ data Delta = Int32Delta Primitive
 -- |Delta operation.
 delta::Primitive -> Delta -> Primitive
 -- delta for integer types is just addition.
-delta (Int32 b) (Int32Delta (Int32 d)) = Int32 (checkRange i32Range (b + d))
-delta (Int64 b) (Int64Delta (Int64 d)) = Int64 (checkRange i64Range (b + d))
-delta (UInt32 b) (UInt32Delta (Int32 d)) = UInt32 (checkRange ui32Range (b `plus` d))
-delta (UInt64 b) (UInt64Delta (Int64 d)) = UInt64 (checkRange ui64Range (b `plus` d))
+delta (Int32 b) (Int32Delta (Int32 d)) = Int32 (b + d)
+delta (Int64 b) (Int64Delta (Int64 d)) = Int64 (b + d)
+delta (UInt32 b) (UInt32Delta (Int32 d)) = UInt32 (b `plus` d)
+delta (UInt64 b) (UInt64Delta (Int64 d)) = UInt64 (b `plus` d)
 -- delta for decimal type is addition of exponents and mantissas.
 delta (Decimal (Int32 b) (Int64 b')) (DecimalDelta (Decimal (Int32 d) (Int64 d'))) 
-    = Decimal (Int32 (checkRange decExpRange (b + d))) (Int64 (checkRange i64Range (b' + d')))
+    = Decimal (Int32 (b + d)) (Int64 (b' + d'))
 delta (Ascii str) (AsciiDelta (Int32 l) (Ascii str')) | l < 0 = Ascii (str' ++ str'') where str'' = genericDrop (l + 1) str
 delta (Ascii str) (AsciiDelta (Int32 l) (Ascii str')) | l >= 0 = Ascii (str'' ++ str') where str'' = genericTake (genericLength str - l) str
 delta (Bytevector bv) (ByteVectorDelta (Int32 l) (Bytevector bv')) | l < 0 = Bytevector (bv'' `B.append` bv') where bv'' = genericDrop (l + 1) bv
@@ -411,40 +383,28 @@ dfbByteVector = Bytevector B.empty
 dfbDecimal::Primitive
 dfbDecimal = Decimal (Int32 0) (Int64 0)
 
--- |Increment an integer in an increment operator.
-inc::Primitive -> Primitive
-inc (Int32 i) | i == snd i32Range = Int32 $ fst i32Range
-inc (Int32 i) = Int32(i + 1)
-inc (Int64 i) | i == snd i64Range = Int64 $ fst i64Range 
-inc (Int64 i) = Int64(i + 1)
-inc (UInt32 i) | i == snd ui32Range = UInt32 $ fst ui32Range
-inc (UInt32 i) = UInt32(i + 1)
-inc (UInt64 i) | i == snd ui64Range = UInt64 $ fst ui64Range
-inc (UInt64 i) = UInt64(i + 1)
-inc _ = error "S2: Impossible to increment an non-integer type field."
-
 -- *Conversions from initial values.
 
 -- |Convert an initial value to an Int32.
 ivToInt32::InitialValueAttr -> Primitive
-ivToInt32 = Int32 . checkRange i32Range . read . trimWhiteSpace . text 
+ivToInt32 = Int32 . read . trimWhiteSpace . text 
 
 -- |Convert an initial value to an UInt32
 ivToUInt32::InitialValueAttr -> Primitive
-ivToUInt32 = UInt32 . checkRange ui32Range . read . trimWhiteSpace . text
+ivToUInt32 = UInt32 . read . trimWhiteSpace . text
 
 -- |Convert an initial value to an Int64
 ivToInt64::InitialValueAttr -> Primitive
-ivToInt64 = Int64 . checkRange i64Range . read . trimWhiteSpace . text
+ivToInt64 = Int64 . read . trimWhiteSpace . text
 
 -- |Convert an initial value to an UInt64
 ivToUInt64::InitialValueAttr -> Primitive
-ivToUInt64 = UInt64 . checkRange ui64Range . read . trimWhiteSpace . text
+ivToUInt64 = UInt64 . read . trimWhiteSpace . text
 
 ivToDec::InitialValueAttr -> Primitive
 ivToDec (InitialValueAttr s) = let  s' = trimWhiteSpace s 
-                                    mant = Int64 (checkRange i64Range (read (filter (/= '.') s')))
-                                    expo = Int32 (checkRange decExpRange (h s'))
+                                    mant = Int64 (read (filter (/= '.') s'))
+                                    expo = Int32 (h s')
                                     h ('-':xs) = h xs
                                     h ('.':xs) = -1 * toEnum (length (takeWhile (=='0') xs) + 1)
                                     h ('0':'.':xs) = h ('.':xs)
@@ -466,10 +426,3 @@ trimWhiteSpace = reverse . dropWhile whiteSpace . reverse . dropWhile whiteSpace
 
 whiteSpace::Char -> Bool
 whiteSpace c =  c `elem` " \t\r\n"
-
--- *Helper functions
-
--- |Check wether a value is in a given range.
-checkRange::Ix a => (a,a) -> a -> a
-checkRange r x = if inRange r x then x else 
-    error "R4: Integer type can not be represented in the target integer type."

@@ -297,7 +297,7 @@ intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Increment oc))) intPars
     )
     (
     let 
-        h (Assigned v) = updatePrevValue fname oc (Assigned v') >> return (Just v') where v' = inc v
+        h (Assigned v) = updatePrevValue fname oc (Assigned v') >> return (Just v') where v' = v + 1
         h (Undefined) = h' oc
             where   h' (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned i) >> return (Just i) where i =ivToInt iv
                     h' (OpContext _ _ Nothing) = error "D5: No initial value in operator context given for\
@@ -357,7 +357,7 @@ intF2P' (FieldInstrContent fname (Just Optional) (Just (Increment oc))) intParse
     )
     (
     let 
-        h (Assigned v) = updatePrevValue fname oc (Assigned v') >> Just <$> return v' where v' = inc v
+        h (Assigned v) = updatePrevValue fname oc (Assigned v') >> Just <$> return v' where v' = v + 1
         h (Undefined) = h' oc
             where   h' (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned i) >> (Just <$> return i) where i = ivToInt iv
                     h' (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> return Nothing
@@ -544,7 +544,7 @@ decF2P (DecimalField fname (Just Mandatory) (Right (DecFieldOp maybe_exOp maybe_
         return (h e m) where   
                         h Nothing _ = Nothing
                         h _ Nothing = Nothing
-                        h (Just (Int32 e')) (Just m') = Just (Decimal (Int32 (checkRange decExpRange e')) m')
+                        h (Just (Int32 e')) (Just m') = Just (Decimal (Int32 e') m')
                         h _ _ = error "Coding error: expontent must always be of type Int32."
 
 
@@ -559,7 +559,7 @@ decF2P (DecimalField fname (Just Optional) (Right (DecFieldOp maybe_exOp maybe_m
         return (h e m) where   
                         h Nothing _ = Nothing
                         h _ Nothing = Nothing
-                        h (Just (Int32 e')) (Just m') = Just (Decimal (Int32 (checkRange decExpRange e')) m')
+                        h (Just (Int32 e')) (Just m') = Just (Decimal (Int32 e') m')
                         h _ _ = error "Coding error: expontent must always be of type Int32."
 
 -- |Maps an ascii field to its parser.
@@ -1017,34 +1017,34 @@ uint32::FParser Primitive
 uint32 = do 
     x <- p
     return $ UInt32 x
-    where p = checkBounds ui32Range uint
+    where p = uint
 
 -- |UInt64 field parser.
 uint64::FParser Primitive
 uint64 = do
     x <- p
     return $ UInt64 x
-    where p = checkBounds ui64Range uint
+    where p = uint
 
 -- |Int32 field parser.
 int32::FParser Primitive
 int32 = do
     x <- p
     return $ Int32 x
-    where p = checkBounds i32Range int
+    where p = int
     
 exint32::FParser Primitive 
 exint32 = do 
     x <- p
     return $ Int32 x
-    where p = checkBounds decExpRange int
+    where p = int
 
 -- |Int64 field parser.
 int64::FParser Primitive
 int64 = do
     x <- p
     return $ Int64 x
-    where p = checkBounds i64Range int
+    where p = int
 
 -- |Dec field parser.
 dec::FParser Primitive
@@ -1072,12 +1072,6 @@ int = do
     where   
             h::(Bits a, Num a) => a -> Word8 -> a
             h r w = fromIntegral (clearBit w 7) .|. shiftL r 7
-
--- |Check wether parsed integer is in given range.
-checkBounds::Ix a => (a,a) -> FParser a -> FParser a
-checkBounds r p = do
-    x <- p
-    return (checkRange r x)
 
 -- |ASCII string field parser, non-Nullable.
 asciiString::FParser Primitive
