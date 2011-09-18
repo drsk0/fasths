@@ -186,7 +186,7 @@ intF2P' (FieldInstrContent _ (Just Optional) (Just (Default Nothing)))
 intF2P' (FieldInstrContent fname (Just Optional) (Just (Copy oc)))
     = ifPresentElse
     (
-    ((nULL :: FParser (Maybe Int32)) *> updatePrevValue fname oc Empty >> return Nothing)
+    (nULL *> updatePrevValue fname oc Empty >> return Nothing)
     <|> do 
         i <- l2 readP
         updatePrevValue fname oc (Assigned (witnessType i))
@@ -207,7 +207,7 @@ intF2P' (FieldInstrContent fname (Just Optional) (Just (Copy oc)))
 intF2P' (FieldInstrContent fname (Just Optional) (Just (Increment oc)))
     = ifPresentElse
     (
-    (nULL :: FParser (Maybe Int32))*> (updatePrevValue fname oc Empty >> return Nothing)
+    nULL *> (updatePrevValue fname oc Empty >> return Nothing)
     <|> do 
         i <- l2 readP
         updatePrevValue fname oc (Assigned (witnessType i))
@@ -333,7 +333,7 @@ decF2P (DecimalField _ (Just Optional) (Left (Default (Just iv))))
 decF2P (DecimalField fname (Just Optional) (Left (Copy oc))) 
     = ifPresentElse
     (
-    ((nULL :: FParser (Maybe Int32)) *> updatePrevValue fname oc Empty >> return Nothing)
+    (nULL *> updatePrevValue fname oc Empty >> return Nothing)
     <|> do
             d <- l2 readP
             updatePrevValue fname oc (Assigned (witnessType d))
@@ -517,7 +517,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Default
 asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Copy oc))))
     = ifPresentElse
     (
-    ((nULL :: FParser (Maybe Int32)) *> (updatePrevValue fname oc Empty >> return Nothing))
+    (nULL *> (updatePrevValue fname oc Empty >> return Nothing))
     <|>
         do 
             s <- rmPreamble' <$> l2 readP
@@ -556,7 +556,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Del
 asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Tail oc))))
     = ifPresentElse
     (
-    ((nULL :: FParser (Maybe Int32)) *> updatePrevValue fname oc Empty >> return Nothing)
+    (nULL *> updatePrevValue fname oc Empty >> return Nothing)
     <|> let baseValue (Assigned p) = return (assertType p)
             baseValue (Undefined) = h oc
                 where   h (OpContext _ _ (Just iv)) = return (ivToPrimitive iv)
@@ -651,7 +651,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Copy
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Copy oc))) _ ) 
     = ifPresentElse
     (
-    ((nULL :: FParser (Maybe Int32)) *> (updatePrevValue fname oc Empty >> return Nothing))
+    (nULL *> (updatePrevValue fname oc Empty >> return Nothing))
     <|> do
             bv <- l2 readP
             updatePrevValue fname oc (Assigned (witnessType bv))
@@ -735,7 +735,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Tail oc))) _ ) 
     = ifPresentElse
     (
-    ((nULL :: FParser (Maybe Int32)) *> updatePrevValue fname oc Empty >> return Nothing)
+    (nULL *> updatePrevValue fname oc Empty >> return Nothing)
     <|> let baseValue (Assigned p) = return (assertType p)
             baseValue (Undefined) = h oc
                 where   h (OpContext _ _ (Just iv)) = return (ivToPrimitive iv)
@@ -842,7 +842,7 @@ uppv d k v = do
 -- These parsers are unaware of nullability, presence map, deltas etc.
 
 -- |nULL parser.
-nULL :: Primitive a => FParser (Maybe a)
+nULL :: FParser (Maybe a)
 nULL = l2 nULL'
     where nULL' = do 
             -- discard result.
