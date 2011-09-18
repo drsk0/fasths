@@ -7,7 +7,7 @@
 -- Stability   :  experimental
 -- Portability :  unknown
 --
-{-# LANGUAGE GeneralizedNewtypeDeriving, FlexibleContexts, GADTs, TypeSynonymInstances, TupleSections, MultiParamTypeClasses, FlexibleInstances, TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts, GADTs, TupleSections, MultiParamTypeClasses, TypeFamilies #-}
 
 module Codec.Fast.Parser 
 (
@@ -19,156 +19,20 @@ segment'
 where 
 
 import Prelude as P hiding (dropWhile)
-import Data.ListLike (dropWhile, genericDrop, genericTake, genericLength)
-import Data.Char (digitToInt)
 import qualified Data.ByteString as B
-import Data.ByteString.Char8 (unpack) 
 import qualified Data.ByteString.UTF8 as U
 import qualified Data.Attoparsec as A
 import Control.Monad.State
 import Control.Monad.Reader
 import Control.Applicative 
-import Data.Bits
 import Data.Int
 import Data.Word 
+import Data.Bits (testBit)
 import qualified Data.Map as M
 import Data.Maybe (catMaybes)
 import Data.List (groupBy)
 import Codec.Fast.Data as F
 
-instance Primitive Int32 where
-    newtype Delta Int32 = Di32 Int32 deriving (Num, Ord, Show, Eq)
-    witnessType = TypeWitnessI32
-    assertType (TypeWitnessI32 i) = i
-    assertType _ = error "Type mismatch."
-    toValue = I32
-    defaultBaseValue = 0 
-    ivToPrimitive = read . trimWhiteSpace . text
-    delta i (Di32 i') = i + i'
-    ftail = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields."
-    readP = int
-    readD = Di32 <$> int
-    readT = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields."
-
-instance Primitive Word32 where
-    newtype Delta Word32 = Dw32 Int32 deriving (Num, Ord, Show, Eq)
-    witnessType = TypeWitnessW32
-    assertType (TypeWitnessW32 w) = w
-    assertType _ = error "Type mismatch."
-    toValue = UI32
-    defaultBaseValue = 0
-    ivToPrimitive = read . trimWhiteSpace . text
-    delta w (Dw32 i) = fromIntegral (fromIntegral w + i)
-    ftail = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields."
-    readP = uint
-    readD = Dw32 <$> int
-    readT = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields."
-
-instance Primitive Int64 where
-    newtype Delta Int64 = Di64 Int64 deriving (Num, Ord, Show, Eq)
-    witnessType = TypeWitnessI64
-    assertType (TypeWitnessI64 i) = i
-    assertType _ = error "Type mismatch."
-    toValue = I64
-    defaultBaseValue = 0
-    ivToPrimitive = read . trimWhiteSpace . text
-    delta i (Di64 i')= i + i'
-    ftail = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields."
-    readP = int
-    readD = Di64 <$> int
-    readT = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields."
-
-instance Primitive Word64 where
-    newtype Delta Word64 = Dw64 Int64 deriving (Num, Ord, Show, Eq)
-    witnessType = TypeWitnessW64
-    assertType (TypeWitnessW64 w) = w
-    assertType _ = error "Type mismatch."
-    toValue = UI64
-    defaultBaseValue = 0
-    ivToPrimitive = read . trimWhiteSpace . text
-    delta w (Dw64 i) = fromIntegral (fromIntegral w + i)
-    ftail = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields." 
-    readP = uint
-    readD = Dw64 <$> int
-    readT = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields."
-
-instance Primitive AsciiString where
-    newtype Delta AsciiString = Dascii (Int32, String)
-    witnessType = TypeWitnessASCII
-    assertType (TypeWitnessASCII s) = s
-    assertType _ = error "Type mismatch."
-    toValue = A
-    defaultBaseValue = ""
-    ivToPrimitive = text
-    delta s1 (Dascii (l, s2)) | l < 0 = s2 ++ s1' where s1' = genericDrop (l + 1) s1
-    delta s1 (Dascii (l, s2)) | l >= 0 = s1' ++ s2 where s1' = genericTake (genericLength s1 - l) s1
-    delta _ _ = error "Type mismatch."
-    ftail s1 s2 = take (length s1 - length s2) s1 ++ s2
-    readP = asciiString
-    readD = do 
-                l <- int
-                s <- readP
-                return (Dascii (l, s))
-    readT = readP
-
-{-instance Primitive UnicodeString  where-}
-    {-data TypeWitness UnicodeString = TypeWitnessUNI UnicodeString -}
-    {-assertType (TypeWitnessUNI s) = s-}
-    {-assertType _ = error "Type mismatch."-}
-    {-type Delta UnicodeString = (Int32, B.ByteString)-}
-    {-defaultBaseValue = ""-}
-    {-ivToPrimitive = text-}
-    {-delta s d =  B.unpack (delta (B.pack s) d)-}
-    {-ftail s1 s2 = B.unpack (ftail (B.pack s1) s2)-}
-    {-readP = B.unpack <$> byteVector-}
-    {-readD = do-}
-                {-l <- int-}
-                {-bv <- readP-}
-                {-return (l, bv)-}
-    {-readT = readP-}
-
-instance Primitive (Int32, Int64) where
-    newtype Delta (Int32, Int64) = Ddec (Int32, Int64)
-    witnessType = TypeWitnessDec
-    assertType (TypeWitnessDec (e, m)) = (e, m)
-    assertType _ = error "Type mismatch."
-    toValue (e, m) = Dec (fromRational ((toRational m) * 10^^e))
-    defaultBaseValue = (0, 0)
-    ivToPrimitive (InitialValueAttr s) = let    s' = trimWhiteSpace s 
-                                                mant = read (filter (/= '.') s')
-                                                expo = h s'
-                                                h ('-':xs) = h xs
-                                                h ('.':xs) = -1 * toEnum (length (takeWhile (=='0') xs) + 1)
-                                                h ('0':'.':xs) = h ('.':xs)
-                                                h xs = toEnum (length (takeWhile (/= '.') xs))
-                                         in (mant, expo)
-    delta (e1, m1) (Ddec (e2, m2)) = (e1 + e2, m1 + m2)
-    ftail = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields."
-    readP = do 
-        e <- int::A.Parser Int32
-        m <- int::A.Parser Int64
-        return (e, m)
-    readD = Ddec <$> readP
-    readT = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields."
-
-instance Primitive B.ByteString where
-    newtype Delta B.ByteString = Dbs (Int32, B.ByteString)
-    witnessType = TypeWitnessBS
-    assertType (TypeWitnessBS bs) = bs
-    assertType _ = error "Type mismatch."
-    toValue = B 
-    defaultBaseValue = B.empty
-    ivToPrimitive iv = B.pack (map (toEnum . digitToInt) (filter whiteSpace (text iv)))
-    delta bv (Dbs (l, bv')) | l < 0 = bv'' `B.append` bv' where bv'' = genericDrop (l + 1) bv 
-    delta bv (Dbs (l, bv')) | l >= 0 = bv'' `B.append` bv' where bv'' = genericTake (genericLength bv - l) bv
-    delta _ _ = error "Type mismatch."
-    ftail b1 b2 = B.take (B.length b1 - B.length b2) b1 `B.append` b2
-    readP = byteVector
-    readD = do 
-                l <- int
-                bv <- readP
-                return (Dbs (l, bv))
-    readT = readP
 
 -- |State of the parser.
 data Context = Context {
@@ -1097,33 +961,6 @@ nULL = l2 nULL'
             -- discard result.
             _ <- A.word8 0x80
             return Nothing
-
--- |Unsigned integer parser, doesn't check for bounds.
--- TODO: should we check for R6 errors, i.e overlong fields?
-uint::(Bits a, Num a) => A.Parser a
-uint = do 
-    bs <- anySBEEntity
-    return (B.foldl h 0 bs)
-    where   h::(Bits a, Num a) => a -> Word8 -> a
-            h r w = fromIntegral (clearBit w 7) .|. shiftL r 7
-        
--- |Signed integer parser, doesn't check for bounds.
-int::(Bits a, Num a) => A.Parser a
-int = do
-    bs <- anySBEEntity
-    return (if testBit (B.head bs) 6 
-            then B.foldl h (shiftL (-1) 7 .|. fromIntegral (setBit (B.head bs) 7)) (B.tail bs)
-            else B.foldl h 0 bs)
-    where   
-            h::(Bits a, Num a) => a -> Word8 -> a
-            h r w = fromIntegral (clearBit w 7) .|. shiftL r 7
-
--- |ASCII string field parser, non-Nullable.
-asciiString::A.Parser AsciiString
-asciiString = do
-    bs <- anySBEEntity
-    let bs' = B.init bs `B.append` B.singleton (clearBit (B.last bs) 8) in
-        return (unpack bs')
     
 -- |Remove Preamble of an ascii string, non-Nullable situation.
 rmPreamble::AsciiString -> AsciiString
@@ -1138,18 +975,6 @@ rmPreamble' (['\0','\0']) = []
 rmPreamble' (['\0','\0','\0']) = "\NUL"
 -- overlong string.
 rmPreamble' s = filter (/= '\0') s
-
--- |Bytevector size preamble parser.
-byteVector::A.Parser B.ByteString
-byteVector = do
-    s <- int::A.Parser Word32
-    byteVector' s
-
--- |Bytevector field parser. The first argument is the size of the bytevector.
--- If the length of the bytevector is bigger than maxBound::Int an exception 
--- will be trown.
-byteVector'::Word32 -> A.Parser B.ByteString
-byteVector' c = A.take (fromEnum c)
 
 -- *Presence map parsers. 
 
@@ -1175,23 +1000,6 @@ ifPresentElse p1 p2 = do
                             if head pmap 
                             then p1
                             else p2
-
--- |Get a Stopbit encoded entity.
-anySBEEntity::A.Parser B.ByteString
-anySBEEntity = takeTill' stopBitSet
-
--- |Like takeTill, but takes the matching byte as well.
-takeTill'::(Word8 -> Bool) -> A.Parser B.ByteString
-takeTill' f = do
-    str <- A.takeTill f
-    c <- A.take 1
-    return (str `B.append` c)
-
--- |Test wether the stop bit is set of a Char. (Note: Chars are converted to
--- Word8's. 
--- TODO: Is this unsafe?
-stopBitSet::Word8 -> Bool
-stopBitSet c = testBit c 7
 
 -- *Stream parsers.
 
@@ -1342,8 +1150,3 @@ minusOne x | x > 0 = x - 1
 minusOne x | x > 0 = x - 1
 minusOne x = x
 
-trimWhiteSpace :: String -> String
-trimWhiteSpace = reverse . dropWhile whiteSpace . reverse . dropWhile whiteSpace
-
-whiteSpace::Char -> Bool
-whiteSpace c =  c `elem` " \t\r\n"
