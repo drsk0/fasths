@@ -763,9 +763,9 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Tail 
 -- |Maps an unicode field to its parser.
 unicodeF2P::UnicodeStringField -> FParser (Maybe UnicodeString)
 unicodeF2P (UnicodeStringField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)
-    = h <$> bytevecF2P (ByteVectorField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)
-        where   h (Just bv) = Just (U.toString bv)
-                h (Nothing) = Nothing
+    = do 
+        m_bv <- bytevecF2P (ByteVectorField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)
+        return (m_bv >>= return . U.toString) -- Maybe is itself a monad.
 
 -- |Maps a sequence field to its parser.
 seqF2P::Sequence -> FParser (NsName, Maybe Value)
