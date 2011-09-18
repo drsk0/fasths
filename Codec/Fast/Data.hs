@@ -119,7 +119,7 @@ instance Primitive Int32 where
     newtype Delta Int32 = Di32 Int32 deriving (Num, Ord, Show, Eq)
     witnessType = TypeWitnessI32
     assertType (TypeWitnessI32 i) = i
-    assertType _ = error "Type mismatch."
+    assertType _ = error "D4: Type mismatch."
     toValue = I32
     defaultBaseValue = 0 
     ivToPrimitive = read . trimWhiteSpace . text
@@ -133,7 +133,7 @@ instance Primitive Word32 where
     newtype Delta Word32 = Dw32 Int32 deriving (Num, Ord, Show, Eq)
     witnessType = TypeWitnessW32
     assertType (TypeWitnessW32 w) = w
-    assertType _ = error "Type mismatch."
+    assertType _ = error "D4: Type mismatch."
     toValue = UI32
     defaultBaseValue = 0
     ivToPrimitive = read . trimWhiteSpace . text
@@ -147,7 +147,7 @@ instance Primitive Int64 where
     newtype Delta Int64 = Di64 Int64 deriving (Num, Ord, Show, Eq)
     witnessType = TypeWitnessI64
     assertType (TypeWitnessI64 i) = i
-    assertType _ = error "Type mismatch."
+    assertType _ = error "D4: Type mismatch."
     toValue = I64
     defaultBaseValue = 0
     ivToPrimitive = read . trimWhiteSpace . text
@@ -161,7 +161,7 @@ instance Primitive Word64 where
     newtype Delta Word64 = Dw64 Int64 deriving (Num, Ord, Show, Eq)
     witnessType = TypeWitnessW64
     assertType (TypeWitnessW64 w) = w
-    assertType _ = error "Type mismatch."
+    assertType _ = error "D4: Type mismatch."
     toValue = UI64
     defaultBaseValue = 0
     ivToPrimitive = read . trimWhiteSpace . text
@@ -175,7 +175,7 @@ instance Primitive AsciiString where
     newtype Delta AsciiString = Dascii (Int32, String)
     witnessType = TypeWitnessASCII
     assertType (TypeWitnessASCII s) = s
-    assertType _ = error "Type mismatch."
+    assertType _ = error "D4: Type mismatch."
     toValue = A
     defaultBaseValue = ""
     ivToPrimitive = text
@@ -210,7 +210,7 @@ instance Primitive (Int32, Int64) where
     newtype Delta (Int32, Int64) = Ddec (Int32, Int64)
     witnessType = TypeWitnessDec
     assertType (TypeWitnessDec (e, m)) = (e, m)
-    assertType _ = error "Type mismatch."
+    assertType _ = error "D4: Type mismatch."
     toValue (e, m) = Dec (fromRational (toRational m * 10^^e))
     defaultBaseValue = (0, 0)
     ivToPrimitive (InitialValueAttr s) = let    s' = trimWhiteSpace s 
@@ -234,7 +234,7 @@ instance Primitive B.ByteString where
     newtype Delta B.ByteString = Dbs (Int32, B.ByteString)
     witnessType = TypeWitnessBS
     assertType (TypeWitnessBS bs) = bs
-    assertType _ = error "Type mismatch."
+    assertType _ = error "D4: Type mismatch."
     toValue = B 
     defaultBaseValue = B.empty
     ivToPrimitive iv = B.pack (map (toEnum . digitToInt) (filter whiteSpace (text iv)))
