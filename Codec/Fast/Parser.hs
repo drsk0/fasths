@@ -491,15 +491,16 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Ta
             return (Just (baseValue pva `ftail` t))
     )
     (
-    let baseValue (Assigned p) = return (Just (assertType p))
-        baseValue (Undefined) = h oc
-            where   h (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i) where i = ivToPrimitive iv
-                    h (OpContext _ _ Nothing) = error "D6: No initial value in operator context\
-                                                              \for mandatory tail operator with undefined dictionary\
-                                                              \value."
-        baseValue (Empty) = error "D7: previous value in a mandatory tail operator can not be empty."
-    in
-        prevValue fname oc >>= baseValue
+    do 
+        p <- prevValue fname oc
+        case p of
+            (Assigned v) -> return (Just (assertType v))
+            Undefined -> h oc
+                where   h (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i) where i = ivToPrimitive iv
+                        h (OpContext _ _ Nothing) = error "D6: No initial value in operator context\
+                                                                  \for mandatory tail operator with undefined dictionary\
+                                                                  \value."
+            Empty -> error "D7: previous value in a mandatory tail operator can not be empty."
     )
 
 -- pm: Yes, Nullable: No
