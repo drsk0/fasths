@@ -194,14 +194,14 @@ instr2P (TemplateReference Nothing) = segment'
 -- Maybe Primitive, the Nothing constructor represents a field that was not
 -- present in the stream.
 field2Parser::Field -> FParser (NsName, Maybe Value)
-field2Parser (IntField f@(Int32Field (FieldInstrContent fname _ _))) = (fname, ) <$> (fmap toValue) <$> (intF2P f :: FParser (Maybe Int32))
-field2Parser (IntField f@(Int64Field (FieldInstrContent fname _ _))) = (fname, ) <$> (fmap toValue) <$> (intF2P f :: FParser (Maybe Int64))
-field2Parser (IntField f@(UInt32Field (FieldInstrContent fname _ _))) = (fname, ) <$> (fmap toValue) <$> (intF2P f :: FParser (Maybe Word32))
-field2Parser (IntField f@(UInt64Field (FieldInstrContent fname _ _))) = (fname, ) <$> (fmap toValue) <$> (intF2P f :: FParser (Maybe Word64))
-field2Parser (DecField f@(DecimalField fname _ _ )) = (fname, ) <$> (fmap toValue) <$> decF2P f
-field2Parser (AsciiStrField f@(AsciiStringField(FieldInstrContent fname _ _ ))) = (fname, ) <$> (fmap toValue) <$> asciiStrF2P f
-field2Parser (UnicodeStrField f@(UnicodeStringField (FieldInstrContent fname _ _ ) _ )) = (fname, ) <$> (fmap toValue) <$> unicodeF2P f
-field2Parser (ByteVecField f@(ByteVectorField (FieldInstrContent fname _ _ ) _ )) = (fname, ) <$> (fmap toValue) <$> bytevecF2P f
+field2Parser (IntField f@(Int32Field (FieldInstrContent fname _ _))) = (fname, ) <$> fmap toValue <$> (intF2P f :: FParser (Maybe Int32))
+field2Parser (IntField f@(Int64Field (FieldInstrContent fname _ _))) = (fname, ) <$> fmap toValue <$> (intF2P f :: FParser (Maybe Int64))
+field2Parser (IntField f@(UInt32Field (FieldInstrContent fname _ _))) = (fname, ) <$> fmap toValue <$> (intF2P f :: FParser (Maybe Word32))
+field2Parser (IntField f@(UInt64Field (FieldInstrContent fname _ _))) = (fname, ) <$> fmap toValue <$> (intF2P f :: FParser (Maybe Word64))
+field2Parser (DecField f@(DecimalField fname _ _ )) = (fname, ) <$> fmap toValue <$> decF2P f
+field2Parser (AsciiStrField f@(AsciiStringField(FieldInstrContent fname _ _ ))) = (fname, ) <$> fmap toValue <$> asciiStrF2P f
+field2Parser (UnicodeStrField f@(UnicodeStringField (FieldInstrContent fname _ _ ) _ )) = (fname, ) <$> fmap toValue <$> unicodeF2P f
+field2Parser (ByteVecField f@(ByteVectorField (FieldInstrContent fname _ _ ) _ )) = (fname, ) <$> fmap toValue <$> bytevecF2P f
 field2Parser (Seq s) = seqF2P s
 field2Parser (Grp g) = groupF2P g
 
@@ -221,12 +221,12 @@ intF2P' :: (Primitive a, Num a, Ord a, Ord (Delta a), Num (Delta a)) => FieldIns
 intF2P' (FieldInstrContent fname Nothing maybe_op) = intF2P' (FieldInstrContent fname (Just Mandatory) maybe_op)
 -- pm: No, Nullable: No
 intF2P' (FieldInstrContent _ (Just Mandatory) Nothing)
-    = Just <$> (l2 readP)
+    = Just <$> l2 readP
 
 -- pm: No, Nullable: Yes
 intF2P' (FieldInstrContent _ (Just Optional) Nothing)
     = nULL 
-    <|> (Just . minusOne) <$> (l2 readP)
+    <|> (Just . minusOne) <$> l2 readP
 
 -- pm: No, Nullable: No
 intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Constant iv)))
@@ -234,7 +234,7 @@ intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Constant iv)))
 
 -- pm: Yes, Nullable: No
 intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Default (Just iv))))
-    = ifPresentElse (Just <$> (l2 readP)) (return (Just(ivToPrimitive iv)))
+    = ifPresentElse (Just <$> l2 readP) (return (Just(ivToPrimitive iv)))
 
 -- pm: Yes, Nullable: No
 intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing)))
@@ -244,7 +244,7 @@ intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing)))
 intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Copy oc)))
     = ifPresentElse   
     (do 
-        i <- (l2 readP)
+        i <- l2 readP
         updatePrevValue fname oc (Assigned (witnessType i))
         return (Just i)
     )
@@ -266,13 +266,13 @@ intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Increment oc)))
     = ifPresentElse
     (
     do 
-        i <- (l2 readP)
+        i <- l2 readP
         updatePrevValue fname oc (Assigned (witnessType i))
         return (Just i)
     )
     (
     let 
-        h (Assigned v) = updatePrevValue fname oc (Assigned (witnessType v')) >> return (Just v') where v' = (assertType v) + 1
+        h (Assigned v) = updatePrevValue fname oc (Assigned (witnessType v')) >> return (Just v') where v' = assertType v + 1
         h (Undefined) = h' oc
             where   h' (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i) where i =ivToPrimitive iv
                     h' (OpContext _ _ Nothing) = error "D5: No initial value in operator context given for\
@@ -293,11 +293,11 @@ intF2P' (FieldInstrContent _ (Just Optional) (Just (Constant iv)))
 
 -- pm: Yes, Nullable: Yes
 intF2P' (FieldInstrContent _ (Just Optional) (Just (Default (Just iv))))
-    = ifPresentElse (nULL <|> ((Just . minusOne) <$> (l2 readP))) (return (Just $ ivToPrimitive iv))
+    = ifPresentElse (nULL <|> ((Just . minusOne) <$> l2 readP)) (return (Just $ ivToPrimitive iv))
 
 -- pm: Yes, Nullable: Yes
 intF2P' (FieldInstrContent _ (Just Optional) (Just (Default Nothing)))
-    = ifPresentElse (nULL <|> ((Just . minusOne) <$> (l2 readP))) (return Nothing)
+    = ifPresentElse (nULL <|> ((Just . minusOne) <$> l2 readP)) (return Nothing)
 
 -- pm: Yes, Nullable: Yes
 intF2P' (FieldInstrContent fname (Just Optional) (Just (Copy oc)))
@@ -332,7 +332,7 @@ intF2P' (FieldInstrContent fname (Just Optional) (Just (Increment oc)))
     )
     (
     let 
-        h (Assigned v) = updatePrevValue fname oc (Assigned (witnessType v')) >> Just <$> return v' where v' = (assertType v) + 1
+        h (Assigned v) = updatePrevValue fname oc (Assigned (witnessType v')) >> Just <$> return v' where v' = assertType v + 1
         h (Undefined) = h' oc
             where   h' (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned (witnessType i)) >> (Just <$> return i) where i = ivToPrimitive iv
                     h' (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> return Nothing

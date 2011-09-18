@@ -211,7 +211,7 @@ instance Primitive (Int32, Int64) where
     witnessType = TypeWitnessDec
     assertType (TypeWitnessDec (e, m)) = (e, m)
     assertType _ = error "Type mismatch."
-    toValue (e, m) = Dec (fromRational ((toRational m) * 10^^e))
+    toValue (e, m) = Dec (fromRational (toRational m * 10^^e))
     defaultBaseValue = (0, 0)
     ivToPrimitive (InitialValueAttr s) = let    s' = trimWhiteSpace s 
                                                 mant = read (filter (/= '.') s')
