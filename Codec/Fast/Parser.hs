@@ -7,7 +7,7 @@
 -- Stability   :  experimental
 -- Portability :  unknown
 --
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, FlexibleContexts, GADTs, TypeSynonymInstances, TupleSections, MultiParamTypeClasses, FlexibleInstances, TypeFamilies #-}
 
 module Codec.Fast.Parser 
 (
@@ -18,7 +18,9 @@ segment'
 )
 where 
 
-import Prelude as P
+import Prelude as P hiding (dropWhile)
+import Data.ListLike (dropWhile, genericDrop, genericTake, genericLength)
+import Data.Char (digitToInt)
 import qualified Data.ByteString as B
 import Data.ByteString.Char8 (unpack) 
 import qualified Data.ByteString.UTF8 as U
@@ -27,20 +29,153 @@ import Control.Monad.State
 import Control.Monad.Reader
 import Control.Applicative 
 import Data.Bits
+import Data.Int
 import Data.Word 
-import Data.Ix (Ix)
 import qualified Data.Map as M
 import Data.Maybe (catMaybes)
 import Data.List (groupBy)
 import Codec.Fast.Data as F
 
+instance Primitive Int32 where
+    newtype Delta Int32 = Di32 Int32 deriving (Num, Ord, Show, Eq)
+    witnessType = TypeWitnessI32
+    assertType (TypeWitnessI32 i) = i
+    assertType _ = error "Type mismatch."
+    toValue = I32
+    defaultBaseValue = 0 
+    ivToPrimitive = read . trimWhiteSpace . text
+    delta i (Di32 i') = i + i'
+    ftail = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields."
+    readP = int
+    readD = Di32 <$> int
+    readT = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields."
+
+instance Primitive Word32 where
+    newtype Delta Word32 = Dw32 Int32 deriving (Num, Ord, Show, Eq)
+    witnessType = TypeWitnessW32
+    assertType (TypeWitnessW32 w) = w
+    assertType _ = error "Type mismatch."
+    toValue = UI32
+    defaultBaseValue = 0
+    ivToPrimitive = read . trimWhiteSpace . text
+    delta w (Dw32 i) = fromIntegral (fromIntegral w + i)
+    ftail = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields."
+    readP = uint
+    readD = Dw32 <$> int
+    readT = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields."
+
+instance Primitive Int64 where
+    newtype Delta Int64 = Di64 Int64 deriving (Num, Ord, Show, Eq)
+    witnessType = TypeWitnessI64
+    assertType (TypeWitnessI64 i) = i
+    assertType _ = error "Type mismatch."
+    toValue = I64
+    defaultBaseValue = 0
+    ivToPrimitive = read . trimWhiteSpace . text
+    delta i (Di64 i')= i + i'
+    ftail = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields."
+    readP = int
+    readD = Di64 <$> int
+    readT = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields."
+
+instance Primitive Word64 where
+    newtype Delta Word64 = Dw64 Int64 deriving (Num, Ord, Show, Eq)
+    witnessType = TypeWitnessW64
+    assertType (TypeWitnessW64 w) = w
+    assertType _ = error "Type mismatch."
+    toValue = UI64
+    defaultBaseValue = 0
+    ivToPrimitive = read . trimWhiteSpace . text
+    delta w (Dw64 i) = fromIntegral (fromIntegral w + i)
+    ftail = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields." 
+    readP = uint
+    readD = Dw64 <$> int
+    readT = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields."
+
+instance Primitive AsciiString where
+    newtype Delta AsciiString = Dascii (Int32, String)
+    witnessType = TypeWitnessASCII
+    assertType (TypeWitnessASCII s) = s
+    assertType _ = error "Type mismatch."
+    toValue = A
+    defaultBaseValue = ""
+    ivToPrimitive = text
+    delta s1 (Dascii (l, s2)) | l < 0 = s2 ++ s1' where s1' = genericDrop (l + 1) s1
+    delta s1 (Dascii (l, s2)) | l >= 0 = s1' ++ s2 where s1' = genericTake (genericLength s1 - l) s1
+    delta _ _ = error "Type mismatch."
+    ftail s1 s2 = take (length s1 - length s2) s1 ++ s2
+    readP = asciiString
+    readD = do 
+                l <- int
+                s <- readP
+                return (Dascii (l, s))
+    readT = readP
+
+{-instance Primitive UnicodeString  where-}
+    {-data TypeWitness UnicodeString = TypeWitnessUNI UnicodeString -}
+    {-assertType (TypeWitnessUNI s) = s-}
+    {-assertType _ = error "Type mismatch."-}
+    {-type Delta UnicodeString = (Int32, B.ByteString)-}
+    {-defaultBaseValue = ""-}
+    {-ivToPrimitive = text-}
+    {-delta s d =  B.unpack (delta (B.pack s) d)-}
+    {-ftail s1 s2 = B.unpack (ftail (B.pack s1) s2)-}
+    {-readP = B.unpack <$> byteVector-}
+    {-readD = do-}
+                {-l <- int-}
+                {-bv <- readP-}
+                {-return (l, bv)-}
+    {-readT = readP-}
+
+instance Primitive (Int32, Int64) where
+    newtype Delta (Int32, Int64) = Ddec (Int32, Int64)
+    witnessType = TypeWitnessDec
+    assertType (TypeWitnessDec (e, m)) = (e, m)
+    assertType _ = error "Type mismatch."
+    toValue (e, m) = Dec (fromRational ((toRational m) * 10^^e))
+    defaultBaseValue = (0, 0)
+    ivToPrimitive (InitialValueAttr s) = let    s' = trimWhiteSpace s 
+                                                mant = read (filter (/= '.') s')
+                                                expo = h s'
+                                                h ('-':xs) = h xs
+                                                h ('.':xs) = -1 * toEnum (length (takeWhile (=='0') xs) + 1)
+                                                h ('0':'.':xs) = h ('.':xs)
+                                                h xs = toEnum (length (takeWhile (/= '.') xs))
+                                         in (mant, expo)
+    delta (e1, m1) (Ddec (e2, m2)) = (e1 + e2, m1 + m2)
+    ftail = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields."
+    readP = do 
+        e <- int::A.Parser Int32
+        m <- int::A.Parser Int64
+        return (e, m)
+    readD = Ddec <$> readP
+    readT = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields."
+
+instance Primitive B.ByteString where
+    newtype Delta B.ByteString = Dbs (Int32, B.ByteString)
+    witnessType = TypeWitnessBS
+    assertType (TypeWitnessBS bs) = bs
+    assertType _ = error "Type mismatch."
+    toValue = B 
+    defaultBaseValue = B.empty
+    ivToPrimitive iv = B.pack (map (toEnum . digitToInt) (filter whiteSpace (text iv)))
+    delta bv (Dbs (l, bv')) | l < 0 = bv'' `B.append` bv' where bv'' = genericDrop (l + 1) bv 
+    delta bv (Dbs (l, bv')) | l >= 0 = bv'' `B.append` bv' where bv'' = genericTake (genericLength bv - l) bv
+    delta _ _ = error "Type mismatch."
+    ftail b1 b2 = B.take (B.length b1 - B.length b2) b1 `B.append` b2
+    readP = byteVector
+    readD = do 
+                l <- int
+                bv <- readP
+                return (Dbs (l, bv))
+    readT = readP
 
 -- |State of the parser.
 data Context = Context {
     -- |Presence map
-    pm          ::[Bool],
+    pm   :: [Bool],
     -- |Dictionaries.
-    dict        ::M.Map String Dictionary
+    dict :: M.Map String Dictionary
     } deriving (Show)
 
 -- |Environment of the parser.
@@ -52,18 +187,6 @@ data Env = Env {
     }
 
 type FParser a = ReaderT Env (StateT Context A.Parser) a
-
--- |Maps a fast primitive to its corresponding fast value.
-p2FValue::Primitive -> Value
-p2FValue (Int32 i) = I32 i
-p2FValue (UInt32 i) = UI32 i
-p2FValue (Int64 i) = I64 i
-p2FValue (UInt64 i) = UI64 i
-p2FValue (Ascii s) = S s
-p2FValue (Unicode s) = S s
-p2FValue (Decimal (Int32 e) (Int64 m)) = D (10^e * fromIntegral m)
-p2FValue (Decimal _ _) = error "Decimal is defined only for Int32 exponent, Int64 mantissa."
-p2FValue (Bytevector bs) = BS bs
 
 -- |The initial state of the parser depending on the templates.
 initState::Templates -> Context
@@ -207,77 +330,65 @@ instr2P (TemplateReference Nothing) = segment'
 -- Maybe Primitive, the Nothing constructor represents a field that was not
 -- present in the stream.
 field2Parser::Field -> FParser (NsName, Maybe Value)
-field2Parser (IntField f@(Int32Field (FieldInstrContent fname _ _))) = (fname, ) <$> fmap p2FValue <$> intF2P f
-field2Parser (IntField f@(Int64Field (FieldInstrContent fname _ _))) = (fname, ) <$> fmap p2FValue <$> intF2P f
-field2Parser (IntField f@(UInt32Field (FieldInstrContent fname _ _))) = (fname, ) <$> fmap p2FValue <$> intF2P f
-field2Parser (IntField f@(UInt64Field (FieldInstrContent fname _ _))) = (fname, ) <$> fmap p2FValue <$> intF2P f
-field2Parser (DecField f@(DecimalField fname _ _ )) = (fname, ) <$> fmap p2FValue <$> decF2P f
-field2Parser (AsciiStrField f@(AsciiStringField(FieldInstrContent fname _ _ ))) = (fname, ) <$> fmap p2FValue <$> asciiStrF2P f
-field2Parser (UnicodeStrField f@(UnicodeStringField (FieldInstrContent fname _ _ ) _ )) = (fname, ) <$> fmap p2FValue <$> unicodeF2P f
-field2Parser (ByteVecField f@(ByteVectorField (FieldInstrContent fname _ _ ) _ )) = (fname, ) <$> fmap p2FValue <$> bytevecF2P f
+field2Parser (IntField f@(Int32Field (FieldInstrContent fname _ _))) = (fname, ) <$> (fmap toValue) <$> (intF2P f :: FParser (Maybe Int32))
+field2Parser (IntField f@(Int64Field (FieldInstrContent fname _ _))) = (fname, ) <$> (fmap toValue) <$> (intF2P f :: FParser (Maybe Int64))
+field2Parser (IntField f@(UInt32Field (FieldInstrContent fname _ _))) = (fname, ) <$> (fmap toValue) <$> (intF2P f :: FParser (Maybe Word32))
+field2Parser (IntField f@(UInt64Field (FieldInstrContent fname _ _))) = (fname, ) <$> (fmap toValue) <$> (intF2P f :: FParser (Maybe Word64))
+field2Parser (DecField f@(DecimalField fname _ _ )) = (fname, ) <$> (fmap toValue) <$> decF2P f
+field2Parser (AsciiStrField f@(AsciiStringField(FieldInstrContent fname _ _ ))) = (fname, ) <$> (fmap toValue) <$> asciiStrF2P f
+field2Parser (UnicodeStrField f@(UnicodeStringField (FieldInstrContent fname _ _ ) _ )) = (fname, ) <$> (fmap toValue) <$> unicodeF2P f
+field2Parser (ByteVecField f@(ByteVectorField (FieldInstrContent fname _ _ ) _ )) = (fname, ) <$> (fmap toValue) <$> bytevecF2P f
 field2Parser (Seq s) = seqF2P s
 field2Parser (Grp g) = groupF2P g
 
+l2::A.Parser a -> FParser a
+l2 = lift . lift
+
 -- |Maps an integer field to its parser.
-intF2P::IntegerField -> FParser (Maybe Primitive)
--- Delta operator needs delta parser!
-intF2P (Int32Field fic@(FieldInstrContent _ _ (Just (Delta _)))) = intF2P'' fic int32Delta ivToUInt32 dfbInt32
-intF2P (Int32Field fic) = intF2P' fic int32 ivToInt32 dfbInt32
-intF2P (UInt32Field fic@(FieldInstrContent _ _ (Just (Delta _)))) = intF2P'' fic uint32Delta ivToUInt32 dfbUInt32
-intF2P (UInt32Field fic) = intF2P' fic uint32 ivToUInt32 dfbUInt32
-intF2P (Int64Field fic@(FieldInstrContent _ _ (Just (Delta _)))) = intF2P'' fic int64Delta ivToUInt32 dfbInt64
-intF2P (Int64Field fic) = intF2P' fic int64 ivToInt64 dfbInt64
-intF2P (UInt64Field fic@(FieldInstrContent _ _ (Just (Delta _)))) = intF2P'' fic uint64Delta ivToUInt32 dfbUInt64
-intF2P (UInt64Field fic) = intF2P' fic uint64 ivToUInt64 dfbUInt64
+intF2P :: (Primitive a, Num a, Ord a,  Ord (Delta a), Num (Delta a)) => IntegerField -> FParser (Maybe a)
+intF2P (Int32Field fic) = intF2P' fic 
+intF2P (UInt32Field fic) = intF2P' fic 
+intF2P (Int64Field fic) = intF2P' fic 
+intF2P (UInt64Field fic) = intF2P' fic 
 
--- |Maps an integer field to a parser, given the field instruction context, the 
--- raw integer parser,a function to convert initial values to the given 
--- primitive and a default base value for default operators.
-intF2P'::FieldInstrContent
-        -> FParser Primitive 
-        -> (InitialValueAttr -> Primitive)  
-        -> Primitive
-        -> FParser (Maybe Primitive)
-
--- Every possible case for the Int32 field.
+intF2P' :: (Primitive a, Num a, Ord a, Ord (Delta a), Num (Delta a)) => FieldInstrContent -> FParser (Maybe a)
 
 -- if the presence attribute is not specified, it is mandatory.
-intF2P' (FieldInstrContent fname Nothing maybe_op) intParser ivToInt defaultBaseValue 
-    = intF2P' (FieldInstrContent fname (Just Mandatory) maybe_op) intParser ivToInt defaultBaseValue
+intF2P' (FieldInstrContent fname Nothing maybe_op) = intF2P' (FieldInstrContent fname (Just Mandatory) maybe_op)
 -- pm: No, Nullable: No
-intF2P' (FieldInstrContent _ (Just Mandatory) Nothing) intParser _ _
-    = Just <$> intParser
+intF2P' (FieldInstrContent _ (Just Mandatory) Nothing)
+    = Just <$> (l2 readP)
 
 -- pm: No, Nullable: Yes
-intF2P' (FieldInstrContent _ (Just Optional) Nothing) intParser _ _
+intF2P' (FieldInstrContent _ (Just Optional) Nothing)
     = nULL 
-    <|> (Just . minusOne) <$> intParser
+    <|> (Just . minusOne) <$> (l2 readP)
 
 -- pm: No, Nullable: No
-intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Constant iv))) _ ivToInt _
-    = return $ Just(ivToInt iv)
+intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Constant iv)))
+    = return $ Just(ivToPrimitive iv)
 
 -- pm: Yes, Nullable: No
-intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Default (Just iv)))) intParser ivToInt _
-    = ifPresentElse (Just <$> intParser) (return (Just(ivToInt iv)))
+intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Default (Just iv))))
+    = ifPresentElse (Just <$> (l2 readP)) (return (Just(ivToPrimitive iv)))
 
 -- pm: Yes, Nullable: No
-intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))) _ _ _
+intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing)))
     = error "S5: No initial value given for mandatory default operator."
 
 -- pm: Yes, Nullable: No
-intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Copy oc))) intParser ivToInt _
+intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Copy oc)))
     = ifPresentElse   
     (do 
-        i <- intParser
-        updatePrevValue fname oc (Assigned i)
+        i <- (l2 readP)
+        updatePrevValue fname oc (Assigned (witnessType i))
         return (Just i)
     )
     ( 
         let 
-            h (Assigned v) = Just v
+            h (Assigned v) = Just (assertType v)
             h (Undefined) = h' oc
-                where   h' (OpContext _ _ (Just iv)) = Just (ivToInt iv)
+                where   h' (OpContext _ _ (Just iv)) = Just (ivToPrimitive iv)
                         h' (OpContext _ _ Nothing) = error "D5: No initial value in operator context\
                                                           \for mandatory copy operator with undefined dictionary\
                                                           \value."
@@ -287,19 +398,19 @@ intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Copy oc))) intParser iv
     )
                             
 -- pm: Yes, Nullable: No
-intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Increment oc))) intParser ivToInt _
+intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Increment oc)))
     = ifPresentElse
     (
     do 
-        i <- intParser
-        updatePrevValue fname oc (Assigned i)
+        i <- (l2 readP)
+        updatePrevValue fname oc (Assigned (witnessType i))
         return (Just i)
     )
     (
     let 
-        h (Assigned v) = updatePrevValue fname oc (Assigned v') >> return (Just v') where v' = v + 1
+        h (Assigned v) = updatePrevValue fname oc (Assigned (witnessType v')) >> return (Just v') where v' = (assertType v) + 1
         h (Undefined) = h' oc
-            where   h' (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned i) >> return (Just i) where i =ivToInt iv
+            where   h' (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i) where i =ivToPrimitive iv
                     h' (OpContext _ _ Nothing) = error "D5: No initial value in operator context given for\
                                                     \mandatory increment operator with undefined dictionary\
                                                     \value."
@@ -309,36 +420,36 @@ intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Increment oc))) intPars
     )
     
 -- pm: -, Nullable: -
-intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Tail _))) _ _ _
+intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Tail _)))
     = error "S2: Tail operator can not be applied on an integer type field." 
 
 -- pm: Yes, Nullable: No
-intF2P' (FieldInstrContent _ (Just Optional) (Just (Constant iv))) _ ivToInt _
-    = ifPresentElse (return (Just(ivToInt iv))) (return Nothing)
+intF2P' (FieldInstrContent _ (Just Optional) (Just (Constant iv)))
+    = ifPresentElse (return (Just(ivToPrimitive iv))) (return Nothing)
 
 -- pm: Yes, Nullable: Yes
-intF2P' (FieldInstrContent _ (Just Optional) (Just (Default (Just iv)))) intParser ivToInt _
-    = ifPresentElse (nULL <|> ((Just . minusOne) <$> intParser)) (return (Just $ ivToInt iv))
+intF2P' (FieldInstrContent _ (Just Optional) (Just (Default (Just iv))))
+    = ifPresentElse (nULL <|> ((Just . minusOne) <$> (l2 readP))) (return (Just $ ivToPrimitive iv))
 
 -- pm: Yes, Nullable: Yes
-intF2P' (FieldInstrContent _ (Just Optional) (Just (Default Nothing))) intParser _ _
-    = ifPresentElse (nULL <|> ((Just . minusOne) <$> intParser)) (return Nothing)
+intF2P' (FieldInstrContent _ (Just Optional) (Just (Default Nothing)))
+    = ifPresentElse (nULL <|> ((Just . minusOne) <$> (l2 readP))) (return Nothing)
 
 -- pm: Yes, Nullable: Yes
-intF2P' (FieldInstrContent fname (Just Optional) (Just (Copy oc))) intParser ivToInt _
+intF2P' (FieldInstrContent fname (Just Optional) (Just (Copy oc)))
     = ifPresentElse
     (
-    (nULL *> updatePrevValue fname oc Empty >> return Nothing)
+    ((nULL :: FParser (Maybe Int32)) *> updatePrevValue fname oc Empty >> return Nothing)
     <|> do 
-        i <- intParser
-        updatePrevValue fname oc (Assigned i)
+        i <- l2 readP
+        updatePrevValue fname oc (Assigned (witnessType i))
         return (Just $ minusOne i)
     )
     (
     let 
-        h (Assigned v) = return (Just v)
+        h (Assigned v) = return (Just (assertType v))
         h (Undefined) = h' oc
-            where   h' (OpContext _ _ (Just iv)) = return $ Just (ivToInt iv)
+            where   h' (OpContext _ _ (Just iv)) = return $ Just (ivToPrimitive iv)
                     h' (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> return Nothing  
         h (Empty) = return Nothing
     in 
@@ -346,20 +457,20 @@ intF2P' (FieldInstrContent fname (Just Optional) (Just (Copy oc))) intParser ivT
     )
 
 -- pm: Yes, Nullable: Yes
-intF2P' (FieldInstrContent fname (Just Optional) (Just (Increment oc))) intParser ivToInt _
+intF2P' (FieldInstrContent fname (Just Optional) (Just (Increment oc)))
     = ifPresentElse
     (
-    nULL *> (updatePrevValue fname oc Empty >> return Nothing)
+    (nULL :: FParser (Maybe Int32))*> (updatePrevValue fname oc Empty >> return Nothing)
     <|> do 
-        i <- intParser
-        updatePrevValue fname oc (Assigned i)
+        i <- l2 readP
+        updatePrevValue fname oc (Assigned (witnessType i))
         return (Just $ minusOne i)
     )
     (
     let 
-        h (Assigned v) = updatePrevValue fname oc (Assigned v') >> Just <$> return v' where v' = v + 1
+        h (Assigned v) = updatePrevValue fname oc (Assigned (witnessType v')) >> Just <$> return v' where v' = (assertType v) + 1
         h (Undefined) = h' oc
-            where   h' (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned i) >> (Just <$> return i) where i = ivToInt iv
+            where   h' (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned (witnessType i)) >> (Just <$> return i) where i = ivToPrimitive iv
                     h' (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> return Nothing
         h (Empty) = return Nothing
      in
@@ -368,57 +479,38 @@ intF2P' (FieldInstrContent fname (Just Optional) (Just (Increment oc))) intParse
 
 
 -- pm: -, Nullable: -
-intF2P' (FieldInstrContent _ (Just Optional) (Just (Tail _))) _ _ _
+intF2P' (FieldInstrContent _ (Just Optional) (Just (Tail _)))
     = error "S2: Tail operator can not be applied on an integer type field." 
 
--- Don't use intF2P' for delta operators.
-intF2P' (FieldInstrContent _ _ (Just (Delta _))) _ _ _ 
-    = error "Coding Error: intF2P' can not be applied on delta operatos, use intF2P''."
-
--- |Maps an integer field with delta operator to a parser, given the field instruction context, the 
--- integer delta parser,a function to convert initial values to the given 
--- primitive and a default base value for default operators.
-intF2P''::FieldInstrContent
-        -> FParser Delta
-        -> (InitialValueAttr -> Primitive)  
-        -> Primitive
-        -> FParser (Maybe Primitive)
-
-intF2P'' (FieldInstrContent fname Nothing (Just (Delta oc))) deltaParser ivToInt defaultBaseValue 
-    = intF2P'' (FieldInstrContent fname (Just Mandatory) (Just (Delta oc))) deltaParser ivToInt defaultBaseValue
-
 -- pm: No, Nullable: No
-intF2P'' (FieldInstrContent fname (Just Mandatory) (Just (Delta oc))) deltaParser ivToInt defaultBaseValue
-    = let   baseValue (Assigned p) = p
+intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Delta oc)))
+    = let   baseValue (Assigned p) = assertType p
             baseValue (Undefined) = h oc
-                where   h (OpContext _ _ (Just iv)) = ivToInt iv
+                where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
                         h (OpContext _ _ Nothing) = defaultBaseValue
             baseValue (Empty) = error "D6: previous value in a delta operator can not be empty."
 
     in
         do 
-            d <- deltaParser
+            d <- l2 readD
             Just <$> (flip  delta d <$> (baseValue <$> prevValue fname oc))
 
 -- pm: No, Nullable: Yes
-intF2P'' (FieldInstrContent fname (Just Optional) (Just (Delta oc))) deltaParser ivToInt defaultBaseValue
+intF2P' (FieldInstrContent fname (Just Optional) (Just (Delta oc)))
     = nULL
-    <|> let     baseValue (Assigned p) = p
+    <|> let     baseValue (Assigned p) = assertType p
                 baseValue (Undefined) = h oc
-                    where   h (OpContext _ _ (Just iv)) = ivToInt iv
+                    where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
                             h (OpContext _ _ Nothing) = defaultBaseValue
                 baseValue (Empty) = error "D6: previous value in a delta operator can not be empty."
 
         in
             do 
-                d <- deltaParser
-                Just <$> (flip delta (minusOne' d) <$> (baseValue <$> prevValue fname oc))
-
-intF2P'' _ _ _ _
-    = error "Coding Error: intF2P'' can only be used for delta operatos."
+                d <- l2 readD
+                Just <$> (flip delta (minusOne d) <$> (baseValue <$> prevValue fname oc))
 
 -- |Maps an decimal field to its parser.
-decF2P::DecimalField -> FParser (Maybe Primitive)
+decF2P::DecimalField -> FParser (Maybe Decimal)
 
 -- If the presence attribute is not specified, the field is considered mandatory.
 decF2P (DecimalField fname Nothing either_op) 
@@ -426,7 +518,7 @@ decF2P (DecimalField fname Nothing either_op)
 
 -- pm: No, Nullable: No
 decF2P (DecimalField _ (Just Mandatory) (Left (Constant iv))) 
-    = return $ Just(ivToDec iv)
+    = return $ Just(ivToPrimitive iv)
 
 -- pm: Yes, Nullable: No
 decF2P (DecimalField _ (Just Mandatory) (Left (Default Nothing))) 
@@ -434,22 +526,22 @@ decF2P (DecimalField _ (Just Mandatory) (Left (Default Nothing)))
 
 -- pm: Yes, Nullable: No
 decF2P (DecimalField _ (Just Mandatory) (Left (Default (Just iv)))) 
-    = ifPresentElse (Just <$> dec) (return(Just(ivToDec iv)))
+    = ifPresentElse (Just <$> l2 readP) (return(Just(ivToPrimitive iv)))
 
 -- pm: Yes, Nullable: No
 decF2P (DecimalField fname (Just Mandatory) (Left (Copy oc))) 
     = ifPresentElse
     (
     do
-        d <- dec
-        updatePrevValue fname oc (Assigned d)
+        d <- l2 readP
+        updatePrevValue fname oc (Assigned (witnessType d))
         return (Just d)
     )
     (
     let 
-        h (Assigned p) = Just p
+        h (Assigned p) = Just (assertType p)
         h (Undefined) = h' oc
-            where   h' (OpContext _ _ (Just iv)) = Just (ivToDec iv)
+            where   h' (OpContext _ _ (Just iv)) = Just (ivToPrimitive iv)
                     h' (OpContext _ _ Nothing) = error "D5: No initial value in operator context\
                                                       \for mandatory copy operator with undefined dictionary\
                                                       \value."
@@ -464,15 +556,15 @@ decF2P (DecimalField _ (Just Mandatory) (Left (Increment _)))
 
 -- pm: No, Nullable: No
 decF2P (DecimalField fname (Just Mandatory) (Left (Delta oc))) 
-    = let   baseValue (Assigned p) = p
+    = let   baseValue (Assigned p) = assertType p
             baseValue (Undefined) = h oc
-                where   h (OpContext _ _ (Just iv)) = ivToDec iv
-                        h (OpContext _ _ Nothing) = dfbDecimal
+                where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
+                        h (OpContext _ _ Nothing) = defaultBaseValue
             baseValue (Empty) = error "D6: previous value in a delta operator can not be empty."
 
     in
         do 
-            d <- decDelta
+            d <- l2 readD
             Just <$> (flip  delta d <$> (baseValue <$> prevValue fname oc))
 
 decF2P (DecimalField _ (Just Mandatory) (Left (Tail _))) 
@@ -480,31 +572,31 @@ decF2P (DecimalField _ (Just Mandatory) (Left (Tail _)))
 
 -- pm: Yes, Nullable: No
 decF2P (DecimalField _ (Just Optional) (Left (Constant iv))) 
-    = ifPresentElse (return(Just(ivToDec iv))) (return Nothing)
+    = ifPresentElse (return(Just(ivToPrimitive iv))) (return Nothing)
 
 -- pm: Yes, Nullable: Yes
 decF2P (DecimalField _ (Just Optional) (Left (Default Nothing))) 
-    = ifPresentElse (nULL <|> (Just <$> dec)) (return Nothing)
+    = ifPresentElse (nULL <|> (Just <$> l2 readP)) (return Nothing)
 
 -- pm: Yes, Nullable: Yes
 decF2P (DecimalField _ (Just Optional) (Left (Default (Just iv)))) 
-    = ifPresentElse (nULL <|> (Just <$> dec)) (return (Just $ ivToDec iv))
+    = ifPresentElse (nULL <|> (Just <$> l2 readP)) (return (Just $ ivToPrimitive iv))
 
 -- pm: Yes, Nullable: Yes
 decF2P (DecimalField fname (Just Optional) (Left (Copy oc))) 
     = ifPresentElse
     (
-    (nULL *> updatePrevValue fname oc Empty >> return Nothing)
+    ((nULL :: FParser (Maybe Int32)) *> updatePrevValue fname oc Empty >> return Nothing)
     <|> do
-            d <- dec
-            updatePrevValue fname oc (Assigned d)
+            d <- l2 readP
+            updatePrevValue fname oc (Assigned (witnessType d))
             return (Just d)
     )
     (
     let 
-        h (Assigned p) = return $ Just p
+        h (Assigned p) = return (Just (assertType p))
         h (Undefined) = h' oc
-            where   h' (OpContext _ _ (Just iv)) = return $ Just (ivToDec iv)
+            where   h' (OpContext _ _ (Just iv)) = return $ Just (ivToPrimitive iv)
                     h' (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> return Nothing  
         h (Empty) = return Nothing
     in 
@@ -518,15 +610,15 @@ decF2P (DecimalField _ (Just Optional) (Left (Increment _)))
 -- pm: No, Nullable: Yes
 decF2P (DecimalField fname (Just Optional) (Left (Delta oc))) 
     = nULL
-    <|> let     baseValue (Assigned p) = p
+    <|> let     baseValue (Assigned p) = assertType p
                 baseValue (Undefined) = h oc
-                    where   h (OpContext _ _ (Just iv)) = ivToDec iv
-                            h (OpContext _ _ Nothing) = dfbDecimal
+                    where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
+                            h (OpContext _ _ Nothing) = defaultBaseValue
                 baseValue (Empty) = error "D6: previous value in a delta operator can not be empty."
 
         in
             do 
-                d <- decDelta
+                d <- l2 readD
                 Just <$> (flip delta d <$> (baseValue <$> prevValue fname oc))
 
 -- pm: No, Nullable: Yes
@@ -544,8 +636,7 @@ decF2P (DecimalField fname (Just Mandatory) (Right (DecFieldOp maybe_exOp maybe_
         return (h e m) where   
                         h Nothing _ = Nothing
                         h _ Nothing = Nothing
-                        h (Just (Int32 e')) (Just m') = Just (Decimal (Int32 e') m')
-                        h _ _ = error "Coding error: expontent must always be of type Int32."
+                        h (Just e') (Just m') = Just (e', m')
 
 
 -- The exponent field is considered as an optional field, the mantissa field as a mandatory field.
@@ -559,27 +650,26 @@ decF2P (DecimalField fname (Just Optional) (Right (DecFieldOp maybe_exOp maybe_m
         return (h e m) where   
                         h Nothing _ = Nothing
                         h _ Nothing = Nothing
-                        h (Just (Int32 e')) (Just m') = Just (Decimal (Int32 e') m')
-                        h _ _ = error "Coding error: expontent must always be of type Int32."
+                        h (Just e') (Just m') = Just (e', m')
 
 -- |Maps an ascii field to its parser.
-asciiStrF2P::AsciiStringField -> FParser (Maybe Primitive)
+asciiStrF2P::AsciiStringField -> FParser (Maybe AsciiString)
 -- If the presence attribute is not specified, its a mandatory field.
 asciiStrF2P (AsciiStringField(FieldInstrContent fname Nothing maybe_op))
     = asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) maybe_op))
 -- pm: No, Nullable: No
 asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) Nothing))
-    = Just <$> asciiString
+    = Just <$> l2 readP
 -- pm: No, Nullable: Yes
 asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Optional) Nothing))
     = nULL
     <|> do
-        str <- asciiString'
-        return $ Just str
+        str <- l2 readP
+        return (Just (rmPreamble' str))
 
 -- pm: No, Nullable: No
 asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Constant iv)))) 
-    = return $ Just (ivToAscii iv)
+    = return $ Just (ivToPrimitive iv)
 
 -- pm: Yes, Nullable: No
 asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))))
@@ -590,11 +680,11 @@ asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Defaul
     = ifPresentElse
     (
     do
-        str <- asciiString 
+        str <- l2 readP
         return $ Just (rmPreamble str)
     )
     (
-     return (Just (ivToAscii iv))
+     return (Just (ivToPrimitive iv))
     )
 
 -- pm: Yes, Nullable: No
@@ -602,15 +692,15 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Co
     = ifPresentElse
     (
     do
-            bv <- byteVector
-            updatePrevValue fname oc (Assigned bv)
-            return (Just bv)
+            s <- l2 readP
+            updatePrevValue fname oc (Assigned (witnessType s))
+            return (Just (rmPreamble s))
     )
     (
     let 
-        h (Assigned p) = return (Just p)
+        h (Assigned p) = return (Just (assertType p))
         h (Undefined) = h' oc
-            where   h' (OpContext _ _ (Just iv)) =  updatePrevValue fname oc (Assigned i) >> return (Just i) where i = ivToAscii iv
+            where   h' (OpContext _ _ (Just iv)) =  updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i) where i = ivToPrimitive iv
                     h' (OpContext _ _ Nothing) = error "D5: No initial value in operator context\
                                                       \for mandatory copy operator with undefined dictionary\
                                                       \value."
@@ -625,38 +715,38 @@ asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Increm
 
 -- pm: No, Nullable: No
 asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Delta oc))))
-    = let   baseValue (Assigned p) = p
+    = let   baseValue (Assigned p) = assertType p
             baseValue (Undefined) = h oc
-                where   h (OpContext _ _ (Just iv)) = ivToAscii iv
-                        h (OpContext _ _ Nothing) = dfbAscii
+                where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
+                        h (OpContext _ _ Nothing) = defaultBaseValue 
             baseValue (Empty) = error "D6: previous value in a delta operator can not be empty."
     in
         do 
-            str <- asciiDelta
+            str <- l2 readD
             Just <$> (flip delta str <$> (baseValue <$> prevValue fname oc))
 
 -- pm: Yes, Nullable: No
 asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Tail oc))))
     = ifPresentElse
     (
-    let baseValue (Assigned p) = p
+    let baseValue (Assigned p) = assertType p
         baseValue (Undefined) = h oc
-            where   h (OpContext _ _ (Just iv)) = ivToAscii iv
-                    h (OpContext _ _ Nothing) = dfbAscii
+            where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
+                    h (OpContext _ _ Nothing) = defaultBaseValue
 
         baseValue (Empty) = h oc
-            where   h (OpContext _ _ (Just iv)) = ivToAscii iv
-                    h (OpContext _ _ Nothing) = dfbAscii
+            where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
+                    h (OpContext _ _ Nothing) = defaultBaseValue
     in
         do
             pva <- prevValue fname oc
-            t <- asciiTail
-            return (Just (baseValue pva `F.tail` t))
+            t <- l2 readT
+            return (Just (baseValue pva `ftail` t))
     )
     (
-    let baseValue (Assigned p) = return (Just p)
+    let baseValue (Assigned p) = return (Just (assertType p))
         baseValue (Undefined) = h oc
-            where   h (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned i) >> return (Just i) where i = ivToAscii iv
+            where   h (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i) where i = ivToPrimitive iv
                     h (OpContext _ _ Nothing) = error "D6: No initial value in operator context\
                                                               \for mandatory tail operator with undefined dictionary\
                                                               \value."
@@ -667,31 +757,31 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Ta
 
 -- pm: Yes, Nullable: No
 asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Constant iv)))) 
-    = ifPresentElse ( return (Just (ivToAscii iv))) (return Nothing)
+    = ifPresentElse ( return (Just (ivToPrimitive iv))) (return Nothing)
 
 -- pm: Yes, Nullable: Yes
 asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Default Nothing))))
-    = ifPresentElse (nULL <|> (Just <$> asciiString')) (return Nothing)
+    = ifPresentElse (nULL <|> (Just . rmPreamble' <$> l2 readP)) (return Nothing)
 -- pm: Yes, Nullable: Yes
 asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Default (Just iv)))))
-    = ifPresentElse (nULL <|> Just <$> asciiString') (return (Just (ivToAscii iv)))
+    = ifPresentElse (nULL <|> (Just . rmPreamble' <$> l2 readP)) (return (Just (ivToPrimitive iv)))
 
 -- pm: Yes, Nullable: Yes
 asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Copy oc))))
     = ifPresentElse
     (
-    (nULL *> (updatePrevValue fname oc Empty >> return Nothing))
+    ((nULL :: FParser (Maybe Int32)) *> (updatePrevValue fname oc Empty >> return Nothing))
     <|>
         do 
-            s <- asciiString'
-            updatePrevValue fname oc (Assigned s)
+            s <- rmPreamble' <$> l2 readP
+            updatePrevValue fname oc (Assigned (witnessType s))
             return (Just s)
     )
     (
     let 
-        h (Assigned p) = return (Just p)
+        h (Assigned p) = return (Just (assertType p))
         h (Undefined) = h' oc
-            where   h' (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned i) >> return (Just i) where i =ivToAscii iv
+            where   h' (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i) where i =ivToPrimitive iv
                     h' (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> return Nothing
         h (Empty) = return Nothing
     in 
@@ -705,38 +795,38 @@ asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Increme
 -- pm: No, Nullable: Yes
 asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Delta oc))))
     = nULL 
-    <|> (let    baseValue (Assigned p) = p
+    <|> (let    baseValue (Assigned p) = assertType p
                 baseValue (Undefined) = h oc
-                    where   h (OpContext _ _ (Just iv)) = ivToAscii iv
-                            h (OpContext _ _ Nothing) = dfbAscii
+                    where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
+                            h (OpContext _ _ Nothing) = defaultBaseValue
                 baseValue (Empty) = error "D6: previous value in a delta operator can not be empty."
         in
             do 
-                str <- asciiDelta'
-                Just <$> (flip delta str <$> (baseValue <$> prevValue fname oc)))
+                (Dascii d) <- l2 readD
+                Just <$> (flip delta (Dascii (fst d, rmPreamble' (snd d))) <$> (baseValue <$> prevValue fname oc))) 
 
 -- pm: Yes, Nullable: Yes
 asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Tail oc))))
     = ifPresentElse
     (
-    (nULL >> updatePrevValue fname oc Empty >> return Nothing)
-    <|> let baseValue (Assigned p) = return p
+    ((nULL :: FParser (Maybe Int32)) *> updatePrevValue fname oc Empty >> return Nothing)
+    <|> let baseValue (Assigned p) = return (assertType p)
             baseValue (Undefined) = h oc
-                where   h (OpContext _ _ (Just iv)) = return (ivToAscii iv)
-                        h (OpContext _ _ Nothing) = return dfbAscii
+                where   h (OpContext _ _ (Just iv)) = return (ivToPrimitive iv)
+                        h (OpContext _ _ Nothing) = return defaultBaseValue
             baseValue (Empty) = h oc
-                where   h (OpContext _ _ (Just iv)) = return (ivToAscii iv)
-                        h (OpContext _ _ Nothing) = return dfbAscii
+                where   h (OpContext _ _ (Just iv)) = return (ivToPrimitive iv)
+                        h (OpContext _ _ Nothing) = return defaultBaseValue
         in
             do
                 bv <- prevValue fname oc >>= baseValue
-                t <- asciiString'
-                return (Just (bv `F.tail` AsciiTail t))
+                t <- rmPreamble' <$> l2 readT
+                return (Just (bv `ftail` t))
     )
     (
-    let baseValue (Assigned p) = return (Just p)
+    let baseValue (Assigned p) = return (Just (assertType p))
         baseValue (Undefined) = h oc
-            where   h (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned i) >> return (Just i) where i = ivToAscii iv
+            where   h (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i) where i = ivToPrimitive iv
                     h (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> return Nothing
         baseValue (Empty) = return Nothing
     in
@@ -744,28 +834,28 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Tai
     )
 
 -- |Maps a bytevector field to its parser.
-bytevecF2P::ByteVectorField -> FParser (Maybe Primitive)
+bytevecF2P::ByteVectorField -> FParser (Maybe B.ByteString)
 bytevecF2P (ByteVectorField (FieldInstrContent fname Nothing maybe_op) len) 
     = bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) maybe_op) len)
 
 -- pm: No, Nullable: No
 bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Mandatory) Nothing ) _ ) 
-    = Just <$> byteVector
+    = Just <$> l2 readP
 
 -- pm: No, Nullable: Yes
 bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Optional) Nothing ) _ ) 
     = nULL
     <|> do
-        bv <- byteVector
+        bv <- l2 readP
         return $ Just bv
 
 -- pm: No, Nullable: No
 bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Constant iv))) _ ) 
-    = return $ Just (ivToByteVector iv)
+    = return $ Just (ivToPrimitive iv)
 
 -- pm: Yes, Nullable: No
 bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Constant iv))) _ ) 
-    = ifPresentElse (return (Just (ivToByteVector iv))) (return Nothing)
+    = ifPresentElse (return (Just (ivToPrimitive iv))) (return Nothing)
 -- pm: Yes, Nullable: No
 bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Default Nothing))) _ ) 
     = error "S5: No initial value given for mandatory default operator."
@@ -775,33 +865,33 @@ bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Default 
     = ifPresentElse
     (
     do
-        bv <- byteVector
+        bv <- l2 readP
         return (Just bv)
     )
     (
-    return (Just (ivToByteVector iv))
+    return (Just (ivToPrimitive iv))
     )
 
 -- pm: Yes, Nullable: Yes
 bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Default Nothing))) _ ) 
-    = ifPresentElse (nULL <|> (Just <$> byteVector)) (return Nothing)
+    = ifPresentElse (nULL <|> (Just <$> l2 readP)) (return Nothing)
 -- pm: Yes, Nullable: Yes
 bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Default (Just iv)))) _ ) 
-    = ifPresentElse (nULL <|> Just <$> byteVector) (return (Just (ivToByteVector iv)))
+    = ifPresentElse (nULL <|> Just <$> l2 readP) (return (Just (ivToPrimitive iv)))
 -- pm: Yes, Nullable: No
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Copy oc))) _ ) 
     = ifPresentElse   
     (
     do
-        bv <- byteVector
-        updatePrevValue fname oc (Assigned bv)
+        bv <- l2 readP 
+        updatePrevValue fname oc (Assigned (witnessType bv))
         return (Just bv)
     )
     (
     let 
-        h (Assigned p) = return (Just p)
+        h (Assigned p) = return (Just (assertType p))
         h (Undefined) = h' oc
-            where   h' (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned bv) >> return (Just bv) where bv = ivToByteVector iv 
+            where   h' (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned (witnessType bv)) >> return (Just bv) where bv = ivToPrimitive iv 
                     h' (OpContext _ _ Nothing) = error "D5: No initial value in operator context\
                                                       \for mandatory copy operator with undefined dictionary\
                                                       \value."
@@ -813,17 +903,17 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Copy
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Copy oc))) _ ) 
     = ifPresentElse
     (
-    (nULL *> (updatePrevValue fname oc Empty >> return Nothing))
+    ((nULL :: FParser (Maybe Int32)) *> (updatePrevValue fname oc Empty >> return Nothing))
     <|> do
-            bv <- byteVector
-            updatePrevValue fname oc (Assigned bv)
+            bv <- l2 readP
+            updatePrevValue fname oc (Assigned (witnessType bv))
             return (Just bv)
     )
     (
     let 
-        h (Assigned p) = return (Just p)
+        h (Assigned p) = return (Just (assertType p))
         h (Undefined) = h' oc
-            where   h' (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned bv) >> return (Just bv) where bv = ivToByteVector iv
+            where   h' (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned (witnessType bv)) >> return (Just bv) where bv = ivToPrimitive iv
                     h' (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> return Nothing
         h (Empty) = return Nothing
     in 
@@ -838,51 +928,51 @@ bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Increment
 
 -- pm: No, Nullable: No
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Delta oc))) _ ) 
-    = let   baseValue (Assigned p) = p
+    = let   baseValue (Assigned p) = assertType p
             baseValue (Undefined) = h oc
-                where   h (OpContext _ _ (Just iv)) = ivToByteVector iv
-                        h (OpContext _ _ Nothing) = dfbByteVector
+                where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
+                        h (OpContext _ _ Nothing) = defaultBaseValue
             baseValue (Empty) = error "D6: previous value in a delta operator can not be empty."
     in
         do 
-            bv <- byteVectorDelta
+            bv <- l2 readD
             Just <$> (flip delta bv <$> (baseValue <$> prevValue fname oc))
 
 -- pm: No, Nullable: Yes
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Delta oc))) _ ) 
     = nULL
-    <|> (let    baseValue (Assigned p) = p
+    <|> (let    baseValue (Assigned p) = assertType p
                 baseValue (Undefined) = h oc
-                    where   h (OpContext _ _ (Just iv)) = ivToByteVector iv
-                            h (OpContext _ _ Nothing) = dfbByteVector
+                    where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
+                            h (OpContext _ _ Nothing) = defaultBaseValue
                 baseValue (Empty) = error "D6: previous value in a delta operator can not be empty."
         in
             do 
-                bv <- byteVectorDelta
+                bv <- l2 readD
                 Just <$> (flip delta bv <$> (baseValue <$> prevValue fname oc)))
 
 -- pm: Yes, Nullable: No
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail oc))) _ ) 
     = ifPresentElse
     (
-    let baseValue (Assigned p) = p
+    let baseValue (Assigned p) = assertType p
         baseValue (Undefined) = h oc
-            where   h (OpContext _ _ (Just iv)) = ivToByteVector iv
-                    h (OpContext _ _ Nothing) = dfbByteVector
+            where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
+                    h (OpContext _ _ Nothing) = defaultBaseValue
 
         baseValue (Empty) = h oc
-            where   h (OpContext _ _ (Just iv)) = ivToAscii iv
-                    h (OpContext _ _ Nothing) = dfbByteVector
+            where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
+                    h (OpContext _ _ Nothing) = defaultBaseValue
     in
         do
             pva <- prevValue fname oc
-            t <- bytevectorTail
-            return (Just(baseValue pva `F.tail` t))
+            t <- l2 readT
+            return (Just(baseValue pva `ftail` t))
     )
     (
-    let baseValue (Assigned p) = return (Just p)
+    let baseValue (Assigned p) = return (Just (assertType p))
         baseValue (Undefined) = h oc
-            where   h (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned bv) >> return (Just bv) where bv = ivToByteVector iv
+            where   h (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned (witnessType bv)) >> return (Just bv) where bv = ivToPrimitive iv
                     h (OpContext _ _ Nothing) = error "D6: No initial value in operator context\
                                               \for mandatory tail operator with undefined dictionary\
                                               \value."
@@ -895,24 +985,24 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Tail oc))) _ ) 
     = ifPresentElse
     (
-    (nULL >> updatePrevValue fname oc Empty >> return Nothing)
-    <|> let baseValue (Assigned p) = return p
+    ((nULL :: FParser (Maybe Int32)) *> updatePrevValue fname oc Empty >> return Nothing)
+    <|> let baseValue (Assigned p) = return (assertType p)
             baseValue (Undefined) = h oc
-                where   h (OpContext _ _ (Just iv)) = return (ivToByteVector iv)
-                        h (OpContext _ _ Nothing) = return dfbByteVector
+                where   h (OpContext _ _ (Just iv)) = return (ivToPrimitive iv)
+                        h (OpContext _ _ Nothing) = return defaultBaseValue
             baseValue (Empty) = h oc
-                where   h (OpContext _ _ (Just iv)) = return (ivToByteVector iv)
-                        h (OpContext _ _ Nothing) = return dfbByteVector
+                where   h (OpContext _ _ (Just iv)) = return (ivToPrimitive iv)
+                        h (OpContext _ _ Nothing) = return defaultBaseValue
         in
             do
                 bv <- prevValue fname oc >>= baseValue
-                t <- bytevectorTail
-                return (Just (bv `F.tail` t))
+                t <- l2 readT
+                return (Just (bv `ftail` t))
     )
     (
-    let baseValue (Assigned p) = return (Just p)
+    let baseValue (Assigned p) = return (Just (assertType p))
         baseValue (Undefined) = h oc
-            where   h (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned bv) >> return (Just bv) where bv = ivToByteVector iv
+            where   h (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned (witnessType bv)) >> return (Just bv) where bv = ivToPrimitive iv
                     h (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> return Nothing
         baseValue (Empty) = return Nothing
     in
@@ -920,11 +1010,10 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Tail 
     )
 
 -- |Maps an unicode field to its parser.
-unicodeF2P::UnicodeStringField -> FParser (Maybe Primitive)
+unicodeF2P::UnicodeStringField -> FParser (Maybe UnicodeString)
 unicodeF2P (UnicodeStringField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)
     = h <$> bytevecF2P (ByteVectorField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)
-        where   h (Just (Bytevector bv)) = Just (Unicode (U.toString bv))
-                h (Just _ ) = error "Coding error: Bytevector parser must parse a bytevector."
+        where   h (Just bv) = Just (U.toString bv)
                 h (Nothing) = Nothing
 
 -- |Maps a sequence field to its parser.
@@ -934,10 +1023,9 @@ seqF2P (Sequence fname maybe_presence _ _ maybe_length instrs)
         i <- h maybe_presence maybe_length
         g i
         where   g Nothing = return (fname, Nothing)
-                g (Just (UInt32 i')) = do
+                g (Just i') = do
                                         s <- ask >>= \env -> A.count (fromEnum i') (segmentDep instrs (templates env) >> mapM instr2P instrs)
                                         return (fname, Just (Sq i' s))
-                g (Just _) = error "Coding error: Length field for sequences must return an Int32."
                 -- get the correct parser for the length field.
                 fname' = uniqueFName fname "l" 
                 h p Nothing = intF2P (UInt32Field (FieldInstrContent fname' p Nothing))
@@ -960,8 +1048,6 @@ groupF2P (Group fname (Just Optional) _ _ instrs)
 -- *Previous value related functions.
 
 -- |Get previous value.
--- TODO: Is the default key the full uri, or just the local name?
--- TODO: Do I look up values by the name of the key or by namespace/name uri?
 prevValue::NsName -> OpContext -> FParser DictValue
 prevValue name (OpContext (Just (DictionaryAttr dname)) Nothing _ ) 
     = pv dname (N name)
@@ -1005,57 +1091,16 @@ uppv d k v = do
 -- These parsers are unaware of nullability, presence map, deltas etc.
 
 -- |nULL parser.
-nULL::FParser (Maybe Primitive)
-nULL = lift $ lift nULL'
+nULL :: Primitive a => FParser (Maybe a)
+nULL = l2 nULL'
     where nULL' = do 
             -- discard result.
             _ <- A.word8 0x80
             return Nothing
 
--- |UInt32 field parser.
-uint32::FParser Primitive
-uint32 = do 
-    x <- p
-    return $ UInt32 x
-    where p = uint
-
--- |UInt64 field parser.
-uint64::FParser Primitive
-uint64 = do
-    x <- p
-    return $ UInt64 x
-    where p = uint
-
--- |Int32 field parser.
-int32::FParser Primitive
-int32 = do
-    x <- p
-    return $ Int32 x
-    where p = int
-    
-exint32::FParser Primitive 
-exint32 = do 
-    x <- p
-    return $ Int32 x
-    where p = int
-
--- |Int64 field parser.
-int64::FParser Primitive
-int64 = do
-    x <- p
-    return $ Int64 x
-    where p = int
-
--- |Dec field parser.
-dec::FParser Primitive
-dec = do
-        e <- exint32 
-        m <- int64 
-        return (Decimal e m)
-
 -- |Unsigned integer parser, doesn't check for bounds.
 -- TODO: should we check for R6 errors, i.e overlong fields?
-uint::(Bits a, Num a) => FParser a
+uint::(Bits a, Num a) => A.Parser a
 uint = do 
     bs <- anySBEEntity
     return (B.foldl h 0 bs)
@@ -1063,7 +1108,7 @@ uint = do
             h r w = fromIntegral (clearBit w 7) .|. shiftL r 7
         
 -- |Signed integer parser, doesn't check for bounds.
-int::(Bits a, Num a) => FParser a
+int::(Bits a, Num a) => A.Parser a
 int = do
     bs <- anySBEEntity
     return (if testBit (B.head bs) 6 
@@ -1074,106 +1119,44 @@ int = do
             h r w = fromIntegral (clearBit w 7) .|. shiftL r 7
 
 -- |ASCII string field parser, non-Nullable.
-asciiString::FParser Primitive
+asciiString::A.Parser AsciiString
 asciiString = do
     bs <- anySBEEntity
     let bs' = B.init bs `B.append` B.singleton (clearBit (B.last bs) 8) in
-        return (rmPreamble(Ascii (unpack bs')))
-
--- |ASCII string field parser, Nullable.
-asciiString'::FParser Primitive
-asciiString' = do
-    bs <- anySBEEntity
-    let bs' = B.init bs `B.append` B.singleton (clearBit (B.last bs) 8) in
-        return (rmPreamble'(Ascii (unpack bs')))
+        return (unpack bs')
     
 -- |Remove Preamble of an ascii string, non-Nullable situation.
-rmPreamble::Primitive -> Primitive
-rmPreamble (Ascii ['\0']) = Ascii []
-rmPreamble (Ascii ['\0', '\0']) = Ascii "\NUL"
+rmPreamble::AsciiString -> AsciiString
+rmPreamble (['\0']) = []
+rmPreamble (['\0', '\0']) = "\NUL"
 -- overlong string.
-rmPreamble (Ascii x) = Ascii (filter (/= '\0') x)
-rmPreamble _ = error "Coding error: rmPreamble only applicable for Ascii primitives."
+rmPreamble s = filter (/= '\0') s
 
 -- |Remove preamble of an ascii string, NULLable situation.
-rmPreamble'::Primitive -> Primitive
-rmPreamble' (Ascii ['\0','\0']) = Ascii []
-rmPreamble' (Ascii ['\0','\0','\0']) = Ascii "\NUL"
+rmPreamble'::AsciiString -> AsciiString
+rmPreamble' (['\0','\0']) = []
+rmPreamble' (['\0','\0','\0']) = "\NUL"
 -- overlong string.
-rmPreamble' (Ascii x) = Ascii (filter (/= '\0') x)
-rmPreamble' _ = error "Coding error: rmPreamble' only applicable for Ascii primitives."
+rmPreamble' s = filter (/= '\0') s
 
 -- |Bytevector size preamble parser.
--- TODO: Is it a UInt32 or a UInt64?
-byteVector::FParser Primitive
+byteVector::A.Parser B.ByteString
 byteVector = do
-    s <- uint32
-    let (UInt32 s') = s in
-            byteVector' s'
+    s <- int::A.Parser Word32
+    byteVector' s
 
 -- |Bytevector field parser. The first argument is the size of the bytevector.
 -- If the length of the bytevector is bigger than maxBound::Int an exception 
 -- will be trown.
-byteVector'::Word32 -> FParser Primitive
-byteVector' c = lift $ lift p
-    where p = Bytevector <$> A.take (fromEnum c)
-
--- * Delta parsers.
--- |Int32 delta parser.
-int32Delta::FParser Delta
-int32Delta = Int32Delta <$> int32
-
--- |Uint32 delta parser.
-uint32Delta::FParser Delta
-uint32Delta = UInt32Delta <$> int32
-
--- |Int64 delta parser.
-int64Delta::FParser Delta
-int64Delta = Int64Delta <$> int64
-
--- |UInt64 delta parser.
-uint64Delta::FParser Delta
-uint64Delta = UInt64Delta <$> int64
-
--- |Decimal delta parser.
-decDelta::FParser Delta
-decDelta = DecimalDelta <$> dec
-
--- |Ascii delta parser, non-Nullable.
-asciiDelta::FParser Delta
-asciiDelta = do
-               l <- int32
-               str <- asciiString
-               return (AsciiDelta l str)
--- |Ascii delta parser, Nullable.
-asciiDelta'::FParser Delta
-asciiDelta' = do
-               l <- int32
-               str <- asciiString'
-               return (AsciiDelta l str)
-
--- |Bytevector delta parser.
-byteVectorDelta::FParser Delta
-byteVectorDelta = do
-                    l <- int32
-                    bv <- byteVector
-                    return (ByteVectorDelta l bv)
-
--- * Tail parsers.
--- | Ascii tail parser, non-nullable case.
-asciiTail::FParser Tail
-asciiTail = AsciiTail <$> asciiString
-
--- | Bytevector tail parser.
-bytevectorTail::FParser Tail
-bytevectorTail = ByteVectorTail <$> byteVector
+byteVector'::Word32 -> A.Parser B.ByteString
+byteVector' c = A.take (fromEnum c)
 
 -- *Presence map parsers. 
 
 -- |Parse PreseneceMap.
 presenceMap::FParser ()
 presenceMap = do
-    bs <- anySBEEntity
+    bs <- l2 anySBEEntity
     -- update state
     st <- get
     put (Context (bsToPm bs) (dict st))
@@ -1194,8 +1177,8 @@ ifPresentElse p1 p2 = do
                             else p2
 
 -- |Get a Stopbit encoded entity.
-anySBEEntity::FParser B.ByteString
-anySBEEntity = lift $ lift (takeTill' stopBitSet)
+anySBEEntity::A.Parser B.ByteString
+anySBEEntity = takeTill' stopBitSet
 
 -- |Like takeTill, but takes the matching byte as well.
 takeTill'::(Word8 -> Bool) -> A.Parser B.ByteString
@@ -1352,16 +1335,15 @@ uniqueFName fname s = NsName (NameAttr(n ++ s)) ns ide
     where (NsName (NameAttr n) ns ide) = fname
 
 -- |Decrement the value of an integer, when it is positive.
-minusOne::Primitive -> Primitive
-minusOne (Int32 x) | x > 0 = Int32 (x - 1)
-minusOne (Int64 x) | x > 0 = Int64 (x - 1)
-minusOne (UInt32 x)| x > 0 = UInt32 (x - 1)
-minusOne (UInt64 x)| x > 0 = UInt64 (x - 1)
+minusOne::(Ord a, Num a) => a -> a
+minusOne x | x > 0 = x - 1
+minusOne x | x > 0 = x - 1
+minusOne x | x > 0 = x - 1
+minusOne x | x > 0 = x - 1
 minusOne x = x
 
-minusOne'::Delta -> Delta
-minusOne' (Int32Delta (Int32 x)) | x > 0 = Int32Delta (Int32 (x - 1))
-minusOne' (Int64Delta (Int64 x)) | x > 0 = Int64Delta (Int64 (x - 1))
-minusOne' (UInt32Delta (Int32 x))| x > 0 = UInt32Delta (Int32 (x - 1))
-minusOne' (UInt64Delta (Int64 x))| x > 0 = UInt64Delta (Int64 (x - 1))
-minusOne' x = x
+trimWhiteSpace :: String -> String
+trimWhiteSpace = reverse . dropWhile whiteSpace . reverse . dropWhile whiteSpace
+
+whiteSpace::Char -> Bool
+whiteSpace c =  c `elem` " \t\r\n"
