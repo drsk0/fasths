@@ -508,7 +508,7 @@ int = do
 asciiString::A.Parser AsciiString
 asciiString = do
     bs <- anySBEEntity
-    let bs' = B.init bs `B.append` B.singleton (clearBit (B.last bs) 8) in
+    let bs' = B.init bs `B.append` B.singleton (clearBit (B.last bs) 7) in
         return (unpack bs')
 
 trimWhiteSpace :: String -> String
