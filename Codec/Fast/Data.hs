@@ -315,7 +315,7 @@ data IntegerField = Int32Field FieldInstrContent
 data DecimalField = DecimalField {
         dfiFName    :: NsName,
         dfiPresence :: Maybe PresenceAttr,
-        dfiFieldOp  :: Either FieldOp DecFieldOp
+        dfiFieldOp  :: Maybe (Either FieldOp DecFieldOp)
         } deriving (Show)
 
 -- |Ascii string field.

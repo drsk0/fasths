@@ -166,7 +166,7 @@ getDecimalField::IOStateArrow TPState XmlTree DecimalField
 getDecimalField = hasName "decimal" >>> proc l -> do
    n <- getNsName                                                   -< l
    p <- maybeA getPresence                                          -< l
-   op<- (ifA (getChildren >>> isElem >>> (hasName "exponent" <+> hasName "mantissa")) (getDecFieldOp >>> arr Right) (getFieldOp >>> arr Left)) -< l
+   op<- maybeA (ifA (getChildren >>> isElem >>> (hasName "exponent" <+> hasName "mantissa")) (getDecFieldOp >>> arr Right) (getFieldOp >>> arr Left)) -< l
    returnA -< (DecimalField n p op)
 
 getDecFieldOp::IOStateArrow TPState XmlTree DecFieldOp 

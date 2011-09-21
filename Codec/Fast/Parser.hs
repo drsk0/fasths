@@ -260,23 +260,32 @@ intF2P' (FieldInstrContent fname (Just Optional) (Just (Delta oc)))
 decF2P::DecimalField -> FParser (Maybe Decimal)
 
 -- If the presence attribute is not specified, the field is considered mandatory.
-decF2P (DecimalField fname Nothing either_op) 
-    = decF2P (DecimalField fname (Just Mandatory) either_op)
+decF2P (DecimalField fname Nothing maybe_either_op) 
+    = decF2P (DecimalField fname (Just Mandatory) maybe_either_op)
+
+-- pm: Np, Nullable: No
+decF2P (DecimalField _ (Just Mandatory) Nothing)
+    = Just <$> (l2 readP)
+
+-- om: No, Nullable: Yes
+decF2P (DecimalField _ (Just Optional) Nothing)
+    = nULL
+    <|> Just <$> (l2 readP)
 
 -- pm: No, Nullable: No
-decF2P (DecimalField _ (Just Mandatory) (Left (Constant iv))) 
+decF2P (DecimalField _ (Just Mandatory) (Just (Left (Constant iv)))) 
     = return $ Just(ivToPrimitive iv)
 
 -- pm: Yes, Nullable: No
-decF2P (DecimalField _ (Just Mandatory) (Left (Default Nothing))) 
+decF2P (DecimalField _ (Just Mandatory) (Just (Left (Default Nothing))))
     = error "S5: No initial value given for mandatory default operator."
 
 -- pm: Yes, Nullable: No
-decF2P (DecimalField _ (Just Mandatory) (Left (Default (Just iv)))) 
+decF2P (DecimalField _ (Just Mandatory) (Just (Left (Default (Just iv)))))
     = ifPresentElse (Just <$> l2 readP) (return(Just(ivToPrimitive iv)))
 
 -- pm: Yes, Nullable: No
-decF2P (DecimalField fname (Just Mandatory) (Left (Copy oc))) 
+decF2P (DecimalField fname (Just Mandatory) (Just (Left (Copy oc)))) 
     = ifPresentElse
     (
     do
@@ -298,11 +307,11 @@ decF2P (DecimalField fname (Just Mandatory) (Left (Copy oc)))
     )
 
 -- pm: Yes, Nullable: No
-decF2P (DecimalField _ (Just Mandatory) (Left (Increment _))) 
+decF2P (DecimalField _ (Just Mandatory) (Just (Left (Increment _)))) 
     = error "S2:Increment operator is only applicable to integer fields." 
 
 -- pm: No, Nullable: No
-decF2P (DecimalField fname (Just Mandatory) (Left (Delta oc))) 
+decF2P (DecimalField fname (Just Mandatory) (Just (Left (Delta oc)))) 
     = let   baseValue (Assigned p) = assertType p
             baseValue (Undefined) = h oc
                 where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
@@ -314,23 +323,23 @@ decF2P (DecimalField fname (Just Mandatory) (Left (Delta oc)))
             d <- l2 readD
             Just <$> (flip  delta d <$> (baseValue <$> prevValue fname oc))
 
-decF2P (DecimalField _ (Just Mandatory) (Left (Tail _))) 
+decF2P (DecimalField _ (Just Mandatory) (Just (Left (Tail _))))
     = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields." 
 
 -- pm: Yes, Nullable: No
-decF2P (DecimalField _ (Just Optional) (Left (Constant iv))) 
+decF2P (DecimalField _ (Just Optional) (Just (Left (Constant iv)))) 
     = ifPresentElse (return(Just(ivToPrimitive iv))) (return Nothing)
 
 -- pm: Yes, Nullable: Yes
-decF2P (DecimalField _ (Just Optional) (Left (Default Nothing))) 
+decF2P (DecimalField _ (Just Optional) (Just (Left (Default Nothing)))) 
     = ifPresentElse (nULL <|> (Just <$> l2 readP)) (return Nothing)
 
 -- pm: Yes, Nullable: Yes
-decF2P (DecimalField _ (Just Optional) (Left (Default (Just iv)))) 
+decF2P (DecimalField _ (Just Optional) (Just (Left (Default (Just iv))))) 
     = ifPresentElse (nULL <|> (Just <$> l2 readP)) (return (Just $ ivToPrimitive iv))
 
 -- pm: Yes, Nullable: Yes
-decF2P (DecimalField fname (Just Optional) (Left (Copy oc))) 
+decF2P (DecimalField fname (Just Optional) (Just (Left (Copy oc)))) 
     = ifPresentElse
     (
     nULL *> (updatePrevValue fname oc Empty >> return Nothing)
@@ -351,11 +360,11 @@ decF2P (DecimalField fname (Just Optional) (Left (Copy oc)))
     )
 
 -- pm: Yes, Nullable: Yes
-decF2P (DecimalField _ (Just Optional) (Left (Increment _))) 
+decF2P (DecimalField _ (Just Optional) (Just (Left (Increment _)))) 
     = error "S2: Increment operator is applicable only to integer fields."
 
 -- pm: No, Nullable: Yes
-decF2P (DecimalField fname (Just Optional) (Left (Delta oc))) 
+decF2P (DecimalField fname (Just Optional) (Just (Left (Delta oc)))) 
     = nULL
     <|> let     baseValue (Assigned p) = assertType p
                 baseValue (Undefined) = h oc
@@ -369,11 +378,11 @@ decF2P (DecimalField fname (Just Optional) (Left (Delta oc)))
                 Just <$> (flip delta d <$> (baseValue <$> prevValue fname oc))
 
 -- pm: No, Nullable: Yes
-decF2P (DecimalField _ (Just Optional) (Left (Tail _))) 
+decF2P (DecimalField _ (Just Optional) (Just (Left (Tail _)))) 
     = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields." 
 
 -- Both operators are handled individually as mandatory operators.
-decF2P (DecimalField fname (Just Mandatory) (Right (DecFieldOp maybe_exOp maybe_maOp))) 
+decF2P (DecimalField fname (Just Mandatory) (Just (Right (DecFieldOp maybe_exOp maybe_maOp)))) 
 -- make fname unique for exponent and mantissa
     = let fname' = uniqueFName fname "e"
           fname'' = uniqueFName fname "m"
@@ -387,7 +396,7 @@ decF2P (DecimalField fname (Just Mandatory) (Right (DecFieldOp maybe_exOp maybe_
 
 
 -- The exponent field is considered as an optional field, the mantissa field as a mandatory field.
-decF2P (DecimalField fname (Just Optional) (Right (DecFieldOp maybe_exOp maybe_maOp)))
+decF2P (DecimalField fname (Just Optional) (Just (Right (DecFieldOp maybe_exOp maybe_maOp))))
 -- make fname unique for exponent and mantissa
     = let fname' = uniqueFName fname "e"
           fname'' = uniqueFName fname  "m"
@@ -924,22 +933,24 @@ needsPm _ (Instruction (IntField (Int64Field fic))) = intFieldNeedsPm fic
 needsPm _ (Instruction (IntField (UInt32Field fic))) = intFieldNeedsPm fic
 needsPm _ (Instruction (IntField (UInt64Field fic))) = intFieldNeedsPm fic
 needsPm ts (Instruction (DecField (DecimalField fname Nothing eitherOp))) = needsPm ts (Instruction(DecField (DecimalField fname (Just Mandatory) eitherOp)))
-needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) (Left (Constant _))))) = False
-needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) (Left (Default _))))) = True
-needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) (Left (Copy _))))) = True
-needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) (Left (Increment _))))) = error "S2:Increment operator is only applicable to integer fields." 
-needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) (Left (Delta _))))) = False
-needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) (Left (Tail _))))) = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields." 
-needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) (Left (Constant _))))) = True
-needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) (Left (Default _))))) = True 
-needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) (Left (Copy _))))) = True
-needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) (Left (Increment _))))) = error "S2:Increment operator is only applicable to integer fields." 
-needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) (Left (Delta _))))) = False
-needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) (Left (Tail _))))) = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields." 
-needsPm ts (Instruction (DecField (DecimalField fname (Just Mandatory) (Right (DecFieldOp maybe_opE maybe_opM))))) = needsPm ts insE && needsPm ts insM 
+needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) Nothing ))) = False
+needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) (Just (Left (Constant _)))))) = False
+needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) (Just (Left (Default _)))))) = True
+needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) (Just (Left (Copy _)))))) = True
+needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) (Just (Left (Increment _)))))) = error "S2:Increment operator is only applicable to integer fields." 
+needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) (Just (Left (Delta _)))))) = False
+needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) (Just (Left (Tail _)))))) = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields." 
+needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) Nothing ))) = False
+needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) (Just (Left (Constant _)))))) = True
+needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) (Just (Left (Default _)))))) = True 
+needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) (Just (Left (Copy _)))))) = True
+needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) (Just (Left (Increment _)))))) = error "S2:Increment operator is only applicable to integer fields." 
+needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) (Just (Left (Delta _)))))) = False
+needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) (Just (Left (Tail _)))))) = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields." 
+needsPm ts (Instruction (DecField (DecimalField fname (Just Mandatory) (Just (Right (DecFieldOp maybe_opE maybe_opM)))))) = needsPm ts insE && needsPm ts insM 
     where   insE = Instruction (IntField (Int32Field (FieldInstrContent fname (Just Mandatory) maybe_opE)))
             insM =  Instruction (IntField (Int64Field (FieldInstrContent fname (Just Mandatory) maybe_opM)))
-needsPm ts (Instruction (DecField (DecimalField fname (Just Optional) (Right (DecFieldOp maybe_opE maybe_opM))))) = needsPm ts insE && needsPm ts insM 
+needsPm ts (Instruction (DecField (DecimalField fname (Just Optional) (Just (Right (DecFieldOp maybe_opE maybe_opM)))))) = needsPm ts insE && needsPm ts insM 
     where   insE = Instruction (IntField (Int32Field (FieldInstrContent fname (Just Optional) maybe_opE)))
             insM =  Instruction (IntField (Int64Field (FieldInstrContent fname (Just Mandatory) maybe_opM)))
 needsPm ts (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent fname Nothing maybeOp)))) = needsPm ts (Instruction(AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Mandatory) maybeOp))))
@@ -1025,23 +1036,25 @@ dictOfField (IntField (Int64Field (FieldInstrContent fname maybePr maybeOp))) = 
 dictOfField (IntField (UInt32Field (FieldInstrContent fname maybePr maybeOp))) = [dictOfIntField $ FieldInstrContent fname maybePr maybeOp]
 dictOfField (IntField (UInt64Field (FieldInstrContent fname maybePr maybeOp))) = [dictOfIntField $ FieldInstrContent fname maybePr maybeOp]
 dictOfField (DecField (DecimalField fname Nothing eitherOp)) = dictOfField $ DecField $ DecimalField fname (Just Mandatory) eitherOp
-dictOfField (DecField (DecimalField _ (Just Mandatory) (Left (Constant _)))) = [Nothing]
-dictOfField (DecField (DecimalField _ (Just Mandatory) (Left (Default Nothing)))) = error "S5: No initial value given for mandatory default operator."
-dictOfField (DecField (DecimalField _ (Just Mandatory) (Left (Default (Just _))))) = [Nothing]
-dictOfField (DecField (DecimalField fname (Just Mandatory) (Left (Copy oc)))) = [Just $ dictOfOpContext oc fname]
-dictOfField (DecField (DecimalField _ (Just Mandatory) (Left (Increment _)))) = error "S2:Increment operator is only applicable to integer fields." 
-dictOfField (DecField (DecimalField fname (Just Mandatory) (Left (Delta oc)))) = [Just $ dictOfOpContext oc fname]
-dictOfField (DecField (DecimalField _ (Just Mandatory) (Left (Tail _)))) = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields." 
-dictOfField (DecField (DecimalField _ (Just Optional) (Left (Constant _)))) = [Nothing]
-dictOfField (DecField (DecimalField _ (Just Optional) (Left (Default Nothing)))) = [Nothing]
-dictOfField (DecField (DecimalField _ (Just Optional) (Left (Default (Just _))))) = [Nothing]
-dictOfField (DecField (DecimalField fname (Just Optional) (Left (Copy oc)))) = [Just $ dictOfOpContext oc fname]
-dictOfField (DecField (DecimalField _ (Just Optional) (Left (Increment _)))) = error "S2:Increment operator is only applicable to integer fields." 
-dictOfField (DecField (DecimalField fname (Just Optional) (Left (Delta oc)))) = [Just $ dictOfOpContext oc fname]
-dictOfField (DecField (DecimalField _ (Just Optional) (Left (Tail _)))) = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields." 
-dictOfField (DecField (DecimalField fname (Just Optional) (Right (DecFieldOp maybe_opE maybe_opM)))) = dictOfField (IntField (Int32Field (FieldInstrContent (uniqueFName fname "e") (Just Optional) maybe_opE))) 
+dictOfField (DecField (DecimalField _ (Just Mandatory) Nothing )) = [Nothing]
+dictOfField (DecField (DecimalField _ (Just Mandatory) (Just (Left (Constant _))))) = [Nothing]
+dictOfField (DecField (DecimalField _ (Just Mandatory) (Just (Left (Default Nothing))))) = error "S5: No initial value given for mandatory default operator."
+dictOfField (DecField (DecimalField _ (Just Mandatory) (Just (Left (Default (Just _)))))) = [Nothing]
+dictOfField (DecField (DecimalField fname (Just Mandatory) (Just (Left (Copy oc))))) = [Just $ dictOfOpContext oc fname]
+dictOfField (DecField (DecimalField _ (Just Mandatory) (Just (Left (Increment _))))) = error "S2:Increment operator is only applicable to integer fields." 
+dictOfField (DecField (DecimalField fname (Just Mandatory) (Just (Left (Delta oc))))) = [Just $ dictOfOpContext oc fname]
+dictOfField (DecField (DecimalField _ (Just Mandatory) (Just (Left (Tail _))))) = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields." 
+dictOfField (DecField (DecimalField _ (Just Optional) Nothing )) = [Nothing]
+dictOfField (DecField (DecimalField _ (Just Optional) (Just (Left (Constant _))))) = [Nothing]
+dictOfField (DecField (DecimalField _ (Just Optional) (Just (Left (Default Nothing))))) = [Nothing]
+dictOfField (DecField (DecimalField _ (Just Optional) (Just (Left (Default (Just _)))))) = [Nothing]
+dictOfField (DecField (DecimalField fname (Just Optional) (Just (Left (Copy oc))))) = [Just $ dictOfOpContext oc fname]
+dictOfField (DecField (DecimalField _ (Just Optional) (Just (Left (Increment _))))) = error "S2:Increment operator is only applicable to integer fields." 
+dictOfField (DecField (DecimalField fname (Just Optional) (Just (Left (Delta oc))))) = [Just $ dictOfOpContext oc fname]
+dictOfField (DecField (DecimalField _ (Just Optional) (Just (Left (Tail _))))) = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields." 
+dictOfField (DecField (DecimalField fname (Just Optional) (Just (Right (DecFieldOp maybe_opE maybe_opM))))) = dictOfField (IntField (Int32Field (FieldInstrContent (uniqueFName fname "e") (Just Optional) maybe_opE))) 
     ++ dictOfField (IntField (Int64Field (FieldInstrContent (uniqueFName fname "m") (Just Mandatory) maybe_opM)))
-dictOfField (DecField (DecimalField fname (Just Mandatory) (Right (DecFieldOp maybe_opE maybe_opM)))) = dictOfField (IntField (Int32Field (FieldInstrContent (uniqueFName fname "e") (Just Mandatory) maybe_opE)))
+dictOfField (DecField (DecimalField fname (Just Mandatory) (Just (Right (DecFieldOp maybe_opE maybe_opM))))) = dictOfField (IntField (Int32Field (FieldInstrContent (uniqueFName fname "e") (Just Mandatory) maybe_opE)))
     ++ dictOfField (IntField (Int64Field (FieldInstrContent (uniqueFName fname "m") (Just Mandatory) maybe_opM)))
 dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname Nothing maybeOp))) = dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Mandatory) maybeOp)))
 dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) Nothing))) = [Nothing]
