@@ -270,7 +270,9 @@ decF2P (DecimalField _ (Just Mandatory) Nothing)
 -- om: No, Nullable: Yes
 decF2P (DecimalField _ (Just Optional) Nothing)
     = nULL
-    <|> Just <$> (l2 readP)
+    <|> do 
+            (e, m) <- l2 readP
+            return (Just (minusOne e, m))
 
 -- pm: No, Nullable: No
 decF2P (DecimalField _ (Just Mandatory) (Just (Left (Constant iv)))) 
