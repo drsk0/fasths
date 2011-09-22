@@ -240,7 +240,8 @@ intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Delta oc)))
     in
         do 
             d <- l2 readD
-            Just <$> (flip  delta d <$> (baseValue <$> prevValue fname oc))
+            i <- (flip  delta d <$> (baseValue <$> prevValue fname oc))
+            updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i)
 
 -- pm: No, Nullable: Yes
 intF2P' (FieldInstrContent fname (Just Optional) (Just (Delta oc)))
@@ -254,7 +255,8 @@ intF2P' (FieldInstrContent fname (Just Optional) (Just (Delta oc)))
         in
             do 
                 d <- l2 readD
-                Just <$> (flip delta (minusOne d) <$> (baseValue <$> prevValue fname oc))
+                i <- (flip delta (minusOne d) <$> (baseValue <$> prevValue fname oc))
+                updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i)
 
 -- |Maps an decimal field to its parser.
 decF2P::DecimalField -> FParser (Maybe Decimal)
@@ -323,7 +325,8 @@ decF2P (DecimalField fname (Just Mandatory) (Just (Left (Delta oc))))
     in
         do 
             d <- l2 readD
-            Just <$> (flip  delta d <$> (baseValue <$> prevValue fname oc))
+            d' <- (flip  delta d <$> (baseValue <$> prevValue fname oc))
+            updatePrevValue fname oc (Assigned (witnessType d')) >> return (Just d')
 
 decF2P (DecimalField _ (Just Mandatory) (Just (Left (Tail _))))
     = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields." 
@@ -377,7 +380,8 @@ decF2P (DecimalField fname (Just Optional) (Just (Left (Delta oc))))
         in
             do 
                 d <- l2 readD
-                Just <$> (flip delta d <$> (baseValue <$> prevValue fname oc))
+                d' <- (flip delta d <$> (baseValue <$> prevValue fname oc))
+                updatePrevValue fname oc (Assigned (witnessType d')) >> return (Just d')
 
 -- pm: No, Nullable: Yes
 decF2P (DecimalField _ (Just Optional) (Just (Left (Tail _)))) 
@@ -481,7 +485,8 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (De
     in
         do 
             str <- l2 readD
-            Just <$> (flip delta str <$> (baseValue <$> prevValue fname oc))
+            str' <- (flip delta str <$> (baseValue <$> prevValue fname oc))
+            updatePrevValue fname oc (Assigned (witnessType str')) >> return (Just str')
 
 -- pm: Yes, Nullable: No
 asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Tail oc))))
@@ -562,7 +567,8 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Del
         in
             do 
                 (Dascii d) <- l2 readD
-                Just <$> (flip delta (Dascii (fst d, rmPreamble' (snd d))) <$> (baseValue <$> prevValue fname oc))) 
+                str <- (flip delta (Dascii (fst d, rmPreamble' (snd d))) <$> (baseValue <$> prevValue fname oc)) 
+                updatePrevValue fname oc (Assigned (witnessType str)) >> return (Just str))
 
 -- pm: Yes, Nullable: Yes
 asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Tail oc))))
@@ -710,7 +716,9 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Delta
         in
             do 
                 bv <- l2 readD
-                Just <$> (flip delta bv <$> (baseValue <$> prevValue fname oc)))
+                bv' <- (flip delta bv <$> (baseValue <$> prevValue fname oc))
+                updatePrevValue fname oc (Assigned (witnessType bv')) >> return (Just bv'))
+
 
 -- pm: Yes, Nullable: No
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail oc))) _ ) 
