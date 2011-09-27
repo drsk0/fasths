@@ -32,6 +32,7 @@ import qualified Data.Map as M
 import Data.Maybe (catMaybes)
 import Data.List (groupBy)
 import Codec.Fast.Data as F
+import Control.Exception
 
 
 -- |State of the parser.
@@ -121,7 +122,7 @@ intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Default (Just iv))))
 
 -- pm: Yes, Nullable: No
 intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing)))
-    = error "S5: No initial value given for mandatory default operator."
+    = throw $ S5 "No initial value given for mandatory default operator."
 
 -- pm: Yes, Nullable: No
 intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Copy oc)))
@@ -138,10 +139,10 @@ intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Copy oc)))
             (Assigned v) -> return (Just (assertType v))
             Undefined -> h' oc
                 where   h' (OpContext _ _ (Just iv)) = return (Just (ivToPrimitive iv))
-                        h' (OpContext _ _ Nothing) = error "D5: No initial value in operator context\
+                        h' (OpContext _ _ Nothing) = throw $ D5 "No initial value in operator context\
                                                           \for mandatory copy operator with undefined dictionary\
                                                           \value."
-            Empty -> error "D6: Previous value is empty in madatory copy operator."
+            Empty -> throw $ D6 "Previous value is empty in madatory copy operator."
     )
                             
 -- pm: Yes, Nullable: No
@@ -160,15 +161,15 @@ intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Increment oc)))
             (Assigned v) -> updatePrevValue fname oc (Assigned (witnessType v')) >> return (Just v') where v' = assertType v + 1 
             Undefined -> h' oc
                 where   h' (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i) where i =ivToPrimitive iv
-                        h' (OpContext _ _ Nothing) = error "D5: No initial value in operator context given for\
+                        h' (OpContext _ _ Nothing) = throw $ D5 "No initial value in operator context given for\
                                                         \mandatory increment operator with undefined dictionary\
                                                         \value."
-            Empty -> error "D6: Previous value is empty in mandatory increment operator."
+            Empty -> throw $ D6 "Previous value is empty in mandatory increment operator."
     )
     
 -- pm: -, Nullable: -
 intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Tail _)))
-    = error "S2: Tail operator can not be applied on an integer type field." 
+    = throw $ S2 "Tail operator can not be applied on an integer type field." 
 
 -- pm: Yes, Nullable: No
 intF2P' (FieldInstrContent _ (Just Optional) (Just (Constant iv)))
@@ -227,7 +228,7 @@ intF2P' (FieldInstrContent fname (Just Optional) (Just (Increment oc)))
 
 -- pm: -, Nullable: -
 intF2P' (FieldInstrContent _ (Just Optional) (Just (Tail _)))
-    = error "S2: Tail operator can not be applied on an integer type field." 
+    = throw $ S2 "Tail operator can not be applied on an integer type field." 
 
 -- pm: No, Nullable: No
 intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Delta oc)))
@@ -235,7 +236,7 @@ intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Delta oc)))
             baseValue (Undefined) = h oc
                 where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
                         h (OpContext _ _ Nothing) = defaultBaseValue
-            baseValue (Empty) = error "D6: previous value in a delta operator can not be empty."
+            baseValue (Empty) = throw $ D6 "previous value in a delta operator can not be empty."
 
     in
         do 
@@ -250,7 +251,7 @@ intF2P' (FieldInstrContent fname (Just Optional) (Just (Delta oc)))
                 baseValue (Undefined) = h oc
                     where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
                             h (OpContext _ _ Nothing) = defaultBaseValue
-                baseValue (Empty) = error "D6: previous value in a delta operator can not be empty."
+                baseValue (Empty) = throw $ D6 "previous value in a delta operator can not be empty."
 
         in
             do 
@@ -282,7 +283,7 @@ decF2P (DecimalField _ (Just Mandatory) (Just (Left (Constant iv))))
 
 -- pm: Yes, Nullable: No
 decF2P (DecimalField _ (Just Mandatory) (Just (Left (Default Nothing))))
-    = error "S5: No initial value given for mandatory default operator."
+    = throw $ S5 "No initial value given for mandatory default operator."
 
 -- pm: Yes, Nullable: No
 decF2P (DecimalField _ (Just Mandatory) (Just (Left (Default (Just iv)))))
@@ -304,15 +305,15 @@ decF2P (DecimalField fname (Just Mandatory) (Just (Left (Copy oc))))
             (Assigned v) -> return (Just (assertType v))
             Undefined -> h' oc
                 where   h' (OpContext _ _ (Just iv)) = return (Just (ivToPrimitive iv))
-                        h' (OpContext _ _ Nothing) = error "D5: No initial value in operator context\
+                        h' (OpContext _ _ Nothing) = throw $ D5 "No initial value in operator context\
                                                           \for mandatory copy operator with undefined dictionary\
                                                           \value."
-            Empty -> error "D6: Previous value is empty in madatory copy operator."
+            Empty -> throw $ D6 "Previous value is empty in madatory copy operator."
     )
 
 -- pm: Yes, Nullable: No
 decF2P (DecimalField _ (Just Mandatory) (Just (Left (Increment _)))) 
-    = error "S2:Increment operator is only applicable to integer fields." 
+    = throw $ S2 "Increment operator is only applicable to integer fields." 
 
 -- pm: No, Nullable: No
 decF2P (DecimalField fname (Just Mandatory) (Just (Left (Delta oc)))) 
@@ -320,7 +321,7 @@ decF2P (DecimalField fname (Just Mandatory) (Just (Left (Delta oc))))
             baseValue (Undefined) = h oc
                 where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
                         h (OpContext _ _ Nothing) = defaultBaseValue
-            baseValue (Empty) = error "D6: previous value in a delta operator can not be empty."
+            baseValue (Empty) = throw $ D6 "previous value in a delta operator can not be empty."
 
     in
         do 
@@ -329,7 +330,7 @@ decF2P (DecimalField fname (Just Mandatory) (Just (Left (Delta oc))))
             updatePrevValue fname oc (Assigned (witnessType d')) >> return (Just d')
 
 decF2P (DecimalField _ (Just Mandatory) (Just (Left (Tail _))))
-    = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields." 
+    = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields." 
 
 -- pm: Yes, Nullable: No
 decF2P (DecimalField _ (Just Optional) (Just (Left (Constant iv)))) 
@@ -366,7 +367,7 @@ decF2P (DecimalField fname (Just Optional) (Just (Left (Copy oc))))
 
 -- pm: Yes, Nullable: Yes
 decF2P (DecimalField _ (Just Optional) (Just (Left (Increment _)))) 
-    = error "S2: Increment operator is applicable only to integer fields."
+    = throw $ S2 "Increment operator is applicable only to integer fields."
 
 -- pm: No, Nullable: Yes
 decF2P (DecimalField fname (Just Optional) (Just (Left (Delta oc)))) 
@@ -375,7 +376,7 @@ decF2P (DecimalField fname (Just Optional) (Just (Left (Delta oc))))
                 baseValue (Undefined) = h oc
                     where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
                             h (OpContext _ _ Nothing) = defaultBaseValue
-                baseValue (Empty) = error "D6: previous value in a delta operator can not be empty."
+                baseValue (Empty) = throw $ D6 "previous value in a delta operator can not be empty."
 
         in
             do 
@@ -385,7 +386,7 @@ decF2P (DecimalField fname (Just Optional) (Just (Left (Delta oc))))
 
 -- pm: No, Nullable: Yes
 decF2P (DecimalField _ (Just Optional) (Just (Left (Tail _)))) 
-    = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields." 
+    = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields." 
 
 -- Both operators are handled individually as mandatory operators.
 decF2P (DecimalField fname (Just Mandatory) (Just (Right (DecFieldOp maybe_exOp maybe_maOp)))) 
@@ -435,7 +436,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Consta
 
 -- pm: Yes, Nullable: No
 asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))))
-    = error "S5: No initial value given for mandatory default operator."
+    = throw $ S5 "No initial value given for mandatory default operator."
 
 -- pm: Yes, Nullable: No
 asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Default (Just iv)))))
@@ -465,15 +466,15 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Co
             (Assigned v) -> return (Just (assertType v))
             Undefined -> h' oc
                 where   h' (OpContext _ _ (Just iv)) =  updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i) where i = ivToPrimitive iv
-                        h' (OpContext _ _ Nothing) = error "D5: No initial value in operator context\
+                        h' (OpContext _ _ Nothing) = throw $ D5 "No initial value in operator context\
                                                           \for mandatory copy operator with undefined dictionary\
                                                           \value."
-            Empty -> error "D6: Previous value is empty in madatory copy operator."
+            Empty -> throw $ D6 "Previous value is empty in madatory copy operator."
     )
 
 -- pm: Yes, Nullable: No
 asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Increment _))))
-    = error "S2:Increment operator is only applicable to integer fields." 
+    = throw $ S2 "Increment operator is only applicable to integer fields." 
 
 -- pm: No, Nullable: No
 asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Delta oc))))
@@ -481,7 +482,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (De
             baseValue (Undefined) = h oc
                 where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
                         h (OpContext _ _ Nothing) = defaultBaseValue 
-            baseValue (Empty) = error "D6: previous value in a delta operator can not be empty."
+            baseValue (Empty) = throw $ D6 "previous value in a delta operator can not be empty."
     in
         do 
             str <- l2 readD
@@ -513,10 +514,10 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Ta
             (Assigned v) -> return (Just (assertType v))
             Undefined -> h oc
                 where   h (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i) where i = ivToPrimitive iv
-                        h (OpContext _ _ Nothing) = error "D6: No initial value in operator context\
+                        h (OpContext _ _ Nothing) = throw $ D6 "No initial value in operator context\
                                                                   \for mandatory tail operator with undefined dictionary\
                                                                   \value."
-            Empty -> error "D7: previous value in a mandatory tail operator can not be empty."
+            Empty -> throw $ D7 "previous value in a mandatory tail operator can not be empty."
     )
 
 -- pm: Yes, Nullable: No
@@ -554,7 +555,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Cop
 
 -- pm: Yes, Nullable: Yes
 asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Increment _ ))))
-    = error "S2:Increment operator is only applicable to integer fields." 
+    = throw $ S2 "Increment operator is only applicable to integer fields." 
 
 -- pm: No, Nullable: Yes
 asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Delta oc))))
@@ -563,7 +564,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Del
                 baseValue (Undefined) = h oc
                     where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
                             h (OpContext _ _ Nothing) = defaultBaseValue
-                baseValue (Empty) = error "D6: previous value in a delta operator can not be empty."
+                baseValue (Empty) = throw $ D6 "previous value in a delta operator can not be empty."
         in
             do 
                 (Dascii d) <- l2 readD
@@ -624,7 +625,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Constant 
     = ifPresentElse (return (Just (ivToPrimitive iv))) (return Nothing)
 -- pm: Yes, Nullable: No
 bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Default Nothing))) _ ) 
-    = error "S5: No initial value given for mandatory default operator."
+    = throw $ S5 "No initial value given for mandatory default operator."
 
 -- pm: Yes, Nullable: No
 bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Default (Just iv)))) _ ) 
@@ -660,10 +661,10 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Copy
             (Assigned v) -> return (Just (assertType v)) 
             Undefined ->  h' oc
                 where   h' (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned (witnessType bv)) >> return (Just bv) where bv = ivToPrimitive iv 
-                        h' (OpContext _ _ Nothing) = error "D5: No initial value in operator context\
+                        h' (OpContext _ _ Nothing) = throw $ D5 "No initial value in operator context\
                                                           \for mandatory copy operator with undefined dictionary\
                                                           \value."
-            Empty -> error "D6: Previous value is empty in madatory copy operator."
+            Empty -> throw $ D6 "Previous value is empty in madatory copy operator."
     )
 -- pm: Yes, Nullable: Yes
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Copy oc))) _ ) 
@@ -688,10 +689,10 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Copy 
 
 -- pm: Yes, Nullable: No
 bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Increment _ ))) _ ) 
-    = error "S2:Increment operator is only applicable to integer fields." 
+    = throw $ S2 "Increment operator is only applicable to integer fields." 
 -- pm: Yes, Nullable: Yes
 bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Increment _ ))) _ ) 
-    = error "S2:Increment operator is only applicable to integer fields." 
+    = throw $ S2 "Increment operator is only applicable to integer fields." 
 
 -- pm: No, Nullable: No
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Delta oc))) _ ) 
@@ -699,7 +700,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Delt
             baseValue (Undefined) = h oc
                 where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
                         h (OpContext _ _ Nothing) = defaultBaseValue
-            baseValue (Empty) = error "D6: previous value in a delta operator can not be empty."
+            baseValue (Empty) = throw $ D6 "previous value in a delta operator can not be empty."
     in
         do 
             bv <- l2 readD
@@ -712,7 +713,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Delta
                 baseValue (Undefined) = h oc
                     where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
                             h (OpContext _ _ Nothing) = defaultBaseValue
-                baseValue (Empty) = error "D6: previous value in a delta operator can not be empty."
+                baseValue (Empty) = throw $ D6 "previous value in a delta operator can not be empty."
         in
             do 
                 bv <- l2 readD
@@ -745,10 +746,10 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail
             (Assigned v) -> return (Just (assertType v))
             Undefined -> h oc
                 where   h (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned (witnessType bv)) >> return (Just bv) where bv = ivToPrimitive iv
-                        h (OpContext _ _ Nothing) = error "D6: No initial value in operator context\
+                        h (OpContext _ _ Nothing) = throw $ D6 "No initial value in operator context\
                                                   \for mandatory tail operator with undefined dictionary\
                                                   \value."
-            Empty -> error "D7: previous value in a mandatory tail operator can not be empty."
+            Empty -> throw $ D7 "previous value in a mandatory tail operator can not be empty."
     )
 
 -- pm: Yes, Nullable: Yes
@@ -836,7 +837,7 @@ pv::String -> DictKey -> FParser DictValue
 pv d k = do
        st <- get
        case M.lookup d (dict st) >>= \(Dictionary _ xs) -> M.lookup k xs of
-        Nothing -> error ("Could not find specified dictionary/key." ++ show d ++ " " ++ show k)
+        Nothing -> throw $ OtherException ("Could not find specified dictionary/key." ++ show d ++ " " ++ show k)
         Just dv -> return dv
 
 -- |Update the previous value.
@@ -947,16 +948,16 @@ needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) Nothing ))) = 
 needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) (Just (Left (Constant _)))))) = False
 needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) (Just (Left (Default _)))))) = True
 needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) (Just (Left (Copy _)))))) = True
-needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) (Just (Left (Increment _)))))) = error "S2:Increment operator is only applicable to integer fields." 
+needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) (Just (Left (Increment _)))))) = throw $ S2 "Increment operator is only applicable to integer fields." 
 needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) (Just (Left (Delta _)))))) = False
-needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) (Just (Left (Tail _)))))) = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields." 
+needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) (Just (Left (Tail _)))))) = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields." 
 needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) Nothing ))) = False
 needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) (Just (Left (Constant _)))))) = True
 needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) (Just (Left (Default _)))))) = True 
 needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) (Just (Left (Copy _)))))) = True
-needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) (Just (Left (Increment _)))))) = error "S2:Increment operator is only applicable to integer fields." 
+needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) (Just (Left (Increment _)))))) = throw $ S2 "Increment operator is only applicable to integer fields." 
 needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) (Just (Left (Delta _)))))) = False
-needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) (Just (Left (Tail _)))))) = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields." 
+needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) (Just (Left (Tail _)))))) = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields." 
 needsPm ts (Instruction (DecField (DecimalField fname (Just Mandatory) (Just (Right (DecFieldOp maybe_opE maybe_opM)))))) = needsPm ts insE && needsPm ts insM 
     where   insE = Instruction (IntField (Int32Field (FieldInstrContent fname (Just Mandatory) maybe_opE)))
             insM =  Instruction (IntField (Int64Field (FieldInstrContent fname (Just Mandatory) maybe_opM)))
@@ -968,14 +969,14 @@ needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Ju
 needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Constant _)))))) = False
 needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Default _)))))) = True
 needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Copy _)))))) = True
-needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Increment _)))))) = error "S2:Increment operator is only applicable to integer fields." 
+needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Increment _)))))) = throw $ S2 "Increment operator is only applicable to integer fields." 
 needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Delta _)))))) =  False
 needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Tail _)))))) = True
 needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) Nothing)))) = False
 needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Constant _)))))) = True
 needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Default _)))))) = True
 needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Copy _)))))) = True
-needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Increment _)))))) = error "S2:Increment operator is only applicable to integer fields." 
+needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Increment _)))))) = throw $ S2 "Increment operator is only applicable to integer fields." 
 needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Delta _)))))) = False
 needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Tail _)))))) = True
 needsPm ts (Instruction (ByteVecField (ByteVectorField (FieldInstrContent fname Nothing maybeOp) maybe_length))) = needsPm ts (Instruction(ByteVecField (ByteVectorField (FieldInstrContent fname (Just Mandatory) maybeOp) maybe_length)))
@@ -983,14 +984,14 @@ needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just
 needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) Nothing) _))) = False
 needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Constant _))) _))) = False
 needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just (Constant _))) _))) = True
-needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))) _))) = error "S5: No initial value given for mandatory default operator."
+needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))) _))) = throw $ S5 " No initial value given for mandatory default operator."
 needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Default (Just _)))) _))) = True
 needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just (Default Nothing))) _))) = True
 needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Default (Just _)))) _))) = True
 needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Copy _ ))) _))) = True
 needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Copy _ ))) _))) = True
-needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Increment _))) _))) = error "S2:Increment operator is only applicable to integer fields." 
-needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Increment _))) _))) = error "S2:Increment operator is only applicable to integer fields." 
+needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Increment _))) _))) = throw $ S2 "Increment operator is only applicable to integer fields." 
+needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Increment _))) _))) = throw $ S2 "Increment operator is only applicable to integer fields." 
 needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Delta _))) _))) = False
 needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Delta _))) _))) = False
 needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Tail _))) _))) = True
@@ -1014,14 +1015,14 @@ intFieldNeedsPm (FieldInstrContent _ (Just Mandatory) (Just (Default _))) = True
 intFieldNeedsPm (FieldInstrContent _ (Just Mandatory) (Just (Copy _))) = True
 intFieldNeedsPm (FieldInstrContent _ (Just Mandatory) (Just (Increment _))) = True
 intFieldNeedsPm (FieldInstrContent _ (Just Mandatory) (Just (Delta _))) = False
-intFieldNeedsPm (FieldInstrContent _ (Just Mandatory) (Just (Tail _))) = error "S2: Tail operator can not be applied on an integer type field." 
+intFieldNeedsPm (FieldInstrContent _ (Just Mandatory) (Just (Tail _))) = throw $ S2 " Tail operator can not be applied on an integer type field." 
 intFieldNeedsPm (FieldInstrContent _ (Just Optional) Nothing) = False
 intFieldNeedsPm (FieldInstrContent _ (Just Optional) (Just (Constant _))) = True
 intFieldNeedsPm (FieldInstrContent _ (Just Optional) (Just (Default _))) = True
 intFieldNeedsPm (FieldInstrContent _ (Just Optional) (Just (Copy _))) = True
 intFieldNeedsPm (FieldInstrContent _ (Just Optional) (Just (Increment _))) = True
 intFieldNeedsPm (FieldInstrContent _ (Just Optional) (Just (Delta _))) = False
-intFieldNeedsPm (FieldInstrContent _ (Just Optional) (Just (Tail _))) = error "S2: Tail operator can not be applied on an integer type field." 
+intFieldNeedsPm (FieldInstrContent _ (Just Optional) (Just (Tail _))) = throw $ S2 " Tail operator can not be applied on an integer type field." 
 
 -- |The initial state of the parser depending on the templates.
 initState::Templates -> Context
@@ -1048,20 +1049,20 @@ dictOfField (IntField (UInt64Field (FieldInstrContent fname maybePr maybeOp))) =
 dictOfField (DecField (DecimalField fname Nothing eitherOp)) = dictOfField $ DecField $ DecimalField fname (Just Mandatory) eitherOp
 dictOfField (DecField (DecimalField _ (Just Mandatory) Nothing )) = [Nothing]
 dictOfField (DecField (DecimalField _ (Just Mandatory) (Just (Left (Constant _))))) = [Nothing]
-dictOfField (DecField (DecimalField _ (Just Mandatory) (Just (Left (Default Nothing))))) = error "S5: No initial value given for mandatory default operator."
+dictOfField (DecField (DecimalField _ (Just Mandatory) (Just (Left (Default Nothing))))) = throw $ S5 " No initial value given for mandatory default operator."
 dictOfField (DecField (DecimalField _ (Just Mandatory) (Just (Left (Default (Just _)))))) = [Nothing]
 dictOfField (DecField (DecimalField fname (Just Mandatory) (Just (Left (Copy oc))))) = [Just $ dictOfOpContext oc fname]
-dictOfField (DecField (DecimalField _ (Just Mandatory) (Just (Left (Increment _))))) = error "S2:Increment operator is only applicable to integer fields." 
+dictOfField (DecField (DecimalField _ (Just Mandatory) (Just (Left (Increment _))))) = throw $ S2 "Increment operator is only applicable to integer fields." 
 dictOfField (DecField (DecimalField fname (Just Mandatory) (Just (Left (Delta oc))))) = [Just $ dictOfOpContext oc fname]
-dictOfField (DecField (DecimalField _ (Just Mandatory) (Just (Left (Tail _))))) = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields." 
+dictOfField (DecField (DecimalField _ (Just Mandatory) (Just (Left (Tail _))))) = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields." 
 dictOfField (DecField (DecimalField _ (Just Optional) Nothing )) = [Nothing]
 dictOfField (DecField (DecimalField _ (Just Optional) (Just (Left (Constant _))))) = [Nothing]
 dictOfField (DecField (DecimalField _ (Just Optional) (Just (Left (Default Nothing))))) = [Nothing]
 dictOfField (DecField (DecimalField _ (Just Optional) (Just (Left (Default (Just _)))))) = [Nothing]
 dictOfField (DecField (DecimalField fname (Just Optional) (Just (Left (Copy oc))))) = [Just $ dictOfOpContext oc fname]
-dictOfField (DecField (DecimalField _ (Just Optional) (Just (Left (Increment _))))) = error "S2:Increment operator is only applicable to integer fields." 
+dictOfField (DecField (DecimalField _ (Just Optional) (Just (Left (Increment _))))) = throw $ S2 "Increment operator is only applicable to integer fields." 
 dictOfField (DecField (DecimalField fname (Just Optional) (Just (Left (Delta oc))))) = [Just $ dictOfOpContext oc fname]
-dictOfField (DecField (DecimalField _ (Just Optional) (Just (Left (Tail _))))) = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields." 
+dictOfField (DecField (DecimalField _ (Just Optional) (Just (Left (Tail _))))) = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields." 
 dictOfField (DecField (DecimalField fname (Just Optional) (Just (Right (DecFieldOp maybe_opE maybe_opM))))) = dictOfField (IntField (Int32Field (FieldInstrContent (uniqueFName fname "e") (Just Optional) maybe_opE))) 
     ++ dictOfField (IntField (Int64Field (FieldInstrContent (uniqueFName fname "m") (Just Mandatory) maybe_opM)))
 dictOfField (DecField (DecimalField fname (Just Mandatory) (Just (Right (DecFieldOp maybe_opE maybe_opM))))) = dictOfField (IntField (Int32Field (FieldInstrContent (uniqueFName fname "e") (Just Mandatory) maybe_opE)))
@@ -1069,10 +1070,10 @@ dictOfField (DecField (DecimalField fname (Just Mandatory) (Just (Right (DecFiel
 dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname Nothing maybeOp))) = dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Mandatory) maybeOp)))
 dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) Nothing))) = [Nothing]
 dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Constant _))))) = [Nothing]
-dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))))) = error "S5: No initial value given for mandatory default operator."
+dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))))) = throw $ S5 " No initial value given for mandatory default operator."
 dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Default (Just _)))))) = [Nothing]
 dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Mandatory) (Just (Copy oc))))) = [Just $ dictOfOpContext oc fname]
-dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Increment _))))) = error "S2:Increment operator is only applicable to integer fields." 
+dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Increment _))))) = throw $ S2 "Increment operator is only applicable to integer fields." 
 dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Mandatory) (Just (Delta oc))))) = [Just $ dictOfOpContext oc fname]
 dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Mandatory) (Just (Tail oc))))) = [Just $ dictOfOpContext oc fname]
 dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) Nothing))) = [Nothing]
@@ -1080,7 +1081,7 @@ dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional
 dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Default Nothing))))) = [Nothing]
 dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Default (Just _)))))) = [Nothing]
 dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Optional) (Just (Copy oc))))) = [Just $ dictOfOpContext oc fname]
-dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Increment _))))) = error "S2:Increment operator is only applicable to integer fields." 
+dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Increment _))))) = throw $ S2 "Increment operator is only applicable to integer fields." 
 dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Optional) (Just (Delta oc))))) = [Just $ dictOfOpContext oc fname]
 dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Optional) (Just (Tail oc))))) = [Just $ dictOfOpContext oc fname]
 dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname Nothing maybeOp) maybe_length)) = dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Mandatory) maybeOp) maybe_length))
@@ -1088,14 +1089,14 @@ dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory)
 dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) Nothing) _)) = [Nothing]
 dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Constant _))) _)) = [Nothing]
 dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just (Constant _))) _)) = [Nothing]
-dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))) _)) = error "S5: No initial value given for mandatory default operator."
+dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))) _)) = throw $ S5 " No initial value given for mandatory default operator."
 dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Default (Just _)))) _)) = [Nothing]
 dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just (Default Nothing))) _)) = [Nothing]
 dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Default (Just _)))) _)) = [Nothing]
 dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Copy oc))) _)) = [Just $ dictOfOpContext oc fname]
 dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Copy oc))) _)) = [Just $ dictOfOpContext oc fname]
-dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Increment _))) _)) = error "S2:Increment operator is only applicable to integer fields." 
-dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Increment _))) _)) = error "S2:Increment operator is only applicable to integer fields." 
+dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Increment _))) _)) = throw $ S2 "Increment operator is only applicable to integer fields." 
+dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Increment _))) _)) = throw $ S2 "Increment operator is only applicable to integer fields." 
 dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Delta oc))) _)) = [Just $ dictOfOpContext oc fname]
 dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Delta oc))) _)) = [Just $ dictOfOpContext oc fname]
 dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail oc))) _)) = [Just $ dictOfOpContext oc fname] 
@@ -1117,14 +1118,14 @@ dictOfIntField (FieldInstrContent _ (Just Mandatory) (Just (Default _))) = Nothi
 dictOfIntField (FieldInstrContent fname (Just Mandatory) (Just (Copy oc))) = Just $ dictOfOpContext oc fname
 dictOfIntField (FieldInstrContent fname (Just Mandatory) (Just (Increment oc))) = Just $ dictOfOpContext oc fname
 dictOfIntField (FieldInstrContent fname (Just Mandatory) (Just (Delta oc))) = Just $ dictOfOpContext oc fname
-dictOfIntField (FieldInstrContent _ (Just Mandatory) (Just (Tail _))) = error "S2: Tail operator can not be applied on an integer type field." 
+dictOfIntField (FieldInstrContent _ (Just Mandatory) (Just (Tail _))) = throw $ S2 " Tail operator can not be applied on an integer type field." 
 dictOfIntField (FieldInstrContent _ (Just Optional) Nothing) =  Nothing
 dictOfIntField (FieldInstrContent _ (Just Optional) (Just (Constant _))) = Nothing
 dictOfIntField (FieldInstrContent _ (Just Optional) (Just (Default _))) = Nothing
 dictOfIntField (FieldInstrContent fname (Just Optional) (Just (Copy oc))) = Just $ dictOfOpContext oc fname
 dictOfIntField (FieldInstrContent fname (Just Optional) (Just (Increment oc))) = Just $ dictOfOpContext oc fname
 dictOfIntField (FieldInstrContent fname (Just Optional) (Just (Delta oc))) = Just $ dictOfOpContext oc fname
-dictOfIntField (FieldInstrContent _ (Just Optional) (Just (Tail _))) = error "S2: Tail operator can not be applied on an integer type field." 
+dictOfIntField (FieldInstrContent _ (Just Optional) (Just (Tail _))) = throw $ S2 " Tail operator can not be applied on an integer type field." 
 
 -- |Outputs a triple (DictionaryName, Key, Value) depending on OpContext and 
 -- the NsName of a field.
@@ -1150,8 +1151,8 @@ templateIdentifier = do
         (Just (UI32 i')) -> do 
             env <- ask
             template2P (templates env M.! tid2temp env i')
-        (Just _) ->  error "Coding error: templateId field must be of type I."
-        Nothing -> error "Failed to parse template identifier."
+        (Just _) ->  throw $ OtherException "Coding error: templateId field must be of type I."
+        Nothing -> throw $ OtherException "Failed to parse template identifier."
 
     where p = field2Parser (IntField (UInt32Field (FieldInstrContent 
                             (NsName (NameAttr "templateId") Nothing Nothing) 

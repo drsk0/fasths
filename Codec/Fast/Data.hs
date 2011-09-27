@@ -7,7 +7,7 @@
 -- Stability   :  experimental
 -- Portability :  unknown
 --
-{-#LANGUAGE TypeSynonymInstances, GeneralizedNewtypeDeriving, FlexibleInstances, GADTs, MultiParamTypeClasses, ExistentialQuantification, TypeFamilies #-}
+{-#LANGUAGE TypeSynonymInstances, GeneralizedNewtypeDeriving, FlexibleInstances, GADTs, MultiParamTypeClasses, ExistentialQuantification, TypeFamilies, DeriveDataTypeable #-}
 
 module Codec.Fast.Data 
 (
@@ -52,7 +52,8 @@ Token (..),
 UnicodeString,
 AsciiString,
 Decimal,
-anySBEEntity
+anySBEEntity,
+FASTException (..)
 )
 
 where
@@ -68,6 +69,39 @@ import Data.Word
 import qualified Data.Map as M
 import qualified Data.Attoparsec as A
 import Control.Applicative 
+import Control.Exception
+import Data.Typeable
+
+data FASTException = S1 String
+                   | S2 String
+                   | S3 String
+                   | S4 String 
+                   | S5 String
+                   | D1 String
+                   | D2 String 
+                   | D3 String
+                   | D4 String
+                   | D5 String
+                   | D6 String
+                   | D7 String
+                   | D8 String
+                   | D9 String
+                   | D10 String
+                   | D11 String
+                   | D12 String
+                   | R1 String
+                   | R2 String
+                   | R3 String
+                   | R4 String
+                   | R5 String 
+                   | R6 String
+                   | R7 String
+                   | R8 String
+                   | R9 String
+                   | OtherException String
+                   deriving (Show, Typeable)
+
+instance Exception FASTException
 
 -- | We need type witnesses to handle manipulation of dictionaries with entries of all possible 
 -- primitive types in generic code.
@@ -119,69 +153,69 @@ instance Primitive Int32 where
     newtype Delta Int32 = Di32 Int32 deriving (Num, Ord, Show, Eq)
     witnessType = TypeWitnessI32
     assertType (TypeWitnessI32 i) = i
-    assertType _ = error "D4: Type mismatch."
+    assertType _ = throw $ D4 "Type mismatch."
     toValue = I32
     defaultBaseValue = 0 
     ivToPrimitive = read . trimWhiteSpace . text
     delta i (Di32 i') = i + i'
-    ftail = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields."
+    ftail = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     readP = int
     readD = Di32 <$> int
-    readT = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields."
+    readT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
 
 instance Primitive Word32 where
     newtype Delta Word32 = Dw32 Int32 deriving (Num, Ord, Show, Eq)
     witnessType = TypeWitnessW32
     assertType (TypeWitnessW32 w) = w
-    assertType _ = error "D4: Type mismatch."
+    assertType _ = throw $ D4 "Type mismatch."
     toValue = UI32
     defaultBaseValue = 0
     ivToPrimitive = read . trimWhiteSpace . text
     delta w (Dw32 i) = fromIntegral (fromIntegral w + i)
-    ftail = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields."
+    ftail = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     readP = uint
     readD = Dw32 <$> int
-    readT = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields."
+    readT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
 
 instance Primitive Int64 where
     newtype Delta Int64 = Di64 Int64 deriving (Num, Ord, Show, Eq)
     witnessType = TypeWitnessI64
     assertType (TypeWitnessI64 i) = i
-    assertType _ = error "D4: Type mismatch."
+    assertType _ = throw $ D4 "Type mismatch."
     toValue = I64
     defaultBaseValue = 0
     ivToPrimitive = read . trimWhiteSpace . text
     delta i (Di64 i')= i + i'
-    ftail = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields."
+    ftail = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     readP = int
     readD = Di64 <$> int
-    readT = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields."
+    readT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
 
 instance Primitive Word64 where
     newtype Delta Word64 = Dw64 Int64 deriving (Num, Ord, Show, Eq)
     witnessType = TypeWitnessW64
     assertType (TypeWitnessW64 w) = w
-    assertType _ = error "D4: Type mismatch."
+    assertType _ = throw $ D4 "Type mismatch."
     toValue = UI64
     defaultBaseValue = 0
     ivToPrimitive = read . trimWhiteSpace . text
     delta w (Dw64 i) = fromIntegral (fromIntegral w + i)
-    ftail = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields." 
+    ftail = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields." 
     readP = uint
     readD = Dw64 <$> int
-    readT = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields."
+    readT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
 
 instance Primitive AsciiString where
     newtype Delta AsciiString = Dascii (Int32, String)
     witnessType = TypeWitnessASCII
     assertType (TypeWitnessASCII s) = s
-    assertType _ = error "D4: Type mismatch."
+    assertType _ = throw $ D4 "Type mismatch."
     toValue = A
     defaultBaseValue = ""
     ivToPrimitive = text
     delta s1 (Dascii (l, s2)) | l < 0 = s2 ++ s1' where s1' = genericDrop (l + 1) s1
     delta s1 (Dascii (l, s2)) | l >= 0 = s1' ++ s2 where s1' = genericTake (genericLength s1 - l) s1
-    delta _ _ = error "Type mismatch."
+    delta _ _ = throw $ D4 "Type mismatch."
     ftail s1 s2 = take (length s1 - length s2) s1 ++ s2
     readP = asciiString
     readD = do 
@@ -210,7 +244,7 @@ instance Primitive (Int32, Int64) where
     newtype Delta (Int32, Int64) = Ddec (Int32, Int64)
     witnessType = TypeWitnessDec
     assertType (TypeWitnessDec (e, m)) = (e, m)
-    assertType _ = error "D4: Type mismatch."
+    assertType _ = throw $ D4 "Type mismatch."
     toValue (e, m) = Dec (fromRational (toRational m * 10^^e))
     defaultBaseValue = (0, 0)
     ivToPrimitive (InitialValueAttr s) = let    s' = trimWhiteSpace s 
@@ -222,25 +256,25 @@ instance Primitive (Int32, Int64) where
                                                 h xs = toEnum (length (takeWhile (/= '.') xs))
                                          in (mant, expo)
     delta (e1, m1) (Ddec (e2, m2)) = (e1 + e2, m1 + m2)
-    ftail = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields."
+    ftail = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     readP = do 
         e <- int::A.Parser Int32
         m <- int::A.Parser Int64
         return (e, m)
     readD = Ddec <$> readP
-    readT = error "S2:Tail operator is only applicable to ascii, unicode and bytevector fields."
+    readT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
 
 instance Primitive B.ByteString where
     newtype Delta B.ByteString = Dbs (Int32, B.ByteString)
     witnessType = TypeWitnessBS
     assertType (TypeWitnessBS bs) = bs
-    assertType _ = error "D4: Type mismatch."
+    assertType _ = throw $ D4 "Type mismatch."
     toValue = B 
     defaultBaseValue = B.empty
     ivToPrimitive iv = B.pack (map (toEnum . digitToInt) (filter whiteSpace (text iv)))
     delta bv (Dbs (l, bv')) | l < 0 = bv'' `B.append` bv' where bv'' = genericDrop (l + 1) bv 
     delta bv (Dbs (l, bv')) | l >= 0 = bv'' `B.append` bv' where bv'' = genericTake (genericLength bv - l) bv
-    delta _ _ = error "Type mismatch."
+    delta _ _ = throw $ D4 "Type mismatch."
     ftail b1 b2 = B.take (B.length b1 - B.length b2) b1 `B.append` b2
     readP = byteVector
     readD = do 

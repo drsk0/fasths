@@ -5,25 +5,29 @@ import Text.XML.HXT.Core (readDocument)
 import qualified Data.Attoparsec as A
 import Control.Monad.State
 import Control.Applicative
+import Control.Exception (Exception)
 import Data.Word (Word32)
 
 -- |Example of a stream. This stream never resets its context.
-stream0::Templates -> (Word32 -> String) -> A.Parser [(NsName, Maybe Value)]
+stream0 :: Templates -> (Word32 -> String) -> A.Parser [(NsName, Maybe Value)]
 stream0 ts tid2tem = evalStateT (A.many1 (message ts tid2tem)) (initState ts)
 
 -- |Example of a stream. In this case, the stream consists of messages
 -- and the parser is reset when a new message starts.
-stream1::Templates -> (Word32 -> String) -> A.Parser [(NsName, Maybe Value)]
+stream1 :: Templates -> (Word32 -> String) -> A.Parser [(NsName, Maybe Value)]
 stream1 ts tid2tem = evalStateT (A.many1 (Codec.Fast.reset ts >> message ts tid2tem)) (initState ts)
 
 -- |Example of a stream. This stream resets the state on every occurence of a message with
 -- name "Reset".
-stream2::Templates -> (Word32 -> String) -> A.Parser [(NsName, Maybe Value)]
+stream2 :: Templates -> (Word32 -> String) -> A.Parser [(NsName, Maybe Value)]
 stream2 ts tid2tem = evalStateT (A.many1 (resetMsg <|> msg)) (initState ts)
     where    msg = message ts tid2tem
              resetMsg =  do 
                     m@(NsName (NameAttr n) _ _, _) <- msg
                     if n == "Reset" then Codec.Fast.reset ts >> return m else fail "Not reset."
+
+handler :: Exception e => e -> IO ()
+handler e = error (show e)
 
 main::IO ()
 main = do 
@@ -31,7 +35,8 @@ main = do
     ts <- if not . null $ args then parseTemplateXML (readDocument [] (args!!0)) else error "No template file given."
     bs <- B.readFile (args!!1)
 --    print ts
-    print (A.feed (A.parse (stream0 ts Main.tid2temp) bs) B.empty)
+    catch (print (A.feed (A.parse (stream0 ts Main.tid2temp) bs) B.empty)) handler
+
 
 tid2temp::Word32 -> String
 tid2temp 30 = "MDIncRefresh_30"

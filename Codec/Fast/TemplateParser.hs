@@ -15,7 +15,7 @@ import Text.XML.HXT.Core
 import Text.XML.HXT.Arrow.XmlState.RunIOStateArrow
 import Data.Maybe (listToMaybe)
 import Codec.Fast.Data
-
+import Control.Exception (throw)
 
 data TPState = TPState {
     ns          ::Maybe NsAttr,
@@ -27,7 +27,7 @@ parseTemplateXML::IOStateArrow TPState XmlTree XmlTree -> IO Templates
 parseTemplateXML ar = fmap safehead (runXIOState (initialState (TPState Nothing Nothing Nothing)) (ar >>> deep (isElem >>> hasName "templates") >>> getTemplates))
 
 safehead::[a] -> a
-safehead xs | null xs = error "Template file could not be parsed."
+safehead xs | null xs = throw $ OtherException "Template file could not be parsed."
 safehead xs = head xs
 
 getTemplates::IOStateArrow TPState XmlTree Templates
