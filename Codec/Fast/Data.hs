@@ -72,6 +72,7 @@ import Control.Applicative
 import Control.Exception
 import Data.Typeable
 
+-- | FAST exception.
 data FASTException = S1 String
                    | S2 String
                    | S3 String
@@ -426,10 +427,7 @@ data DecFieldOp = DecFieldOp {
     } deriving (Show)
 
 -- |Dictionary consists of a name and a list of key value pairs.
-data Dictionary = Dictionary String (M.Map DictKey DictValue) 
-
-instance Show Dictionary where
-    show _ = ""
+data Dictionary = Dictionary String (M.Map DictKey DictValue)
 
 data DictKey = N NsName
              | K NsKey
