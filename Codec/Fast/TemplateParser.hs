@@ -182,7 +182,7 @@ getMantissa::IOStateArrow TPState XmlTree FieldOp
 getMantissa = hasName "mantissa" >>> getFieldOp
 
 getAsciiStringField::IOStateArrow TPState XmlTree AsciiStringField
-getAsciiStringField = hasName "string" >>> (((getAttrValue' "charset" >>> isA ( == "ascii")) `guards` (getFieldInstrContent >>> arr AsciiStringField)) <+> (getFieldInstrContent >>> arr AsciiStringField))
+getAsciiStringField = hasName "string" >>> (((getAttrValue' "charset" >>> isA ( == "ascii")) `guards` (getFieldInstrContent >>> arr AsciiStringField)) <+> (getAttrValue0 "charset" `guards` (getFieldInstrContent >>> arr AsciiStringField)))
 
 getUnicodeStringField::IOStateArrow TPState XmlTree UnicodeStringField
 getUnicodeStringField = 
