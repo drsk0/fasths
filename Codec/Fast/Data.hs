@@ -472,7 +472,6 @@ data InitialValueAttr = InitialValueAttr {
 -- the 'ns' attribute. For templates the namespace URI is given by the 
 -- 'templateNs' attribute.
 -- Note that full name constructors in the data structures are named 'fname'.
--- QUESTION: What is the 'idAttribute' for?
 
 -- |A full name for an application type, field or operator key.
 data NsName = NsName NameAttr (Maybe NsAttr) (Maybe IdAttr) deriving (Eq, Ord, Show)
@@ -508,7 +507,7 @@ stopBitSet c = testBit c 7
 -- |Bytevector size preamble parser.
 byteVector::A.Parser B.ByteString
 byteVector = do
-    s <- int::A.Parser Word32
+    s <- uint::A.Parser Word32
     byteVector' s
 
 -- |Bytevector field parser. The first argument is the size of the bytevector.
