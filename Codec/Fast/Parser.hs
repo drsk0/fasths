@@ -20,7 +20,7 @@ where
 
 import Prelude as P hiding (dropWhile)
 import qualified Data.ByteString as B
-import qualified Data.ByteString.UTF8 as U
+import Data.ByteString.UTF8 (toString)
 import qualified Data.Attoparsec as A
 import Control.Monad.State
 import Control.Monad.Reader
@@ -786,7 +786,7 @@ unicodeF2P::UnicodeStringField -> FParser (Maybe UnicodeString)
 unicodeF2P (UnicodeStringField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)
     = do 
         m_bv <- bytevecF2P (ByteVectorField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)
-        return (m_bv >>= return . U.toString) -- Maybe is itself a monad.
+        return (m_bv >>= return . toString) -- Maybe is itself a monad.
 
 -- |Maps a sequence field to its parser.
 seqF2P::Sequence -> FParser (NsName, Maybe Value)
@@ -1170,9 +1170,6 @@ uniqueFName fname s = NsName (NameAttr(n ++ s)) ns ide
 
 -- |Decrement the value of an integer, when it is positive.
 minusOne::(Ord a, Num a) => a -> a
-minusOne x | x > 0 = x - 1
-minusOne x | x > 0 = x - 1
-minusOne x | x > 0 = x - 1
 minusOne x | x > 0 = x - 1
 minusOne x = x
 
