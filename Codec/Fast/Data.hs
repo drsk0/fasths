@@ -512,7 +512,7 @@ anySBEEntity :: A.Parser B.ByteString
 anySBEEntity = takeTill' stopBitSet
 
 _anySBEEntity :: B.ByteString -> Coparser
-_anySBEEntity bs = P.putByteString ((B.init bs) `B.append` (B.singleton (setBit (B.last bs) 7)))
+_anySBEEntity bs = P.putByteString (B.init bs `B.append` B.singleton (setBit (B.last bs) 7))
 
 -- |Like takeTill, but takes the matching byte as well.
 takeTill' :: (Word8 -> Bool) -> A.Parser B.ByteString
@@ -540,7 +540,7 @@ byteVector' :: Word32 -> A.Parser B.ByteString
 byteVector' c = A.take (fromEnum c)
 
 _byteVector :: B.ByteString -> Coparser
-_byteVector bs = (_uint ((fromIntegral(B.length bs)) :: Word32)) >> (P.putByteString bs)
+_byteVector bs = _uint (fromIntegral(B.length bs) :: Word32) >> P.putByteString bs
 
 -- |Unsigned integer parser, doesn't check for bounds.
 -- TODO: should we check for R6 errors, i.e overlong fields?
@@ -556,7 +556,7 @@ _uint ui = _anySBEEntity (_uintBS ui)
 
 _uintBS :: (Bits a, Eq a, Integral a) => a -> B.ByteString
 _uintBS ui = if ui' /= 0 
-            then (_uintBS ui') `B.snoc` (fromIntegral (ui .&. 127) :: Word8)
+            then _uintBS ui' `B.snoc` (fromIntegral (ui .&. 127) :: Word8)
             else B.empty
             where ui' = shiftR ui 7
 
@@ -574,7 +574,7 @@ int = do
 _int :: (Bits a, Ord a, Integral a) => a -> Coparser
 _int i = if i < 0 
          then _anySBEEntity (_uintBS i)
-         else _anySBEEntity ((setBit (B.head (_uintBS i)) 6) `B.cons` B.tail (_uintBS i))
+         else _anySBEEntity (setBit (B.head (_uintBS i)) 6 `B.cons` B.tail (_uintBS i))
 
 -- |ASCII string field parser, non-Nullable.
 asciiString :: A.Parser AsciiString
