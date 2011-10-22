@@ -63,11 +63,12 @@ import Data.ListLike (dropWhile, genericDrop, genericTake, genericLength)
 import Data.Char (digitToInt)
 import Data.Bits
 import qualified Data.ByteString as B
-import Data.ByteString.Char8 (unpack) 
+import Data.ByteString.Char8 (unpack, pack) 
 import Data.Int
 import Data.Word
 import qualified Data.Map as M
 import qualified Data.Attoparsec as A
+import qualified Data.Binary.Put as P
 import Control.Applicative 
 import Control.Exception
 import Data.Typeable
@@ -116,21 +117,27 @@ data TypeWitness a where
     TypeWitnessBS    :: B.ByteString  -> TypeWitness B.ByteString
     TypeWitnessDec   :: Decimal       -> TypeWitness Decimal
 
+type Coparser = P.Put
+
 -- | Primitive type class.
 class Primitive a where
-    data Delta a       :: *
-    witnessType        :: a -> TypeWitness a
-    assertType         :: (Primitive b) => TypeWitness b -> a
-    toValue            :: a -> Value
-    defaultBaseValue   :: a
-    ivToPrimitive      :: InitialValueAttr -> a
-    delta              :: a -> Delta a -> a
-    ftail              :: a -> a -> a
-    readP              :: A.Parser a
-    readD              :: A.Parser (Delta a)
-    readT              :: A.Parser a
+    data Delta a     :: *
+    witnessType      :: a -> TypeWitness a
+    assertType       :: (Primitive b) => TypeWitness b -> a
+    toValue          :: a -> Value
+    defaultBaseValue :: a
+    ivToPrimitive    :: InitialValueAttr -> a
+    delta            :: a -> Delta a -> a
+    ftail            :: a -> a -> a
+    decodeP          :: A.Parser a
+    decodeD          :: A.Parser (Delta a)
+    decodeT          :: A.Parser a
+    encodeP          :: a -> Coparser
+    encodeD          :: Delta a -> Coparser
+    encodeT          :: a -> Coparser
 
-    readT = readP
+    decodeT = decodeP
+    encodeT = encodeP
 
 -- |The values in a messages.
 data Value = I32 Int32
@@ -160,9 +167,11 @@ instance Primitive Int32 where
     ivToPrimitive = read . trimWhiteSpace . text
     delta i (Di32 i') = i + i'
     ftail = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
-    readP = int
-    readD = Di32 <$> int
-    readT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
+    decodeP = int
+    decodeD = Di32 <$> int
+    decodeT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
+    encodeP = _int
+    encodeD (Di32 i) = encodeP i
 
 instance Primitive Word32 where
     newtype Delta Word32 = Dw32 Int32 deriving (Num, Ord, Show, Eq)
@@ -174,9 +183,11 @@ instance Primitive Word32 where
     ivToPrimitive = read . trimWhiteSpace . text
     delta w (Dw32 i) = fromIntegral (fromIntegral w + i)
     ftail = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
-    readP = uint
-    readD = Dw32 <$> int
-    readT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
+    decodeP = uint
+    decodeD = Dw32 <$> int
+    decodeT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
+    encodeP = _uint
+    encodeD (Dw32 w) = encodeP w
 
 instance Primitive Int64 where
     newtype Delta Int64 = Di64 Int64 deriving (Num, Ord, Show, Eq)
@@ -188,9 +199,11 @@ instance Primitive Int64 where
     ivToPrimitive = read . trimWhiteSpace . text
     delta i (Di64 i')= i + i'
     ftail = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
-    readP = int
-    readD = Di64 <$> int
-    readT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
+    decodeP = int
+    decodeD = Di64 <$> int
+    decodeT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
+    encodeP = _int
+    encodeD (Di64 i) = encodeP i
 
 instance Primitive Word64 where
     newtype Delta Word64 = Dw64 Int64 deriving (Num, Ord, Show, Eq)
@@ -202,9 +215,11 @@ instance Primitive Word64 where
     ivToPrimitive = read . trimWhiteSpace . text
     delta w (Dw64 i) = fromIntegral (fromIntegral w + i)
     ftail = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields." 
-    readP = uint
-    readD = Dw64 <$> int
-    readT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
+    decodeP = uint
+    decodeD = Dw64 <$> int
+    decodeT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
+    encodeP = _uint
+    encodeD (Dw64 i) = encodeP i
 
 instance Primitive AsciiString where
     newtype Delta AsciiString = Dascii (Int32, String)
@@ -218,12 +233,14 @@ instance Primitive AsciiString where
     delta s1 (Dascii (l, s2)) | l >= 0 = s1' ++ s2 where s1' = genericTake (genericLength s1 - l) s1
     delta _ _ = throw $ D4 "Type mismatch."
     ftail s1 s2 = take (length s1 - length s2) s1 ++ s2
-    readP = asciiString
-    readD = do 
+    decodeP = asciiString
+    decodeD = do 
                 l <- int
-                s <- readP
+                s <- decodeP
                 return (Dascii (l, s))
-    readT = readP
+    decodeT = decodeP
+    encodeP = _asciiString
+    encodeD (Dascii (i, s)) = encodeP i >> encodeP s
 
 {-instance Primitive UnicodeString  where-}
     {-data TypeWitness UnicodeString = TypeWitnessUNI UnicodeString -}
@@ -234,12 +251,12 @@ instance Primitive AsciiString where
     {-ivToPrimitive = text-}
     {-delta s d =  B.unpack (delta (B.pack s) d)-}
     {-ftail s1 s2 = B.unpack (ftail (B.pack s1) s2)-}
-    {-readP = B.unpack <$> byteVector-}
-    {-readD = do-}
+    {-decodeP = B.unpack <$> byteVector-}
+    {-decodeD = do-}
                 {-l <- int-}
-                {-bv <- readP-}
+                {-bv <- decodeP-}
                 {-return (l, bv)-}
-    {-readT = readP-}
+    {-decodeT = decodeP-}
 
 instance Primitive (Int32, Int64) where
     newtype Delta (Int32, Int64) = Ddec (Int32, Int64)
@@ -258,12 +275,14 @@ instance Primitive (Int32, Int64) where
                                          in (mant, expo)
     delta (e1, m1) (Ddec (e2, m2)) = (e1 + e2, m1 + m2)
     ftail = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
-    readP = do 
+    decodeP = do 
         e <- int::A.Parser Int32
         m <- int::A.Parser Int64
         return (e, m)
-    readD = Ddec <$> readP
-    readT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
+    decodeD = Ddec <$> decodeP
+    decodeT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
+    encodeP (e, m) = encodeP e >> encodeP m
+    encodeD (Ddec (e, m)) = encodeP e >> encodeP m
 
 instance Primitive B.ByteString where
     newtype Delta B.ByteString = Dbs (Int32, B.ByteString)
@@ -277,12 +296,13 @@ instance Primitive B.ByteString where
     delta bv (Dbs (l, bv')) | l >= 0 = bv'' `B.append` bv' where bv'' = genericTake (genericLength bv - l) bv
     delta _ _ = throw $ D4 "Type mismatch."
     ftail b1 b2 = B.take (B.length b1 - B.length b2) b1 `B.append` b2
-    readP = byteVector
-    readD = do 
+    decodeP = byteVector
+    decodeD = do 
                 l <- int
-                bv <- readP
+                bv <- decodeP
                 return (Dbs (l, bv))
-    readT = readP
+    encodeP = _byteVector
+    encodeD (Dbs (i, bs)) = encodeP i >> encodeP bs
 
 --
 -- The following definitions follow allmost one to one the FAST specification.
@@ -488,11 +508,14 @@ newtype Token = Token String deriving (Eq, Ord, Show)
 
 
 -- |Get a Stopbit encoded entity.
-anySBEEntity::A.Parser B.ByteString
+anySBEEntity :: A.Parser B.ByteString
 anySBEEntity = takeTill' stopBitSet
 
+_anySBEEntity :: B.ByteString -> Coparser
+_anySBEEntity bs = P.putByteString ((B.init bs) `B.append` (B.singleton (setBit (B.last bs) 7)))
+
 -- |Like takeTill, but takes the matching byte as well.
-takeTill'::(Word8 -> Bool) -> A.Parser B.ByteString
+takeTill' :: (Word8 -> Bool) -> A.Parser B.ByteString
 takeTill' f = do
     str <- A.takeTill f
     c <- A.take 1
@@ -501,11 +524,11 @@ takeTill' f = do
 -- |Test wether the stop bit is set of a Char. (Note: Chars are converted to
 -- Word8's. 
 -- TODO: Is this unsafe?
-stopBitSet::Word8 -> Bool
+stopBitSet :: Word8 -> Bool
 stopBitSet c = testBit c 7
 
 -- |Bytevector size preamble parser.
-byteVector::A.Parser B.ByteString
+byteVector :: A.Parser B.ByteString
 byteVector = do
     s <- uint::A.Parser Word32
     byteVector' s
@@ -513,19 +536,32 @@ byteVector = do
 -- |Bytevector field parser. The first argument is the size of the bytevector.
 -- If the length of the bytevector is bigger than maxBound::Int an exception 
 -- will be trown.
-byteVector'::Word32 -> A.Parser B.ByteString
+byteVector' :: Word32 -> A.Parser B.ByteString
 byteVector' c = A.take (fromEnum c)
+
+_byteVector :: B.ByteString -> Coparser
+_byteVector bs = (_uint ((fromIntegral(B.length bs)) :: Word32)) >> (P.putByteString bs)
+
 -- |Unsigned integer parser, doesn't check for bounds.
 -- TODO: should we check for R6 errors, i.e overlong fields?
-uint::(Bits a, Num a) => A.Parser a
+uint :: (Bits a) => A.Parser a
 uint = do 
     bs <- anySBEEntity
     return (B.foldl h 0 bs)
     where   h::(Bits a, Num a) => a -> Word8 -> a
             h r w = fromIntegral (clearBit w 7) .|. shiftL r 7
         
+_uint :: (Bits a, Eq a, Integral a) => a -> Coparser
+_uint ui = _anySBEEntity (_uintBS ui)
+
+_uintBS :: (Bits a, Eq a, Integral a) => a -> B.ByteString
+_uintBS ui = if ui' /= 0 
+            then (_uintBS ui') `B.snoc` (fromIntegral (ui .&. 127) :: Word8)
+            else B.empty
+            where ui' = shiftR ui 7
+
 -- |Signed integer parser, doesn't check for bounds.
-int::(Bits a, Num a) => A.Parser a
+int :: (Bits a) => A.Parser a
 int = do
     bs <- anySBEEntity
     return (if testBit (B.head bs) 6 
@@ -535,15 +571,23 @@ int = do
             h::(Bits a, Num a) => a -> Word8 -> a
             h r w = fromIntegral (clearBit w 7) .|. shiftL r 7
 
+_int :: (Bits a, Ord a, Integral a) => a -> Coparser
+_int i = if i < 0 
+         then _anySBEEntity (_uintBS i)
+         else _anySBEEntity ((setBit (B.head (_uintBS i)) 6) `B.cons` B.tail (_uintBS i))
+
 -- |ASCII string field parser, non-Nullable.
-asciiString::A.Parser AsciiString
+asciiString :: A.Parser AsciiString
 asciiString = do
     bs <- anySBEEntity
     let bs' = B.init bs `B.append` B.singleton (clearBit (B.last bs) 7) in
         return (unpack bs')
 
+_asciiString :: AsciiString -> Coparser
+_asciiString s = _anySBEEntity (pack s)
+
 trimWhiteSpace :: String -> String
 trimWhiteSpace = reverse . dropWhile whiteSpace . reverse . dropWhile whiteSpace
 
-whiteSpace::Char -> Bool
+whiteSpace :: Char -> Bool
 whiteSpace c =  c `elem` " \t\r\n"

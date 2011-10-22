@@ -105,12 +105,12 @@ intF2P' :: (Primitive a, Num a, Ord a, Ord (Delta a), Num (Delta a)) => FieldIns
 intF2P' (FieldInstrContent fname Nothing maybe_op) = intF2P' (FieldInstrContent fname (Just Mandatory) maybe_op)
 -- pm: No, Nullable: No
 intF2P' (FieldInstrContent _ (Just Mandatory) Nothing)
-    = Just <$> l2 readP
+    = Just <$> l2 decodeP
 
 -- pm: No, Nullable: Yes
 intF2P' (FieldInstrContent _ (Just Optional) Nothing)
     = nULL 
-    <|> (Just . minusOne) <$> l2 readP
+    <|> (Just . minusOne) <$> l2 decodeP
 
 -- pm: No, Nullable: No
 intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Constant iv)))
@@ -118,7 +118,7 @@ intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Constant iv)))
 
 -- pm: Yes, Nullable: No
 intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Default (Just iv))))
-    = ifPresentElse (Just <$> l2 readP) (return (Just(ivToPrimitive iv)))
+    = ifPresentElse (Just <$> l2 decodeP) (return (Just(ivToPrimitive iv)))
 
 -- pm: Yes, Nullable: No
 intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing)))
@@ -128,7 +128,7 @@ intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing)))
 intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Copy oc)))
     = ifPresentElse   
     (do 
-        i <- l2 readP
+        i <- l2 decodeP
         updatePrevValue fname oc (Assigned (witnessType i))
         return (Just i)
     )
@@ -150,7 +150,7 @@ intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Increment oc)))
     = ifPresentElse
     (
     do 
-        i <- l2 readP
+        i <- l2 decodeP
         updatePrevValue fname oc (Assigned (witnessType i))
         return (Just i)
     )
@@ -177,11 +177,11 @@ intF2P' (FieldInstrContent _ (Just Optional) (Just (Constant iv)))
 
 -- pm: Yes, Nullable: Yes
 intF2P' (FieldInstrContent _ (Just Optional) (Just (Default (Just iv))))
-    = ifPresentElse (nULL <|> ((Just . minusOne) <$> l2 readP)) (return (Just $ ivToPrimitive iv))
+    = ifPresentElse (nULL <|> ((Just . minusOne) <$> l2 decodeP)) (return (Just $ ivToPrimitive iv))
 
 -- pm: Yes, Nullable: Yes
 intF2P' (FieldInstrContent _ (Just Optional) (Just (Default Nothing)))
-    = ifPresentElse (nULL <|> ((Just . minusOne) <$> l2 readP)) (return Nothing)
+    = ifPresentElse (nULL <|> ((Just . minusOne) <$> l2 decodeP)) (return Nothing)
 
 -- pm: Yes, Nullable: Yes
 intF2P' (FieldInstrContent fname (Just Optional) (Just (Copy oc)))
@@ -189,7 +189,7 @@ intF2P' (FieldInstrContent fname (Just Optional) (Just (Copy oc)))
     (
     nULL *> (updatePrevValue fname oc Empty >> return Nothing)
     <|> do 
-        i <- l2 readP
+        i <- l2 decodeP
         updatePrevValue fname oc (Assigned (witnessType i))
         return (Just $ minusOne i)
     )
@@ -210,7 +210,7 @@ intF2P' (FieldInstrContent fname (Just Optional) (Just (Increment oc)))
     (
     nULL *> (updatePrevValue fname oc Empty >> return Nothing)
     <|> do 
-        i <- l2 readP
+        i <- l2 decodeP
         updatePrevValue fname oc (Assigned (witnessType i))
         return (Just $ minusOne i)
     )
@@ -240,7 +240,7 @@ intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Delta oc)))
 
     in
         do 
-            d <- l2 readD
+            d <- l2 decodeD
             i <- (flip  delta d <$> (baseValue <$> prevValue fname oc))
             updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i)
 
@@ -255,7 +255,7 @@ intF2P' (FieldInstrContent fname (Just Optional) (Just (Delta oc)))
 
         in
             do 
-                d <- l2 readD
+                d <- l2 decodeD
                 i <- (flip delta (minusOne d) <$> (baseValue <$> prevValue fname oc))
                 updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i)
 
@@ -268,13 +268,13 @@ decF2P (DecimalField fname Nothing maybe_either_op)
 
 -- pm: Np, Nullable: No
 decF2P (DecimalField _ (Just Mandatory) Nothing)
-    = Just <$> (l2 readP)
+    = Just <$> (l2 decodeP)
 
 -- om: No, Nullable: Yes
 decF2P (DecimalField _ (Just Optional) Nothing)
     = nULL
     <|> do 
-            (e, m) <- l2 readP
+            (e, m) <- l2 decodeP
             return (Just (minusOne e, m))
 
 -- pm: No, Nullable: No
@@ -287,14 +287,14 @@ decF2P (DecimalField _ (Just Mandatory) (Just (Left (Default Nothing))))
 
 -- pm: Yes, Nullable: No
 decF2P (DecimalField _ (Just Mandatory) (Just (Left (Default (Just iv)))))
-    = ifPresentElse (Just <$> l2 readP) (return(Just(ivToPrimitive iv)))
+    = ifPresentElse (Just <$> l2 decodeP) (return(Just(ivToPrimitive iv)))
 
 -- pm: Yes, Nullable: No
 decF2P (DecimalField fname (Just Mandatory) (Just (Left (Copy oc)))) 
     = ifPresentElse
     (
     do
-        d <- l2 readP
+        d <- l2 decodeP
         updatePrevValue fname oc (Assigned (witnessType d))
         return (Just d)
     )
@@ -325,7 +325,7 @@ decF2P (DecimalField fname (Just Mandatory) (Just (Left (Delta oc))))
 
     in
         do 
-            d <- l2 readD
+            d <- l2 decodeD
             d' <- (flip  delta d <$> (baseValue <$> prevValue fname oc))
             updatePrevValue fname oc (Assigned (witnessType d')) >> return (Just d')
 
@@ -338,11 +338,11 @@ decF2P (DecimalField _ (Just Optional) (Just (Left (Constant iv))))
 
 -- pm: Yes, Nullable: Yes
 decF2P (DecimalField _ (Just Optional) (Just (Left (Default Nothing)))) 
-    = ifPresentElse (nULL <|> (Just <$> l2 readP)) (return Nothing)
+    = ifPresentElse (nULL <|> (Just <$> l2 decodeP)) (return Nothing)
 
 -- pm: Yes, Nullable: Yes
 decF2P (DecimalField _ (Just Optional) (Just (Left (Default (Just iv))))) 
-    = ifPresentElse (nULL <|> (Just <$> l2 readP)) (return (Just $ ivToPrimitive iv))
+    = ifPresentElse (nULL <|> (Just <$> l2 decodeP)) (return (Just $ ivToPrimitive iv))
 
 -- pm: Yes, Nullable: Yes
 decF2P (DecimalField fname (Just Optional) (Just (Left (Copy oc)))) 
@@ -350,7 +350,7 @@ decF2P (DecimalField fname (Just Optional) (Just (Left (Copy oc))))
     (
     nULL *> (updatePrevValue fname oc Empty >> return Nothing)
     <|> do
-            d <- l2 readP
+            d <- l2 decodeP
             updatePrevValue fname oc (Assigned (witnessType d))
             return (Just d)
     )
@@ -380,7 +380,7 @@ decF2P (DecimalField fname (Just Optional) (Just (Left (Delta oc))))
 
         in
             do 
-                d <- l2 readD
+                d <- l2 decodeD
                 d' <- (flip delta d <$> (baseValue <$> prevValue fname oc))
                 updatePrevValue fname oc (Assigned (witnessType d')) >> return (Just d')
 
@@ -422,12 +422,12 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname Nothing maybe_op))
     = asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) maybe_op))
 -- pm: No, Nullable: No
 asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) Nothing))
-    = Just <$> l2 readP
+    = Just <$> l2 decodeP
 -- pm: No, Nullable: Yes
 asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Optional) Nothing))
     = nULL
     <|> do
-        str <- l2 readP
+        str <- l2 decodeP
         return (Just (rmPreamble' str))
 
 -- pm: No, Nullable: No
@@ -443,7 +443,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Defaul
     = ifPresentElse
     (
     do
-        str <- l2 readP
+        str <- l2 decodeP
         return $ Just (rmPreamble str)
     )
     (
@@ -455,7 +455,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Co
     = ifPresentElse
     (
     do
-            s <- l2 readP
+            s <- l2 decodeP
             updatePrevValue fname oc (Assigned (witnessType s))
             return (Just (rmPreamble s))
     )
@@ -485,7 +485,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (De
             baseValue (Empty) = throw $ D6 "previous value in a delta operator can not be empty."
     in
         do 
-            str <- l2 readD
+            str <- l2 decodeD
             str' <- (flip delta str <$> (baseValue <$> prevValue fname oc))
             updatePrevValue fname oc (Assigned (witnessType str')) >> return (Just str')
 
@@ -504,7 +504,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Ta
     in
         do
             pva <- prevValue fname oc
-            t <- l2 readT
+            t <- l2 decodeT
             return (Just (baseValue pva `ftail` t))
     )
     (
@@ -526,10 +526,10 @@ asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Constan
 
 -- pm: Yes, Nullable: Yes
 asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Default Nothing))))
-    = ifPresentElse (nULL <|> (Just . rmPreamble' <$> l2 readP)) (return Nothing)
+    = ifPresentElse (nULL <|> (Just . rmPreamble' <$> l2 decodeP)) (return Nothing)
 -- pm: Yes, Nullable: Yes
 asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Default (Just iv)))))
-    = ifPresentElse (nULL <|> (Just . rmPreamble' <$> l2 readP)) (return (Just (ivToPrimitive iv)))
+    = ifPresentElse (nULL <|> (Just . rmPreamble' <$> l2 decodeP)) (return (Just (ivToPrimitive iv)))
 
 -- pm: Yes, Nullable: Yes
 asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Copy oc))))
@@ -538,7 +538,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Cop
     nULL *> (updatePrevValue fname oc Empty >> return Nothing)
     <|>
         do 
-            s <- rmPreamble' <$> l2 readP
+            s <- rmPreamble' <$> l2 decodeP
             updatePrevValue fname oc (Assigned (witnessType s))
             return (Just s)
     )
@@ -567,7 +567,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Del
                 baseValue (Empty) = throw $ D6 "previous value in a delta operator can not be empty."
         in
             do 
-                (Dascii d) <- l2 readD
+                (Dascii d) <- l2 decodeD
                 str <- (flip delta (Dascii (fst d, rmPreamble' (snd d))) <$> (baseValue <$> prevValue fname oc)) 
                 updatePrevValue fname oc (Assigned (witnessType str)) >> return (Just str))
 
@@ -586,7 +586,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Tai
         in
             do
                 bv <- prevValue fname oc >>= baseValue
-                t <- rmPreamble' <$> l2 readT
+                t <- rmPreamble' <$> l2 decodeT
                 return (Just (bv `ftail` t))
     )
     (
@@ -607,13 +607,13 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname Nothing maybe_op) len)
 
 -- pm: No, Nullable: No
 bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Mandatory) Nothing ) _ ) 
-    = Just <$> l2 readP
+    = Just <$> l2 decodeP
 
 -- pm: No, Nullable: Yes
 bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Optional) Nothing ) _ ) 
     = nULL
     <|> do
-        bv <- l2 readP
+        bv <- l2 decodeP
         return $ Just bv
 
 -- pm: No, Nullable: No
@@ -632,7 +632,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Default 
     = ifPresentElse
     (
     do
-        bv <- l2 readP
+        bv <- l2 decodeP
         return (Just bv)
     )
     (
@@ -641,16 +641,16 @@ bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Default 
 
 -- pm: Yes, Nullable: Yes
 bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Default Nothing))) _ ) 
-    = ifPresentElse (nULL <|> (Just <$> l2 readP)) (return Nothing)
+    = ifPresentElse (nULL <|> (Just <$> l2 decodeP)) (return Nothing)
 -- pm: Yes, Nullable: Yes
 bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Default (Just iv)))) _ ) 
-    = ifPresentElse (nULL <|> Just <$> l2 readP) (return (Just (ivToPrimitive iv)))
+    = ifPresentElse (nULL <|> Just <$> l2 decodeP) (return (Just (ivToPrimitive iv)))
 -- pm: Yes, Nullable: No
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Copy oc))) _ ) 
     = ifPresentElse   
     (
     do
-        bv <- l2 readP 
+        bv <- l2 decodeP 
         updatePrevValue fname oc (Assigned (witnessType bv))
         return (Just bv)
     )
@@ -672,7 +672,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Copy 
     (
     nULL *> (updatePrevValue fname oc Empty >> return Nothing)
     <|> do
-            bv <- l2 readP
+            bv <- l2 decodeP
             updatePrevValue fname oc (Assigned (witnessType bv))
             return (Just bv)
     )
@@ -703,7 +703,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Delt
             baseValue (Empty) = throw $ D6 "previous value in a delta operator can not be empty."
     in
         do 
-            bv <- l2 readD
+            bv <- l2 decodeD
             Just <$> (flip delta bv <$> (baseValue <$> prevValue fname oc))
 
 -- pm: No, Nullable: Yes
@@ -716,7 +716,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Delta
                 baseValue (Empty) = throw $ D6 "previous value in a delta operator can not be empty."
         in
             do 
-                bv <- l2 readD
+                bv <- l2 decodeD
                 bv' <- (flip delta bv <$> (baseValue <$> prevValue fname oc))
                 updatePrevValue fname oc (Assigned (witnessType bv')) >> return (Just bv'))
 
@@ -736,7 +736,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail
     in
         do
             pva <- prevValue fname oc
-            t <- l2 readT
+            t <- l2 decodeT
             return (Just(baseValue pva `ftail` t))
     )
     (
@@ -767,7 +767,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Tail 
         in
             do
                 bv <- prevValue fname oc >>= baseValue
-                t <- l2 readT
+                t <- l2 decodeT
                 return (Just (bv `ftail` t))
     )
     (
