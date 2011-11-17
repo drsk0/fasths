@@ -53,7 +53,10 @@ UnicodeString,
 AsciiString,
 Decimal,
 anySBEEntity,
-FASTException (..)
+FASTException (..),
+Coparser (..),
+Context (..),
+_anySBEEntity
 )
 
 where
@@ -66,12 +69,14 @@ import qualified Data.ByteString as B
 import Data.ByteString.Char8 (unpack, pack) 
 import Data.Int
 import Data.Word
+import Data.Monoid
 import qualified Data.Map as M
 import qualified Data.Attoparsec as A
-import qualified Data.Binary.Put as P
+import qualified Data.Binary.Builder as BU
 import Control.Applicative 
 import Control.Exception
 import Data.Typeable
+import Data.Functor.Contravariant
 
 -- | FAST exception.
 data FASTException = S1 String
@@ -105,6 +110,14 @@ data FASTException = S1 String
 
 instance Exception FASTException
 
+-- |State of the (co)parser.
+data Context = Context {
+    -- |Presence map
+    pm   :: [Bool],
+    -- |Dictionaries.
+    dict :: M.Map String Dictionary
+    }
+
 -- | We need type witnesses to handle manipulation of dictionaries with entries of all possible 
 -- primitive types in generic code.
 data TypeWitness a where 
@@ -117,7 +130,16 @@ data TypeWitness a where
     TypeWitnessBS    :: B.ByteString  -> TypeWitness B.ByteString
     TypeWitnessDec   :: Decimal       -> TypeWitness Decimal
 
-type Coparser = P.Put
+newtype Coparser a = CP (a -> BU.Builder)
+
+instance Contravariant Coparser where
+    contramap f (CP g) = CP (g . f)
+
+append :: Coparser a -> Coparser b -> Coparser (a, b)
+append (CP f) (CP g) = CP (\(x, y) -> f x `BU.append` g y)
+
+append' :: Coparser a -> Coparser a -> Coparser a
+append' cp1 cp2 = contramap (\x -> (x, x)) (append cp1 cp2)
 
 -- | Primitive type class.
 class Primitive a where
@@ -132,9 +154,9 @@ class Primitive a where
     decodeP          :: A.Parser a
     decodeD          :: A.Parser (Delta a)
     decodeT          :: A.Parser a
-    encodeP          :: a -> Coparser
-    encodeD          :: Delta a -> Coparser
-    encodeT          :: a -> Coparser
+    encodeP          :: Coparser a
+    encodeD          :: Coparser (Delta a)
+    encodeT          :: Coparser a
 
     decodeT = decodeP
     encodeT = encodeP
@@ -171,7 +193,7 @@ instance Primitive Int32 where
     decodeD = Di32 <$> int
     decodeT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     encodeP = _int
-    encodeD (Di32 i) = encodeP i
+    encodeD  = contramap (\(Di32 i) -> i) encodeP
 
 instance Primitive Word32 where
     newtype Delta Word32 = Dw32 Int32 deriving (Num, Ord, Show, Eq)
@@ -187,7 +209,7 @@ instance Primitive Word32 where
     decodeD = Dw32 <$> int
     decodeT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     encodeP = _uint
-    encodeD (Dw32 w) = encodeP w
+    encodeD = contramap (\(Dw32 w) -> w) encodeP
 
 instance Primitive Int64 where
     newtype Delta Int64 = Di64 Int64 deriving (Num, Ord, Show, Eq)
@@ -203,7 +225,7 @@ instance Primitive Int64 where
     decodeD = Di64 <$> int
     decodeT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     encodeP = _int
-    encodeD (Di64 i) = encodeP i
+    encodeD = contramap (\(Di64 i) -> i) encodeP
 
 instance Primitive Word64 where
     newtype Delta Word64 = Dw64 Int64 deriving (Num, Ord, Show, Eq)
@@ -219,7 +241,7 @@ instance Primitive Word64 where
     decodeD = Dw64 <$> int
     decodeT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     encodeP = _uint
-    encodeD (Dw64 i) = encodeP i
+    encodeD = contramap (\(Dw64 w) -> w) encodeP
 
 instance Primitive AsciiString where
     newtype Delta AsciiString = Dascii (Int32, String)
@@ -240,7 +262,7 @@ instance Primitive AsciiString where
                 return (Dascii (l, s))
     decodeT = decodeP
     encodeP = _asciiString
-    encodeD (Dascii (i, s)) = encodeP i >> encodeP s
+    encodeD = contramap (\(Dascii (i, s)) -> (i, s)) (encodeP `append` encodeP)
 
 {-instance Primitive UnicodeString  where-}
     {-data TypeWitness UnicodeString = TypeWitnessUNI UnicodeString -}
@@ -281,8 +303,8 @@ instance Primitive (Int32, Int64) where
         return (e, m)
     decodeD = Ddec <$> decodeP
     decodeT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
-    encodeP (e, m) = encodeP e >> encodeP m
-    encodeD (Ddec (e, m)) = encodeP e >> encodeP m
+    encodeP = encodeP `append` encodeP
+    encodeD = contramap (\(Ddec (e, m)) -> (e, m)) encodeP
 
 instance Primitive B.ByteString where
     newtype Delta B.ByteString = Dbs (Int32, B.ByteString)
@@ -302,7 +324,7 @@ instance Primitive B.ByteString where
                 bv <- decodeP
                 return (Dbs (l, bv))
     encodeP = _byteVector
-    encodeD (Dbs (i, bs)) = encodeP i >> encodeP bs
+    encodeD = contramap (\(Dbs (i, bs)) -> (i, bs)) (encodeP `append` encodeP)
 
 --
 -- The following definitions follow allmost one to one the FAST specification.
@@ -511,8 +533,8 @@ newtype Token = Token String deriving (Eq, Ord, Show)
 anySBEEntity :: A.Parser B.ByteString
 anySBEEntity = takeTill' stopBitSet
 
-_anySBEEntity :: B.ByteString -> Coparser
-_anySBEEntity bs = P.putByteString (B.init bs `B.append` B.singleton (setBit (B.last bs) 7))
+_anySBEEntity :: Coparser B.ByteString
+_anySBEEntity = CP (\bs -> BU.fromByteString (B.init bs `B.append` B.singleton (setBit (B.last bs) 7)))
 
 -- |Like takeTill, but takes the matching byte as well.
 takeTill' :: (Word8 -> Bool) -> A.Parser B.ByteString
@@ -539,8 +561,8 @@ byteVector = do
 byteVector' :: Word32 -> A.Parser B.ByteString
 byteVector' c = A.take (fromEnum c)
 
-_byteVector :: B.ByteString -> Coparser
-_byteVector bs = _uint (fromIntegral(B.length bs) :: Word32) >> P.putByteString bs
+_byteVector :: Coparser B.ByteString
+_byteVector = (contramap (\bs -> fromIntegral(B.length bs) :: Word32) _uint) `append'` (CP BU.fromByteString)
 
 -- |Unsigned integer parser, doesn't check for bounds.
 -- TODO: should we check for R6 errors, i.e overlong fields?
@@ -551,12 +573,12 @@ uint = do
     where   h::(Bits a, Num a) => a -> Word8 -> a
             h r w = fromIntegral (clearBit w 7) .|. shiftL r 7
         
-_uint :: (Bits a, Eq a, Integral a) => a -> Coparser
-_uint ui = _anySBEEntity (_uintBS ui)
+_uint :: (Bits a, Eq a, Integral a) => Coparser a
+_uint = contramap uintBS _anySBEEntity 
 
-_uintBS :: (Bits a, Eq a, Integral a) => a -> B.ByteString
-_uintBS ui = if ui' /= 0 
-            then _uintBS ui' `B.snoc` (fromIntegral (ui .&. 127) :: Word8)
+uintBS :: (Bits a, Eq a, Integral a) => a -> B.ByteString
+uintBS ui = if ui' /= 0 
+            then uintBS ui' `B.snoc` (fromIntegral (ui .&. 127) :: Word8)
             else B.empty
             where ui' = shiftR ui 7
 
@@ -571,20 +593,23 @@ int = do
             h::(Bits a, Num a) => a -> Word8 -> a
             h r w = fromIntegral (clearBit w 7) .|. shiftL r 7
 
-_int :: (Bits a, Ord a, Integral a) => a -> Coparser
-_int i = if i < 0 
-         then _anySBEEntity (_uintBS i)
-         else _anySBEEntity (setBit (B.head (_uintBS i)) 6 `B.cons` B.tail (_uintBS i))
+_int :: (Bits a, Ord a, Integral a) => Coparser a
+_int  = contramap intBS _anySBEEntity
+
+intBS :: (Bits a, Ord a, Integral a) => a -> B.ByteString
+intBS i =    if i < 0 
+             then (setBit (B.head (uintBS i)) 6 `B.cons` B.tail (uintBS i))
+             else (uintBS i)
 
 -- |ASCII string field parser, non-Nullable.
 asciiString :: A.Parser AsciiString
 asciiString = do
     bs <- anySBEEntity
-    let bs' = B.init bs `B.append` B.singleton (clearBit (B.last bs) 7) in
+    let bs' = B.init bs `mappend` B.singleton (clearBit (B.last bs) 7) in
         return (unpack bs')
 
-_asciiString :: AsciiString -> Coparser
-_asciiString s = _anySBEEntity (pack s)
+_asciiString :: Coparser AsciiString
+_asciiString = contramap pack _anySBEEntity
 
 trimWhiteSpace :: String -> String
 trimWhiteSpace = reverse . dropWhile whiteSpace . reverse . dropWhile whiteSpace

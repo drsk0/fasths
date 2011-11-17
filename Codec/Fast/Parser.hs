@@ -35,14 +35,6 @@ import Codec.Fast.Data as F
 import Control.Exception
 
 
--- |State of the parser.
-data Context = Context {
-    -- |Presence map
-    pm   :: [Bool],
-    -- |Dictionaries.
-    dict :: M.Map String Dictionary
-    }
-
 -- |Environment of the parser.
 data Env = Env {
     -- |All known templates.
