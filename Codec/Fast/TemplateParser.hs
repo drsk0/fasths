@@ -20,7 +20,7 @@ import Control.Exception (throw)
 data TPState = TPState {
     ns          ::Maybe NsAttr,
     templateNs  ::Maybe TemplateNsAttr,
-    dict        ::Maybe DictionaryAttr
+    dic        ::Maybe DictionaryAttr
     }
 
 parseTemplateXML::IOStateArrow TPState XmlTree XmlTree -> IO Templates
@@ -41,16 +41,16 @@ getTemplates = proc l -> do
 getNs::IOStateArrow TPState XmlTree (Maybe NsAttr)
 getNs = ifA (hasAttr "ns") (getAttrValue "ns" >>> changeUserState updateNs >>> arr (Just . NsAttr)) (getUserState >>> arr ns)
     where   updateNs::String -> TPState -> TPState
-            updateNs n s = TPState (Just (NsAttr n)) (templateNs s) (dict s)
+            updateNs n s = TPState (Just (NsAttr n)) (templateNs s) (dic s)
             
 
 getTempNs::IOStateArrow TPState XmlTree (Maybe TemplateNsAttr)
 getTempNs = ifA (hasAttr "templateNs") (getAttrValue "templateNs" >>> changeUserState updateTempNs >>> arr (Just . TemplateNsAttr)) (getUserState >>> arr templateNs)
     where   updateTempNs::String -> TPState -> TPState
-            updateTempNs tempNs s = TPState (ns s) (Just (TemplateNsAttr tempNs)) (dict s)
+            updateTempNs tempNs s = TPState (ns s) (Just (TemplateNsAttr tempNs)) (dic s)
 
 getDict::IOStateArrow TPState XmlTree (Maybe DictionaryAttr)
-getDict = ifA (hasAttr "dictionary") (getAttrValue "dictionary" >>> changeUserState updateDict >>> arr (Just . DictionaryAttr)) (getUserState >>> arr dict)
+getDict = ifA (hasAttr "dictionary") (getAttrValue "dictionary" >>> changeUserState updateDict >>> arr (Just . DictionaryAttr)) (getUserState >>> arr dic)
     where   updateDict::String -> TPState -> TPState
             updateDict d s = TPState (ns s) (templateNs s) (Just (DictionaryAttr d))
 
