@@ -50,11 +50,6 @@ type FParser a = ReaderT Env (StateT Context A.Parser) a
 template2P :: Template -> FParser (NsName, Maybe Value)
 template2P t = (tname2fname (tName t), ) <$> Just . Gr <$> mapM instr2P (tInstructions t)
 
--- |Translates a TemplateNsName into a NsName. Its the same anyway.
-tname2fname :: TemplateNsName -> NsName
-tname2fname (TemplateNsName n (Just (TemplateNsAttr ns)) maybe_id) = NsName n (Just (NsAttr ns)) maybe_id
-tname2fname (TemplateNsName n Nothing maybe_id) = NsName n Nothing maybe_id
-
 -- |Maps an instruction to its corresponding parser.
 instr2P :: Instruction -> FParser (NsName, Maybe Value)
 instr2P (Instruction f) = field2Parser f

@@ -54,9 +54,11 @@ AsciiString,
 Decimal,
 anySBEEntity,
 FASTException (..),
-Coparser (..),
 Context (..),
-_anySBEEntity
+tname2fname,
+_anySBEEntity,
+Coparser,
+DualType
 )
 
 where
@@ -76,7 +78,6 @@ import qualified Data.Binary.Builder as BU
 import Control.Applicative 
 import Control.Exception
 import Data.Typeable
-import Data.Functor.Contravariant
 
 -- | FAST exception.
 data FASTException = S1 String
@@ -130,16 +131,18 @@ data TypeWitness a where
     TypeWitnessBS    :: B.ByteString  -> TypeWitness B.ByteString
     TypeWitnessDec   :: Decimal       -> TypeWitness Decimal
 
-newtype Coparser a = CP (a -> BU.Builder)
+type DualType a m = a -> m
 
-instance Contravariant Coparser where
-    contramap f (CP g) = CP (g . f)
+contramap :: (a -> b) -> DualType b m -> DualType a m
+contramap f cp = cp . f
 
-append :: Coparser a -> Coparser b -> Coparser (a, b)
-append (CP f) (CP g) = CP (\(x, y) -> f x `BU.append` g y)
+append :: (Monoid m) => DualType a m -> DualType b m -> DualType (a, b) m
+append cp1 cp2 = \(x, y) -> ((cp1 x) `mappend` (cp2 y))
 
-append' :: Coparser a -> Coparser a -> Coparser a
-append' cp1 cp2 = contramap (\x -> (x, x)) (append cp1 cp2)
+append' :: (Monoid m) => DualType a m -> DualType a m -> DualType a m
+append' cp1 cp2 = contramap (\x -> (x, x)) (cp1 `append` cp2)
+
+type Coparser a = DualType a BU.Builder
 
 -- | Primitive type class.
 class Primitive a where
@@ -193,7 +196,7 @@ instance Primitive Int32 where
     decodeD = Di32 <$> int
     decodeT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     encodeP = _int
-    encodeD  = contramap (\(Di32 i) -> i) encodeP
+    encodeD  =  encodeP . (\(Di32 i) -> i)
 
 instance Primitive Word32 where
     newtype Delta Word32 = Dw32 Int32 deriving (Num, Ord, Show, Eq)
@@ -209,7 +212,7 @@ instance Primitive Word32 where
     decodeD = Dw32 <$> int
     decodeT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     encodeP = _uint
-    encodeD = contramap (\(Dw32 w) -> w) encodeP
+    encodeD =  encodeP . (\(Dw32 w) -> w)
 
 instance Primitive Int64 where
     newtype Delta Int64 = Di64 Int64 deriving (Num, Ord, Show, Eq)
@@ -225,7 +228,7 @@ instance Primitive Int64 where
     decodeD = Di64 <$> int
     decodeT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     encodeP = _int
-    encodeD = contramap (\(Di64 i) -> i) encodeP
+    encodeD =  encodeP . (\(Di64 i) -> i)
 
 instance Primitive Word64 where
     newtype Delta Word64 = Dw64 Int64 deriving (Num, Ord, Show, Eq)
@@ -241,7 +244,7 @@ instance Primitive Word64 where
     decodeD = Dw64 <$> int
     decodeT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     encodeP = _uint
-    encodeD = contramap (\(Dw64 w) -> w) encodeP
+    encodeD = encodeP . (\(Dw64 w) -> w)
 
 instance Primitive AsciiString where
     newtype Delta AsciiString = Dascii (Int32, String)
@@ -262,7 +265,7 @@ instance Primitive AsciiString where
                 return (Dascii (l, s))
     decodeT = decodeP
     encodeP = _asciiString
-    encodeD = contramap (\(Dascii (i, s)) -> (i, s)) (encodeP `append` encodeP)
+    encodeD = (encodeP `append` encodeP) . (\(Dascii (i, s)) -> (i, s))
 
 {-instance Primitive UnicodeString  where-}
     {-data TypeWitness UnicodeString = TypeWitnessUNI UnicodeString -}
@@ -304,7 +307,7 @@ instance Primitive (Int32, Int64) where
     decodeD = Ddec <$> decodeP
     decodeT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     encodeP = encodeP `append` encodeP
-    encodeD = contramap (\(Ddec (e, m)) -> (e, m)) encodeP
+    encodeD = encodeP . (\(Ddec (e, m)) -> (e, m))
 
 instance Primitive B.ByteString where
     newtype Delta B.ByteString = Dbs (Int32, B.ByteString)
@@ -324,7 +327,7 @@ instance Primitive B.ByteString where
                 bv <- decodeP
                 return (Dbs (l, bv))
     encodeP = _byteVector
-    encodeD = contramap (\(Dbs (i, bs)) -> (i, bs)) (encodeP `append` encodeP)
+    encodeD = (encodeP `append` encodeP) . (\(Dbs (i, bs)) -> (i, bs)) 
 
 --
 -- The following definitions follow allmost one to one the FAST specification.
@@ -521,6 +524,11 @@ data NsName = NsName NameAttr (Maybe NsAttr) (Maybe IdAttr) deriving (Eq, Ord, S
 -- |A full name for a template.
 data TemplateNsName = TemplateNsName NameAttr (Maybe TemplateNsAttr) (Maybe IdAttr) deriving (Show)
 
+-- |Translates a TemplateNsName into a NsName. Its the same anyway.
+tname2fname :: TemplateNsName -> NsName
+tname2fname (TemplateNsName n (Just (TemplateNsAttr ns)) maybe_id) = NsName n (Just (NsAttr ns)) maybe_id
+tname2fname (TemplateNsName n Nothing maybe_id) = NsName n Nothing maybe_id
+
 -- |The very basic name related attributes.
 newtype NameAttr = NameAttr String deriving (Eq, Ord, Show)
 newtype NsAttr = NsAttr String deriving (Eq, Ord, Show)
@@ -534,7 +542,7 @@ anySBEEntity :: A.Parser B.ByteString
 anySBEEntity = takeTill' stopBitSet
 
 _anySBEEntity :: Coparser B.ByteString
-_anySBEEntity = CP (\bs -> BU.fromByteString (B.init bs `B.append` B.singleton (setBit (B.last bs) 7)))
+_anySBEEntity bs = BU.fromByteString (B.init bs `B.append` B.singleton (setBit (B.last bs) 7))
 
 -- |Like takeTill, but takes the matching byte as well.
 takeTill' :: (Word8 -> Bool) -> A.Parser B.ByteString
@@ -562,7 +570,7 @@ byteVector' :: Word32 -> A.Parser B.ByteString
 byteVector' c = A.take (fromEnum c)
 
 _byteVector :: Coparser B.ByteString
-_byteVector = (contramap (\bs -> fromIntegral(B.length bs) :: Word32) _uint) `append'` (CP BU.fromByteString)
+_byteVector = (_uint . (\bs -> fromIntegral(B.length bs) :: Word32)) `append'` (BU.fromByteString)
 
 -- |Unsigned integer parser, doesn't check for bounds.
 -- TODO: should we check for R6 errors, i.e overlong fields?
@@ -574,7 +582,7 @@ uint = do
             h r w = fromIntegral (clearBit w 7) .|. shiftL r 7
         
 _uint :: (Bits a, Eq a, Integral a) => Coparser a
-_uint = contramap uintBS _anySBEEntity 
+_uint = _anySBEEntity . uintBS 
 
 uintBS :: (Bits a, Eq a, Integral a) => a -> B.ByteString
 uintBS ui = if ui' /= 0 
@@ -594,7 +602,7 @@ int = do
             h r w = fromIntegral (clearBit w 7) .|. shiftL r 7
 
 _int :: (Bits a, Ord a, Integral a) => Coparser a
-_int  = contramap intBS _anySBEEntity
+_int  = _anySBEEntity . intBS 
 
 intBS :: (Bits a, Ord a, Integral a) => a -> B.ByteString
 intBS i =    if i < 0 
@@ -609,7 +617,7 @@ asciiString = do
         return (unpack bs')
 
 _asciiString :: Coparser AsciiString
-_asciiString = contramap pack _anySBEEntity
+_asciiString = _anySBEEntity . pack 
 
 trimWhiteSpace :: String -> String
 trimWhiteSpace = reverse . dropWhile whiteSpace . reverse . dropWhile whiteSpace
