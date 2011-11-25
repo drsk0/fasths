@@ -8,9 +8,10 @@ where
 import Codec.Fast.Data
 import qualified Data.Map as M
 import Data.Word
+import Data.Bits
 import Control.Monad.Reader
 import Control.Monad.State
-import Data.ByteString as B
+import qualified Data.ByteString as B
 import qualified Data.Binary.Builder as BU
 
 data Env_ = Env_ {
@@ -51,7 +52,13 @@ _presenceMap () = do
     return $ (_anySBEEntity (pmToBs $ pm st))
 
 pmToBs :: [Bool] -> B.ByteString
-pmToBs = undefined
+pmToBs xs = B.pack (map h (sublistsOfLength 7 xs))
+    where   h :: [Bool] -> Word8
+            h = fst . (foldl (\(r,n) y -> if y then (setBit r n, n-1) else (r, n-1)) (0, 6))
+
+sublistsOfLength :: Int -> [a] -> [[a]]
+sublistsOfLength n [] = []
+sublistsOfLength n xs = (take n xs) : sublistsOfLength n (drop n xs)
 
 template2Cop :: Template -> FCoparser (NsName, Value)
 template2Cop = undefined
