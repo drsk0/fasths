@@ -58,7 +58,8 @@ Context (..),
 tname2fname,
 _anySBEEntity,
 Coparser,
-DualType
+DualType,
+sequenceD
 )
 
 where
@@ -141,6 +142,9 @@ append cp1 cp2 = \(x, y) -> ((cp1 x) `mappend` (cp2 y))
 
 append' :: (Monoid m) => DualType a m -> DualType a m -> DualType a m
 append' cp1 cp2 = contramap (\x -> (x, x)) (cp1 `append` cp2)
+
+sequenceD :: (Monoid m) => [DualType a m] -> DualType [a] m
+sequenceD ds = \xs -> mconcat (zipWith (\x d -> d x) xs ds)
 
 type Coparser a = DualType a BU.Builder
 

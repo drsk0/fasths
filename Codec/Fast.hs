@@ -39,7 +39,7 @@ message::Templates -> (Word32 -> String) -> StateT Context A.Parser (NsName, May
 message ts tid2tem = let env = initEnv ts tid2tem 
     in runReaderT segment' env
 
-_message :: Templates -> (NsName -> Word32) -> (NsName, Value) -> State Context BU.Builder
+_message :: Templates -> (NsName -> Word32) -> (NsName, Maybe Value) -> State Context BU.Builder
 _message ts tem2tid msg = let env = _initEnv ts tem2tid
     in runReaderT (_segment' msg) env
 
