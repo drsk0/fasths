@@ -59,6 +59,7 @@ tname2fname,
 _anySBEEntity,
 Coparser,
 DualType,
+contramap,
 sequenceD
 )
 
@@ -138,13 +139,13 @@ contramap :: (a -> b) -> DualType b m -> DualType a m
 contramap f cp = cp . f
 
 append :: (Monoid m) => DualType a m -> DualType b m -> DualType (a, b) m
-append cp1 cp2 = \(x, y) -> ((cp1 x) `mappend` (cp2 y))
+append cp1 cp2 (x, y) = cp1 x `mappend` cp2 y
 
 append' :: (Monoid m) => DualType a m -> DualType a m -> DualType a m
 append' cp1 cp2 = contramap (\x -> (x, x)) (cp1 `append` cp2)
 
 sequenceD :: (Monoid m) => [DualType a m] -> DualType [a] m
-sequenceD ds = \xs -> mconcat (zipWith (\x d -> d x) xs ds)
+sequenceD ds xs = mconcat (zipWith (\x d -> d x) xs ds)
 
 type Coparser a = DualType a BU.Builder
 
@@ -154,6 +155,7 @@ class Primitive a where
     witnessType      :: a -> TypeWitness a
     assertType       :: (Primitive b) => TypeWitness b -> a
     toValue          :: a -> Value
+    fromValue        :: Value -> a
     defaultBaseValue :: a
     ivToPrimitive    :: InitialValueAttr -> a
     delta            :: a -> Delta a -> a
@@ -192,6 +194,8 @@ instance Primitive Int32 where
     assertType (TypeWitnessI32 i) = i
     assertType _ = throw $ D4 "Type mismatch."
     toValue = I32
+    fromValue (I32 i) = i
+    fromValue _ = throw $ D4 "Type mismatch."
     defaultBaseValue = 0 
     ivToPrimitive = read . trimWhiteSpace . text
     delta i (Di32 i') = i + i'
@@ -208,6 +212,8 @@ instance Primitive Word32 where
     assertType (TypeWitnessW32 w) = w
     assertType _ = throw $ D4 "Type mismatch."
     toValue = UI32
+    fromValue (UI32 i) = i
+    fromValue _ = throw $ OtherException "Type mismatch."
     defaultBaseValue = 0
     ivToPrimitive = read . trimWhiteSpace . text
     delta w (Dw32 i) = fromIntegral (fromIntegral w + i)
@@ -224,6 +230,8 @@ instance Primitive Int64 where
     assertType (TypeWitnessI64 i) = i
     assertType _ = throw $ D4 "Type mismatch."
     toValue = I64
+    fromValue (I64 i) = i
+    fromValue _ = throw $ OtherException "Type mismatch."
     defaultBaseValue = 0
     ivToPrimitive = read . trimWhiteSpace . text
     delta i (Di64 i')= i + i'
@@ -240,6 +248,8 @@ instance Primitive Word64 where
     assertType (TypeWitnessW64 w) = w
     assertType _ = throw $ D4 "Type mismatch."
     toValue = UI64
+    fromValue (UI64 i) = i
+    fromValue _ = throw $ OtherException "Type mismatch."
     defaultBaseValue = 0
     ivToPrimitive = read . trimWhiteSpace . text
     delta w (Dw64 i) = fromIntegral (fromIntegral w + i)
@@ -256,6 +266,8 @@ instance Primitive AsciiString where
     assertType (TypeWitnessASCII s) = s
     assertType _ = throw $ D4 "Type mismatch."
     toValue = A
+    fromValue (A s) = s
+    fromValue _ = throw $ OtherException "Type mismatch."
     defaultBaseValue = ""
     ivToPrimitive = text
     delta s1 (Dascii (l, s2)) | l < 0 = s2 ++ s1' where s1' = genericDrop (l + 1) s1
@@ -292,7 +304,10 @@ instance Primitive (Int32, Int64) where
     witnessType = TypeWitnessDec
     assertType (TypeWitnessDec (e, m)) = (e, m)
     assertType _ = throw $ D4 "Type mismatch."
-    toValue (e, m) = Dec (fromRational (toRational m * 10^^e))
+    toValue (e, m) = Dec $ encodeFloat (fromIntegral m) (fromIntegral e)
+    fromValue (Dec d) = (fromIntegral $ snd d', fromIntegral $ fst d') where d' = decodeFloat d
+    -- TODO: Might overflow for huge values in fromIntegral.
+    fromValue _ = throw $ D4 "Type mismatch."
     defaultBaseValue = (0, 0)
     ivToPrimitive (InitialValueAttr s) = let    s' = trimWhiteSpace s 
                                                 mant = read (filter (/= '.') s')
@@ -319,6 +334,8 @@ instance Primitive B.ByteString where
     assertType (TypeWitnessBS bs) = bs
     assertType _ = throw $ D4 "Type mismatch."
     toValue = B 
+    fromValue (B bs) = bs
+    fromValue _ = throw $ D4 "Type mismatch."
     defaultBaseValue = B.empty
     ivToPrimitive iv = B.pack (map (toEnum . digitToInt) (filter whiteSpace (text iv)))
     delta bv (Dbs (l, bv')) | l < 0 = bv'' `B.append` bv' where bv'' = genericDrop (l + 1) bv 
@@ -574,7 +591,7 @@ byteVector' :: Word32 -> A.Parser B.ByteString
 byteVector' c = A.take (fromEnum c)
 
 _byteVector :: Coparser B.ByteString
-_byteVector = (_uint . (\bs -> fromIntegral(B.length bs) :: Word32)) `append'` (BU.fromByteString)
+_byteVector = (_uint . (\bs -> fromIntegral(B.length bs) :: Word32)) `append'` BU.fromByteString
 
 -- |Unsigned integer parser, doesn't check for bounds.
 -- TODO: should we check for R6 errors, i.e overlong fields?
@@ -610,8 +627,8 @@ _int  = _anySBEEntity . intBS
 
 intBS :: (Bits a, Ord a, Integral a) => a -> B.ByteString
 intBS i =    if i < 0 
-             then (setBit (B.head (uintBS i)) 6 `B.cons` B.tail (uintBS i))
-             else (uintBS i)
+             then setBit (B.head (uintBS i)) 6 `B.cons` B.tail (uintBS i)
+             else uintBS i
 
 -- |ASCII string field parser, non-Nullable.
 asciiString :: A.Parser AsciiString

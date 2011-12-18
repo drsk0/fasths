@@ -10,6 +10,7 @@ where
 import Codec.Fast.Data
 import qualified Data.Map as M
 import Data.Word
+import Data.Int
 import Data.Bits
 import Data.Monoid
 import Control.Monad.Reader
@@ -54,28 +55,28 @@ _templateIdentifier (n, v)  =
    in
    do
        env <- ask
-       tid <- _p (n, (Just . UI32 . (temp2tid env)) n)
-       msg <- template2Cop ((templates env) M.! n) (n, v)
+       tid <- _p (n, (Just . UI32 . temp2tid env) n)
+       msg <- template2Cop (templates env M.! n) (n, v)
        return (tid `BU.append` msg)
 
 _presenceMap :: FCoparser ()
 _presenceMap () = do
     st <- get
-    return $ (_anySBEEntity (pmToBs $ pm st))
+    return $ _anySBEEntity (pmToBs $ pm st)
 
 pmToBs :: [Bool] -> B.ByteString
 pmToBs xs = B.pack (map h (sublistsOfLength 7 xs))
     where   h :: [Bool] -> Word8
-            h = fst . (foldl (\(r,n) y -> if y then (setBit r n, n-1) else (r, n-1)) (0, 6))
+            h = fst . foldl (\(r,n) y -> if y then (setBit r n, n-1) else (r, n-1)) (0, 6)
 
 sublistsOfLength :: Int -> [a] -> [[a]]
 sublistsOfLength _ [] = []
-sublistsOfLength n xs = (take n xs) : sublistsOfLength n (drop n xs)
+sublistsOfLength n xs = take n xs : sublistsOfLength n (drop n xs)
 
 template2Cop :: Template -> FCoparser (NsName, Maybe Value)
 template2Cop t = f
-    where f (n, Just (Gr g)) = (sequenceD (map instr2Cop (tInstructions t))) g
-          f (n, _) = throw $ OtherException "Template doesn't fit message."
+    where f (_, Just (Gr g)) = sequenceD (map instr2Cop (tInstructions t)) g
+          f (_, _) = throw $ OtherException "Template doesn't fit message."
           -- TODO: Are there cases that shoudn't trigger an exception?
         
 
@@ -83,8 +84,35 @@ instr2Cop :: Instruction -> FCoparser (NsName, Maybe Value)
 instr2Cop (Instruction f) = field2Cop f 
 instr2Cop (TemplateReference (Just trc)) = \(n, v) -> do
     env <- ask
-    template2Cop ((templates env) M.! (NsName name Nothing Nothing)) (n, v) where (TemplateReferenceContent name _) = trc
+    template2Cop (templates env M.! NsName name Nothing Nothing) (n, v) where (TemplateReferenceContent name _) = trc
 instr2Cop (TemplateReference Nothing) = _segment'
 
 field2Cop :: Field -> FCoparser (NsName, Maybe Value)
-field2Cop = undefined
+field2Cop (IntField f@(Int32Field (FieldInstrContent fname _ _))) = contramap (fmap fromValue . assertNameIs fname) (intF2Cop f :: FCoparser (Maybe Int32))
+field2Cop (IntField f@(Int64Field (FieldInstrContent fname _ _))) = contramap (fmap fromValue . assertNameIs fname) (intF2Cop f :: FCoparser (Maybe Int64))
+field2Cop (IntField f@(UInt32Field (FieldInstrContent fname _ _))) = contramap (fmap fromValue . assertNameIs fname) (intF2Cop f :: FCoparser (Maybe Word32))
+field2Cop (IntField f@(UInt64Field (FieldInstrContent fname _ _))) = contramap (fmap fromValue . assertNameIs fname) (intF2Cop f :: FCoparser (Maybe Word64))
+field2Cop (DecField f@(DecimalField fname _ _ )) = contramap (fmap fromValue . assertNameIs fname) (decF2Cop f)
+field2Cop (AsciiStrField f@(AsciiStringField(FieldInstrContent fname _ _ ))) = contramap (fmap fromValue . assertNameIs fname) (asciiStrF2Cop f)
+field2Cop (UnicodeStrField f@(UnicodeStringField (FieldInstrContent fname _ _ ) _ )) = contramap (fmap fromValue . assertNameIs fname) (unicodeF2Cop f)
+field2Cop (ByteVecField f@(ByteVectorField (FieldInstrContent fname _ _ ) _ )) = contramap (fmap fromValue . assertNameIs fname) (bytevecF2Cop f)
+field2Cop (Seq s) = contramap (assertNameIs (sFName s)) (seqF2Cop s)
+field2Cop (Grp g) = contramap (assertNameIs (gFName g)) (groupF2Cop g)
+
+assertNameIs :: NsName -> (NsName, a) -> a
+assertNameIs n1 (n2, x) = if n1 == n2 then x else throw $ OtherException "Template doesn't fit message."
+
+intF2Cop :: (Primitive a, Num a) => IntegerField -> FCoparser (Maybe a)
+intF2Cop = undefined
+decF2Cop :: DecimalField -> FCoparser (Maybe (Int32, Int64))
+decF2Cop = undefined
+asciiStrF2Cop :: AsciiStringField -> FCoparser (Maybe AsciiString)
+asciiStrF2Cop = undefined
+unicodeF2Cop :: UnicodeStringField -> FCoparser (Maybe UnicodeString)
+unicodeF2Cop = undefined
+bytevecF2Cop :: ByteVectorField -> FCoparser (Maybe B.ByteString)
+bytevecF2Cop = undefined
+seqF2Cop :: Sequence -> FCoparser (Maybe Value)
+seqF2Cop = undefined
+groupF2Cop :: Group -> FCoparser (Maybe Value)
+groupF2Cop = undefined
