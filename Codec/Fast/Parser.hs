@@ -116,12 +116,12 @@ intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Copy oc)))
     = ifPresentElse   
     (do 
         i <- l2 decodeP
-        updatePrevValue fname oc (Assigned (witnessType i))
+        lift $ updatePrevValue fname oc (Assigned (witnessType i))
         return (Just i)
     )
     ( 
     do 
-        p <- prevValue fname oc
+        p <- lift $ prevValue fname oc
         case p of
             (Assigned v) -> return (Just (assertType v))
             Undefined -> h' oc
@@ -138,16 +138,16 @@ intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Increment oc)))
     (
     do 
         i <- l2 decodeP
-        updatePrevValue fname oc (Assigned (witnessType i))
+        lift $ updatePrevValue fname oc (Assigned (witnessType i))
         return (Just i)
     )
     (
     do 
-        p <- prevValue fname oc
+        p <- lift $ prevValue fname oc
         case p of
-            (Assigned v) -> updatePrevValue fname oc (Assigned (witnessType v')) >> return (Just v') where v' = assertType v + 1 
+            (Assigned v) -> lift $ updatePrevValue fname oc (Assigned (witnessType v')) >> return (Just v') where v' = assertType v + 1 
             Undefined -> h' oc
-                where   h' (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i) where i =ivToPrimitive iv
+                where   h' (OpContext _ _ (Just iv)) = lift $ updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i) where i =ivToPrimitive iv
                         h' (OpContext _ _ Nothing) = throw $ D5 "No initial value in operator context given for\
                                                         \mandatory increment operator with undefined dictionary\
                                                         \value."
@@ -174,20 +174,20 @@ intF2P' (FieldInstrContent _ (Just Optional) (Just (Default Nothing)))
 intF2P' (FieldInstrContent fname (Just Optional) (Just (Copy oc)))
     = ifPresentElse
     (
-    nULL *> (updatePrevValue fname oc Empty >> return Nothing)
+    nULL *> (lift $ updatePrevValue fname oc Empty >> return Nothing)
     <|> do 
         i <- l2 decodeP
-        updatePrevValue fname oc (Assigned (witnessType i))
+        lift $ updatePrevValue fname oc (Assigned (witnessType i))
         return (Just $ minusOne i)
     )
     (
     do
-        p <- prevValue fname oc
+        p <- lift $ prevValue fname oc
         case p of
             (Assigned v) -> return (Just (assertType v))
             Undefined -> h' oc
                 where   h' (OpContext _ _ (Just iv)) = return $ Just (ivToPrimitive iv)
-                        h' (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> return Nothing
+                        h' (OpContext _ _ Nothing) = lift $ updatePrevValue fname oc Empty >> return Nothing
             Empty -> return Nothing
     )
 
@@ -195,20 +195,20 @@ intF2P' (FieldInstrContent fname (Just Optional) (Just (Copy oc)))
 intF2P' (FieldInstrContent fname (Just Optional) (Just (Increment oc)))
     = ifPresentElse
     (
-    nULL *> (updatePrevValue fname oc Empty >> return Nothing)
+    nULL *> (lift $ updatePrevValue fname oc Empty >> return Nothing)
     <|> do 
         i <- l2 decodeP
-        updatePrevValue fname oc (Assigned (witnessType i))
+        lift $ updatePrevValue fname oc (Assigned (witnessType i))
         return (Just $ minusOne i)
     )
     (
     do 
-        p <- prevValue fname oc
+        p <- lift $ prevValue fname oc
         case p of
-            (Assigned v) -> updatePrevValue fname oc (Assigned (witnessType v')) >> Just <$> return v' where v' = assertType v + 1
+            (Assigned v) -> lift $ updatePrevValue fname oc (Assigned (witnessType v')) >> Just <$> return v' where v' = assertType v + 1
             Undefined -> h' oc
-                where   h' (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned (witnessType i)) >> (Just <$> return i) where i = ivToPrimitive iv
-                        h' (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> return Nothing
+                where   h' (OpContext _ _ (Just iv)) = lift $ updatePrevValue fname oc (Assigned (witnessType i)) >> (Just <$> return i) where i = ivToPrimitive iv
+                        h' (OpContext _ _ Nothing) = lift $ updatePrevValue fname oc Empty >> return Nothing
             Empty -> return Nothing
     )
 
@@ -228,8 +228,8 @@ intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Delta oc)))
     in
         do 
             d <- l2 decodeD
-            i <- (flip  delta d <$> (baseValue <$> prevValue fname oc))
-            updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i)
+            i <- (flip  delta d <$> (baseValue <$> (lift $ prevValue fname oc)))
+            lift $ updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i)
 
 -- pm: No, Nullable: Yes
 intF2P' (FieldInstrContent fname (Just Optional) (Just (Delta oc)))
@@ -243,8 +243,8 @@ intF2P' (FieldInstrContent fname (Just Optional) (Just (Delta oc)))
         in
             do 
                 d <- l2 decodeD
-                i <- (flip delta (minusOne d) <$> (baseValue <$> prevValue fname oc))
-                updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i)
+                i <- (flip delta (minusOne d) <$> (baseValue <$> (lift $ prevValue fname oc)))
+                lift $ updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i)
 
 -- |Maps an decimal field to its parser.
 decF2P::DecimalField -> FParser (Maybe Decimal)
@@ -282,12 +282,12 @@ decF2P (DecimalField fname (Just Mandatory) (Just (Left (Copy oc))))
     (
     do
         d <- l2 decodeP
-        updatePrevValue fname oc (Assigned (witnessType d))
+        lift $ updatePrevValue fname oc (Assigned (witnessType d))
         return (Just d)
     )
     (
     do 
-        p <- prevValue fname oc
+        p <- lift $ prevValue fname oc
         case p of
             (Assigned v) -> return (Just (assertType v))
             Undefined -> h' oc
@@ -313,8 +313,8 @@ decF2P (DecimalField fname (Just Mandatory) (Just (Left (Delta oc))))
     in
         do 
             d <- l2 decodeD
-            d' <- (flip  delta d <$> (baseValue <$> prevValue fname oc))
-            updatePrevValue fname oc (Assigned (witnessType d')) >> return (Just d')
+            d' <- (flip  delta d <$> (baseValue <$> (lift $ prevValue fname oc)))
+            lift $ updatePrevValue fname oc (Assigned (witnessType d')) >> return (Just d')
 
 decF2P (DecimalField _ (Just Mandatory) (Just (Left (Tail _))))
     = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields." 
@@ -335,20 +335,20 @@ decF2P (DecimalField _ (Just Optional) (Just (Left (Default (Just iv)))))
 decF2P (DecimalField fname (Just Optional) (Just (Left (Copy oc)))) 
     = ifPresentElse
     (
-    nULL *> (updatePrevValue fname oc Empty >> return Nothing)
+    nULL *> (lift $ updatePrevValue fname oc Empty >> return Nothing)
     <|> do
             d <- l2 decodeP
-            updatePrevValue fname oc (Assigned (witnessType d))
+            lift $ updatePrevValue fname oc (Assigned (witnessType d))
             return (Just d)
     )
     (
     do 
-        p <- prevValue fname oc
+        p <- lift $ prevValue fname oc
         case p of
             (Assigned v) -> return (Just (assertType v))
             Undefined -> h' oc
                 where   h' (OpContext _ _ (Just iv)) = return $ Just (ivToPrimitive iv)
-                        h' (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> return Nothing
+                        h' (OpContext _ _ Nothing) = lift $ updatePrevValue fname oc Empty >> return Nothing
             Empty -> return Nothing
     )
 
@@ -368,8 +368,8 @@ decF2P (DecimalField fname (Just Optional) (Just (Left (Delta oc))))
         in
             do 
                 d <- l2 decodeD
-                d' <- (flip delta d <$> (baseValue <$> prevValue fname oc))
-                updatePrevValue fname oc (Assigned (witnessType d')) >> return (Just d')
+                d' <- (flip delta d <$> (baseValue <$> (lift $ prevValue fname oc)))
+                lift $ updatePrevValue fname oc (Assigned (witnessType d')) >> return (Just d')
 
 -- pm: No, Nullable: Yes
 decF2P (DecimalField _ (Just Optional) (Just (Left (Tail _)))) 
@@ -443,16 +443,16 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Co
     (
     do
             s <- l2 decodeP
-            updatePrevValue fname oc (Assigned (witnessType s))
+            lift $ updatePrevValue fname oc (Assigned (witnessType s))
             return (Just (rmPreamble s))
     )
     (
     do 
-        p <- prevValue fname oc
+        p <- lift $ prevValue fname oc
         case p of
             (Assigned v) -> return (Just (assertType v))
             Undefined -> h' oc
-                where   h' (OpContext _ _ (Just iv)) =  updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i) where i = ivToPrimitive iv
+                where   h' (OpContext _ _ (Just iv)) =  lift $ updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i) where i = ivToPrimitive iv
                         h' (OpContext _ _ Nothing) = throw $ D5 "No initial value in operator context\
                                                           \for mandatory copy operator with undefined dictionary\
                                                           \value."
@@ -473,8 +473,8 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (De
     in
         do 
             str <- l2 decodeD
-            str' <- (flip delta str <$> (baseValue <$> prevValue fname oc))
-            updatePrevValue fname oc (Assigned (witnessType str')) >> return (Just str')
+            str' <- (flip delta str <$> (baseValue <$> (lift $ prevValue fname oc)))
+            lift $ updatePrevValue fname oc (Assigned (witnessType str')) >> return (Just str')
 
 -- pm: Yes, Nullable: No
 asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Tail oc))))
@@ -490,17 +490,17 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Ta
                     h (OpContext _ _ Nothing) = defaultBaseValue
     in
         do
-            pva <- prevValue fname oc
+            pva <- lift $ prevValue fname oc
             t <- l2 decodeT
             return (Just (baseValue pva `ftail` t))
     )
     (
     do 
-        p <- prevValue fname oc
+        p <- lift $ prevValue fname oc
         case p of
             (Assigned v) -> return (Just (assertType v))
             Undefined -> h oc
-                where   h (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i) where i = ivToPrimitive iv
+                where   h (OpContext _ _ (Just iv)) = lift $ updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i) where i = ivToPrimitive iv
                         h (OpContext _ _ Nothing) = throw $ D6 "No initial value in operator context\
                                                                   \for mandatory tail operator with undefined dictionary\
                                                                   \value."
@@ -522,21 +522,21 @@ asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Default
 asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Copy oc))))
     = ifPresentElse
     (
-    nULL *> (updatePrevValue fname oc Empty >> return Nothing)
+    nULL *> (lift $ updatePrevValue fname oc Empty >> return Nothing)
     <|>
         do 
             s <- rmPreamble' <$> l2 decodeP
-            updatePrevValue fname oc (Assigned (witnessType s))
+            lift $ updatePrevValue fname oc (Assigned (witnessType s))
             return (Just s)
     )
     (
     do 
-        p <- prevValue fname oc
+        p <- lift $ prevValue fname oc
         case p of
             (Assigned v) -> return (Just (assertType v))
             Undefined -> h' oc
-                where   h' (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i) where i =ivToPrimitive iv
-                        h' (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> return Nothing
+                where   h' (OpContext _ _ (Just iv)) = lift $ updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i) where i =ivToPrimitive iv
+                        h' (OpContext _ _ Nothing) = lift $ updatePrevValue fname oc Empty >> return Nothing
             Empty -> return Nothing
     )
 
@@ -555,14 +555,14 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Del
         in
             do 
                 (Dascii d) <- l2 decodeD
-                str <- (flip delta (Dascii (fst d, rmPreamble' (snd d))) <$> (baseValue <$> prevValue fname oc)) 
-                updatePrevValue fname oc (Assigned (witnessType str)) >> return (Just str))
+                str <- (flip delta (Dascii (fst d, rmPreamble' (snd d))) <$> (baseValue <$> (lift $ prevValue fname oc))) 
+                lift $ updatePrevValue fname oc (Assigned (witnessType str)) >> return (Just str))
 
 -- pm: Yes, Nullable: Yes
 asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Tail oc))))
     = ifPresentElse
     (
-    nULL *> (updatePrevValue fname oc Empty >> return Nothing)
+    nULL *> (lift $ updatePrevValue fname oc Empty >> return Nothing)
     <|> let baseValue (Assigned p) = return (assertType p)
             baseValue (Undefined) = h oc
                 where   h (OpContext _ _ (Just iv)) = return (ivToPrimitive iv)
@@ -572,18 +572,18 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Tai
                         h (OpContext _ _ Nothing) = return defaultBaseValue
         in
             do
-                bv <- prevValue fname oc >>= baseValue
+                bv <- lift $ prevValue fname oc >>= baseValue
                 t <- rmPreamble' <$> l2 decodeT
                 return (Just (bv `ftail` t))
     )
     (
     do
-        p <- prevValue fname oc
+        p <- lift $ prevValue fname oc
         case p of
             (Assigned v) -> return (Just (assertType v))
             Undefined -> h oc
-                where   h (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i) where i = ivToPrimitive iv
-                        h (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> return Nothing
+                where   h (OpContext _ _ (Just iv)) = lift $ updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i) where i = ivToPrimitive iv
+                        h (OpContext _ _ Nothing) = lift $ updatePrevValue fname oc Empty >> return Nothing
             Empty -> return Nothing
     )
 
@@ -638,16 +638,16 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Copy
     (
     do
         bv <- l2 decodeP 
-        updatePrevValue fname oc (Assigned (witnessType bv))
+        lift $ updatePrevValue fname oc (Assigned (witnessType bv))
         return (Just bv)
     )
     (
     do 
-        p <- prevValue fname oc
+        p <- lift $ prevValue fname oc
         case p of
             (Assigned v) -> return (Just (assertType v)) 
             Undefined ->  h' oc
-                where   h' (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned (witnessType bv)) >> return (Just bv) where bv = ivToPrimitive iv 
+                where   h' (OpContext _ _ (Just iv)) = lift $ updatePrevValue fname oc (Assigned (witnessType bv)) >> return (Just bv) where bv = ivToPrimitive iv 
                         h' (OpContext _ _ Nothing) = throw $ D5 "No initial value in operator context\
                                                           \for mandatory copy operator with undefined dictionary\
                                                           \value."
@@ -657,20 +657,20 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Copy
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Copy oc))) _ ) 
     = ifPresentElse
     (
-    nULL *> (updatePrevValue fname oc Empty >> return Nothing)
+    nULL *> (lift $ updatePrevValue fname oc Empty >> return Nothing)
     <|> do
             bv <- l2 decodeP
-            updatePrevValue fname oc (Assigned (witnessType bv))
+            lift $ updatePrevValue fname oc (Assigned (witnessType bv))
             return (Just bv)
     )
     (
     do
-        p <- prevValue fname oc
+        p <- lift $ prevValue fname oc
         case p of
             (Assigned v) -> return (Just (assertType v)) 
             Undefined -> h' oc
-                where   h' (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned (witnessType bv)) >> return (Just bv) where bv = ivToPrimitive iv
-                        h' (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> return Nothing
+                where   h' (OpContext _ _ (Just iv)) = lift $ updatePrevValue fname oc (Assigned (witnessType bv)) >> return (Just bv) where bv = ivToPrimitive iv
+                        h' (OpContext _ _ Nothing) = lift $ updatePrevValue fname oc Empty >> return Nothing
             Empty -> return Nothing
     )
 
@@ -691,7 +691,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Delt
     in
         do 
             bv <- l2 decodeD
-            Just <$> (flip delta bv <$> (baseValue <$> prevValue fname oc))
+            Just <$> (flip delta bv <$> (baseValue <$> (lift $ prevValue fname oc)))
 
 -- pm: No, Nullable: Yes
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Delta oc))) _ ) 
@@ -704,8 +704,8 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Delta
         in
             do 
                 bv <- l2 decodeD
-                bv' <- (flip delta bv <$> (baseValue <$> prevValue fname oc))
-                updatePrevValue fname oc (Assigned (witnessType bv')) >> return (Just bv'))
+                bv' <- (flip delta bv <$> (baseValue <$> (lift $ prevValue fname oc)))
+                lift $ updatePrevValue fname oc (Assigned (witnessType bv')) >> return (Just bv'))
 
 
 -- pm: Yes, Nullable: No
@@ -722,17 +722,17 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail
                     h (OpContext _ _ Nothing) = defaultBaseValue
     in
         do
-            pva <- prevValue fname oc
+            pva <- lift $ prevValue fname oc
             t <- l2 decodeT
             return (Just(baseValue pva `ftail` t))
     )
     (
     do
-        p <- prevValue fname oc
+        p <- lift $ prevValue fname oc
         case p of
             (Assigned v) -> return (Just (assertType v))
             Undefined -> h oc
-                where   h (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned (witnessType bv)) >> return (Just bv) where bv = ivToPrimitive iv
+                where   h (OpContext _ _ (Just iv)) = lift $ updatePrevValue fname oc (Assigned (witnessType bv)) >> return (Just bv) where bv = ivToPrimitive iv
                         h (OpContext _ _ Nothing) = throw $ D6 "No initial value in operator context\
                                                   \for mandatory tail operator with undefined dictionary\
                                                   \value."
@@ -743,7 +743,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Tail oc))) _ ) 
     = ifPresentElse
     (
-    nULL *> (updatePrevValue fname oc Empty >> return Nothing)
+    nULL *> (lift $ updatePrevValue fname oc Empty >> return Nothing)
     <|> let baseValue (Assigned p) = return (assertType p)
             baseValue (Undefined) = h oc
                 where   h (OpContext _ _ (Just iv)) = return (ivToPrimitive iv)
@@ -753,18 +753,18 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Tail 
                         h (OpContext _ _ Nothing) = return defaultBaseValue
         in
             do
-                bv <- prevValue fname oc >>= baseValue
+                bv <- lift $ prevValue fname oc >>= baseValue
                 t <- l2 decodeT
                 return (Just (bv `ftail` t))
     )
     (
     do 
-        p <- prevValue fname oc
+        p <- lift $ prevValue fname oc
         case p of
             (Assigned v) -> return (Just (assertType v))
             Undefined -> h oc
-                where   h (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned (witnessType bv)) >> return (Just bv) where bv = ivToPrimitive iv
-                        h (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> return Nothing
+                where   h (OpContext _ _ (Just iv)) = lift $ updatePrevValue fname oc (Assigned (witnessType bv)) >> return (Just bv) where bv = ivToPrimitive iv
+                        h (OpContext _ _ Nothing) = lift $ updatePrevValue fname oc Empty >> return Nothing
             Empty -> return Nothing
     )
 
@@ -803,48 +803,6 @@ groupF2P (Group fname (Just Optional) _ _ instrs)
     = ifPresentElse 
     (ask >>= \env -> (fname,) . Just . Gr <$> (segmentGrp instrs (templates env) >> mapM instr2P instrs)) 
     (return (fname, Nothing))
-
--- *Previous value related functions.
-
--- |Get previous value.
-prevValue::NsName -> OpContext -> FParser DictValue
-prevValue name (OpContext (Just (DictionaryAttr dname)) Nothing _ ) 
-    = pv dname (N name)
-
-prevValue _ (OpContext (Just (DictionaryAttr dname)) (Just dkey) _ ) 
-    = pv dname (K dkey)
-
-prevValue name (OpContext Nothing Nothing _ ) 
-    = pv "global" (N name)
-
-prevValue _ (OpContext Nothing (Just dkey) _ ) 
-    = pv "global" (K dkey)
-
-pv::String -> DictKey -> FParser DictValue
-pv d k = do
-       st <- get
-       case M.lookup d (dict st) >>= \(Dictionary _ xs) -> M.lookup k xs of
-        Nothing -> throw $ OtherException ("Could not find specified dictionary/key." ++ show d ++ " " ++ show k)
-        Just dv -> return dv
-
--- |Update the previous value.
-updatePrevValue::NsName -> OpContext -> DictValue -> FParser ()
-updatePrevValue name (OpContext (Just (DictionaryAttr dname)) Nothing _ ) dvalue
-    = uppv dname (N name) dvalue
-
-updatePrevValue _ (OpContext (Just (DictionaryAttr dname)) (Just dkey) _ ) dvalue
-    = uppv dname (K dkey) dvalue
-
-updatePrevValue name (OpContext Nothing Nothing _ ) dvalue
-    = uppv "global" (N name) dvalue
-
-updatePrevValue _ (OpContext Nothing (Just dkey) _ ) dvalue
-    = uppv "global" (K dkey) dvalue
-
-uppv::String -> DictKey -> DictValue -> FParser ()
-uppv d k v = do
-    st <- get
-    put (Context (pm st) (M.adjust (\(Dictionary n xs) -> Dictionary n (M.adjust (\_ -> v) k xs)) d (dict st)))
 
 -- *Raw Parsers for basic FAST primitives
 -- These parsers are unaware of nullability, presence map, deltas etc.

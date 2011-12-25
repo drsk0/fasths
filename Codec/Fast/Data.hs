@@ -60,7 +60,9 @@ _anySBEEntity,
 Coparser,
 DualType,
 contramap,
-sequenceD
+sequenceD,
+prevValue,
+updatePrevValue
 )
 
 where
@@ -78,6 +80,7 @@ import qualified Data.Map as M
 import qualified Data.Attoparsec as A
 import qualified Data.Binary.Builder as BU
 import Control.Applicative 
+import Control.Monad.State
 import Control.Exception
 import Data.Typeable
 
@@ -645,3 +648,45 @@ trimWhiteSpace = reverse . dropWhile whiteSpace . reverse . dropWhile whiteSpace
 
 whiteSpace :: Char -> Bool
 whiteSpace c =  c `elem` " \t\r\n"
+
+-- *Previous value related functions.
+
+-- |Get previous value.
+prevValue :: (Monad m) => NsName -> OpContext -> StateT Context m DictValue
+prevValue name (OpContext (Just (DictionaryAttr dname)) Nothing _ ) 
+    = pv dname (N name)
+
+prevValue _ (OpContext (Just (DictionaryAttr dname)) (Just dkey) _ ) 
+    = pv dname (K dkey)
+
+prevValue name (OpContext Nothing Nothing _ ) 
+    = pv "global" (N name)
+
+prevValue _ (OpContext Nothing (Just dkey) _ ) 
+    = pv "global" (K dkey)
+
+pv :: (Monad m) => String -> DictKey -> StateT Context m DictValue
+pv d k = do
+       st <- get
+       case M.lookup d (dict st) >>= \(Dictionary _ xs) -> M.lookup k xs of
+        Nothing -> throw $ OtherException ("Could not find specified dictionary/key." ++ show d ++ " " ++ show k)
+        Just dv -> return dv
+
+-- |Update the previous value.
+updatePrevValue :: (Monad m) => NsName -> OpContext -> DictValue -> StateT Context m ()
+updatePrevValue name (OpContext (Just (DictionaryAttr dname)) Nothing _ ) dvalue
+    = uppv dname (N name) dvalue
+
+updatePrevValue _ (OpContext (Just (DictionaryAttr dname)) (Just dkey) _ ) dvalue
+    = uppv dname (K dkey) dvalue
+
+updatePrevValue name (OpContext Nothing Nothing _ ) dvalue
+    = uppv "global" (N name) dvalue
+
+updatePrevValue _ (OpContext Nothing (Just dkey) _ ) dvalue
+    = uppv "global" (K dkey) dvalue
+
+uppv :: (Monad m) => String -> DictKey -> DictValue -> StateT Context m ()
+uppv d k v = do
+    st <- get
+    put (Context (pm st) (M.adjust (\(Dictionary n xs) -> Dictionary n (M.adjust (\_ -> v) k xs)) d (dict st)))
