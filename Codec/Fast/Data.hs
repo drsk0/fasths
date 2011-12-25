@@ -62,7 +62,8 @@ DualType,
 contramap,
 sequenceD,
 prevValue,
-updatePrevValue
+updatePrevValue,
+setPMap
 )
 
 where
@@ -690,3 +691,8 @@ uppv :: (Monad m) => String -> DictKey -> DictValue -> StateT Context m ()
 uppv d k v = do
     st <- get
     put (Context (pm st) (M.adjust (\(Dictionary n xs) -> Dictionary n (M.adjust (\_ -> v) k xs)) d (dict st)))
+
+setPMap :: (Monad m) => Bool -> StateT Context m ()
+setPMap b = do 
+                 st <- get
+                 put (Context ((pm st) ++ [b]) (dict st))

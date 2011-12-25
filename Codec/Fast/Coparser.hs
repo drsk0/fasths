@@ -102,8 +102,181 @@ field2Cop (Grp g) = contramap (assertNameIs (gFName g)) (groupF2Cop g)
 assertNameIs :: NsName -> (NsName, a) -> a
 assertNameIs n1 (n2, x) = if n1 == n2 then x else throw $ OtherException "Template doesn't fit message."
 
-intF2Cop :: (Primitive a, Num a) => IntegerField -> FCoparser (Maybe a)
-intF2Cop = undefined
+intF2Cop :: (Primitive a, Num a, Ord a) => IntegerField -> FCoparser (Maybe a)
+intF2Cop (Int32Field fic) = intF2Cop' fic 
+intF2Cop (UInt32Field fic) = intF2Cop' fic 
+intF2Cop (Int64Field fic) = intF2Cop' fic 
+intF2Cop (UInt64Field fic) = intF2Cop' fic 
+
+intF2Cop' :: (Primitive a, Num a, Ord a) => FieldInstrContent -> FCoparser (Maybe a)
+
+-- if the presence attribute is not specified, it is mandatory.
+intF2Cop' (FieldInstrContent fname Nothing maybe_op) = intF2Cop' (FieldInstrContent fname (Just Mandatory) maybe_op)
+
+-- pm: No, Nullable: No
+intF2Cop' (FieldInstrContent _ (Just Mandatory) Nothing) 
+    = cp where cp (Just i) = lift $ return $ encodeP i
+               cp (Nothing) = throw $ OtherException "Template doesn't fit message."
+
+-- pm: No, Nullable: Yes
+intF2Cop' (FieldInstrContent _ (Just Optional) Nothing)
+    = cp where cp (Just i) = lift $ return $ encodeP $ plusOne i
+               cp (Nothing) = nulL
+
+-- pm: No, Nullable: No
+intF2Cop' (FieldInstrContent _ (Just Mandatory) (Just (Constant _)))
+    = \_ -> lift $ return $ BU.empty
+
+-- pm: Yes, Nullable: No
+intF2Cop' (FieldInstrContent _ (Just Mandatory) (Just (Default (Just _))))
+    = cp where cp (Just i) = lift $ setPMap True >> (lift $ return $ encodeP i)
+               cp (Nothing) = lift $ setPMap False >> (lift $ return $ BU.empty)
+
+-- pm: Yes, Nullable: No
+intF2Cop' (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing)))
+    = throw $ S5 "No initial value given for mandatory default operator."
+
+-- pm: Yes, Nullable: No
+intF2Cop' (FieldInstrContent fname (Just Mandatory) (Just (Copy oc)))
+    = cp where cp (Just i) = do
+                                p <- lift $ prevValue fname oc
+                                case p of
+                                    (Assigned v) -> if (assertType v) == i 
+                                                    then lift $ (setPMap False) >> (lift $ return $ BU.empty)
+                                                    else (lift $ setPMap True >> (lift $ return $ encodeP i))
+                                    Undefined -> h' oc
+                                        where   h' (OpContext _ _ (Just iv)) = if (ivToPrimitive iv) == i 
+                                                                                then (lift $ setPMap False) >> (lift $ return BU.empty) 
+                                                                                else (lift $ setPMap True >> (lift $ return $ encodeP i))
+                                                h' (OpContext _ _ Nothing) = lift $ setPMap True >> (lift $ return $ encodeP i)
+                                    Empty -> lift $ setPMap True >> (lift $ return $ encodeP i)
+
+               cp (Nothing) = throw $ OtherException "Template doesn't fit message."
+
+nulL :: FBuilder 
+nulL = lift $ return $ BU.singleton 0x80
+
+plusOne :: (Ord a, Num a) => a -> a
+plusOne x | x >= 0 = x + 1 
+plusOne x = x
+                            
+{-
+-- pm: Yes, Nullable: No
+intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Increment oc)))
+    = ifPresentElse
+    (
+    do 
+        i <- l2 decodeP
+        updatePrevValue fname oc (Assigned (witnessType i))
+        return (Just i)
+    )
+    (
+    do 
+        p <- prevValue fname oc
+        case p of
+            (Assigned v) -> updatePrevValue fname oc (Assigned (witnessType v')) >> return (Just v') where v' = assertType v + 1 
+            Undefined -> h' oc
+                where   h' (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i) where i =ivToPrimitive iv
+                        h' (OpContext _ _ Nothing) = throw $ D5 "No initial value in operator context given for\
+                                                        \mandatory increment operator with undefined dictionary\
+                                                        \value."
+            Empty -> throw $ D6 "Previous value is empty in mandatory increment operator."
+    )
+    
+-- pm: -, Nullable: -
+intF2P' (FieldInstrContent _ (Just Mandatory) (Just (Tail _)))
+    = throw $ S2 "Tail operator can not be applied on an integer type field." 
+
+-- pm: Yes, Nullable: No
+intF2P' (FieldInstrContent _ (Just Optional) (Just (Constant iv)))
+    = ifPresentElse (return (Just(ivToPrimitive iv))) (return Nothing)
+
+-- pm: Yes, Nullable: Yes
+intF2P' (FieldInstrContent _ (Just Optional) (Just (Default (Just iv))))
+    = ifPresentElse (nULL <|> ((Just . minusOne) <$> l2 decodeP)) (return (Just $ ivToPrimitive iv))
+
+-- pm: Yes, Nullable: Yes
+intF2P' (FieldInstrContent _ (Just Optional) (Just (Default Nothing)))
+    = ifPresentElse (nULL <|> ((Just . minusOne) <$> l2 decodeP)) (return Nothing)
+
+-- pm: Yes, Nullable: Yes
+intF2P' (FieldInstrContent fname (Just Optional) (Just (Copy oc)))
+    = ifPresentElse
+    (
+    nULL *> (updatePrevValue fname oc Empty >> return Nothing)
+    <|> do 
+        i <- l2 decodeP
+        updatePrevValue fname oc (Assigned (witnessType i))
+        return (Just $ minusOne i)
+    )
+    (
+    do
+        p <- prevValue fname oc
+        case p of
+            (Assigned v) -> return (Just (assertType v))
+            Undefined -> h' oc
+                where   h' (OpContext _ _ (Just iv)) = return $ Just (ivToPrimitive iv)
+                        h' (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> return Nothing
+            Empty -> return Nothing
+    )
+
+-- pm: Yes, Nullable: Yes
+intF2P' (FieldInstrContent fname (Just Optional) (Just (Increment oc)))
+    = ifPresentElse
+    (
+    nULL *> (updatePrevValue fname oc Empty >> return Nothing)
+    <|> do 
+        i <- l2 decodeP
+        updatePrevValue fname oc (Assigned (witnessType i))
+        return (Just $ minusOne i)
+    )
+    (
+    do 
+        p <- prevValue fname oc
+        case p of
+            (Assigned v) -> updatePrevValue fname oc (Assigned (witnessType v')) >> Just <$> return v' where v' = assertType v + 1
+            Undefined -> h' oc
+                where   h' (OpContext _ _ (Just iv)) = updatePrevValue fname oc (Assigned (witnessType i)) >> (Just <$> return i) where i = ivToPrimitive iv
+                        h' (OpContext _ _ Nothing) = updatePrevValue fname oc Empty >> return Nothing
+            Empty -> return Nothing
+    )
+
+
+-- pm: -, Nullable: -
+intF2P' (FieldInstrContent _ (Just Optional) (Just (Tail _)))
+    = throw $ S2 "Tail operator can not be applied on an integer type field." 
+
+-- pm: No, Nullable: No
+intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Delta oc)))
+    = let   baseValue (Assigned p) = assertType p
+            baseValue (Undefined) = h oc
+                where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
+                        h (OpContext _ _ Nothing) = defaultBaseValue
+            baseValue (Empty) = throw $ D6 "previous value in a delta operator can not be empty."
+
+    in
+        do 
+            d <- l2 decodeD
+            i <- (flip  delta d <$> (baseValue <$> prevValue fname oc))
+            updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i)
+
+-- pm: No, Nullable: Yes
+intF2P' (FieldInstrContent fname (Just Optional) (Just (Delta oc)))
+    = nULL
+    <|> let     baseValue (Assigned p) = assertType p
+                baseValue (Undefined) = h oc
+                    where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
+                            h (OpContext _ _ Nothing) = defaultBaseValue
+                baseValue (Empty) = throw $ D6 "previous value in a delta operator can not be empty."
+
+        in
+            do 
+                d <- l2 decodeD
+                i <- (flip delta (minusOne d) <$> (baseValue <$> prevValue fname oc))
+                updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i)
+
+-}
+
 decF2Cop :: DecimalField -> FCoparser (Maybe (Int32, Int64))
 decF2Cop = undefined
 asciiStrF2Cop :: AsciiStringField -> FCoparser (Maybe AsciiString)
