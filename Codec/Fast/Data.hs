@@ -68,8 +68,8 @@ setPMap
 
 where
 
-import Prelude hiding (exponent, dropWhile)
-import Data.ListLike (dropWhile, genericDrop, genericTake, genericLength)
+import Prelude hiding (exponent, dropWhile, reverse, zip)
+import Data.ListLike (dropWhile, genericDrop, genericTake, genericLength, reverse, zip)
 import Data.Char (digitToInt)
 import Data.Bits
 import qualified Data.ByteString as B
@@ -163,6 +163,7 @@ class Primitive a where
     defaultBaseValue :: a
     ivToPrimitive    :: InitialValueAttr -> a
     delta            :: a -> Delta a -> a
+    delta_           :: a -> a -> Delta a
     ftail            :: a -> a -> a
     decodeP          :: A.Parser a
     decodeD          :: A.Parser (Delta a)
@@ -203,6 +204,7 @@ instance Primitive Int32 where
     defaultBaseValue = 0 
     ivToPrimitive = read . trimWhiteSpace . text
     delta i (Di32 i') = i + i'
+    delta_ i1 i2 = Di32 $ i1 - i2
     ftail = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     decodeP = int
     decodeD = Di32 <$> int
@@ -221,6 +223,7 @@ instance Primitive Word32 where
     defaultBaseValue = 0
     ivToPrimitive = read . trimWhiteSpace . text
     delta w (Dw32 i) = fromIntegral (fromIntegral w + i)
+    delta_ w1 w2 = Dw32 (fromIntegral w1 - fromIntegral w2)
     ftail = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     decodeP = uint
     decodeD = Dw32 <$> int
@@ -239,6 +242,7 @@ instance Primitive Int64 where
     defaultBaseValue = 0
     ivToPrimitive = read . trimWhiteSpace . text
     delta i (Di64 i')= i + i'
+    delta_ i1 i2 = Di64 (i1 - i2)
     ftail = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     decodeP = int
     decodeD = Di64 <$> int
@@ -257,6 +261,7 @@ instance Primitive Word64 where
     defaultBaseValue = 0
     ivToPrimitive = read . trimWhiteSpace . text
     delta w (Dw64 i) = fromIntegral (fromIntegral w + i)
+    delta_ w1 w2 = Dw64 (fromIntegral w1 - fromIntegral w2)
     ftail = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields." 
     decodeP = uint
     decodeD = Dw64 <$> int
@@ -274,9 +279,15 @@ instance Primitive AsciiString where
     fromValue _ = throw $ OtherException "Type mismatch."
     defaultBaseValue = ""
     ivToPrimitive = text
-    delta s1 (Dascii (l, s2)) | l < 0 = s2 ++ s1' where s1' = genericDrop (l + 1) s1
+    delta s1 (Dascii (l, s2)) | l < 0 = s2 ++ s1' where s1' = genericDrop (-l) s1
     delta s1 (Dascii (l, s2)) | l >= 0 = s1' ++ s2 where s1' = genericTake (genericLength s1 - l) s1
     delta _ _ = throw $ D4 "Type mismatch."
+    delta_ s1 s2 =  if ((genericLength l1) :: Int32) >= genericLength l2 
+                    then Dascii (genericLength s2 - genericLength l1, genericDrop ((genericLength l1) :: Int32) s1)
+                    else Dascii (genericLength l2 - genericLength s2, genericTake ((genericLength s1 - genericLength l2) :: Int32) s1)
+                    where   l1 = map fst $ takeWhile (\(c1, c2) -> c1 == c2) (zip s1 s2)
+                            l2 = map fst $ takeWhile (\(c1, c2) -> c1 == c2) (zip (reverse s1) (reverse s2))
+                            
     ftail s1 s2 = take (length s1 - length s2) s1 ++ s2
     decodeP = asciiString
     decodeD = do 
@@ -322,6 +333,7 @@ instance Primitive (Int32, Int64) where
                                                 h xs = toEnum (length (takeWhile (/= '.') xs))
                                          in (mant, expo)
     delta (e1, m1) (Ddec (e2, m2)) = (e1 + e2, m1 + m2)
+    delta_ (e2, m2) (e1, m1) = Ddec (e2 - e1, m2 - m1)
     ftail = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     decodeP = do 
         e <- int::A.Parser Int32
@@ -342,9 +354,14 @@ instance Primitive B.ByteString where
     fromValue _ = throw $ D4 "Type mismatch."
     defaultBaseValue = B.empty
     ivToPrimitive iv = B.pack (map (toEnum . digitToInt) (filter whiteSpace (text iv)))
-    delta bv (Dbs (l, bv')) | l < 0 = bv'' `B.append` bv' where bv'' = genericDrop (l + 1) bv 
+    delta bv (Dbs (l, bv')) | l < 0 = bv'' `B.append` bv' where bv'' = genericDrop (-l) bv 
     delta bv (Dbs (l, bv')) | l >= 0 = bv'' `B.append` bv' where bv'' = genericTake (genericLength bv - l) bv
     delta _ _ = throw $ D4 "Type mismatch."
+    delta_ bv1 bv2 =  if ((genericLength l1) :: Int32) >= genericLength l2 
+                    then Dbs (genericLength bv2 - genericLength l1, genericDrop ((genericLength l1) :: Int32) bv1)
+                    else Dbs (genericLength l2 - genericLength bv2, genericTake ((genericLength bv1 - genericLength l2) :: Int32) bv1)
+                    where   l1 = map fst $ takeWhile (\(c1, c2) -> c1 == c2) (zip bv1 bv2)
+                            l2 = map fst $ takeWhile (\(c1, c2) -> c1 == c2) (zip (reverse bv1) (reverse bv2))
     ftail b1 b2 = B.take (B.length b1 - B.length b2) b1 `B.append` b2
     decodeP = byteVector
     decodeD = do 
