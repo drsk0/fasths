@@ -9,6 +9,7 @@ where
 
 import Codec.Fast.Data
 import qualified Data.Map as M
+import Data.ByteString.UTF8 (fromString)
 import Data.Word
 import Data.Int
 import Data.Bits
@@ -615,6 +616,187 @@ asciiStrF2Cop (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (T
                                                 h (OpContext _ _ Nothing) = (lift $ setPMap False) >> (lift $ updatePrevValue fname oc Empty) >> (lift $ return BU.empty)
                                     Empty -> (lift $ setPMap False) >> (lift $ return BU.empty)
 
+bytevecF2Cop :: ByteVectorField -> FCoparser (Maybe B.ByteString)
+
+bytevecF2Cop (ByteVectorField (FieldInstrContent fname Nothing maybe_op) len) 
+    = bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Mandatory) maybe_op) len)
+
+-- pm: No, Nullable: No
+bytevecF2Cop (ByteVectorField (FieldInstrContent _ (Just Mandatory) Nothing ) _ ) 
+    = cp where  cp (Just bv) = lift $ return $ encodeP bv
+                cp (Nothing) = throw $ OtherException "Template doesn't fit message."
+
+-- pm: No, Nullable: Yes
+bytevecF2Cop (ByteVectorField (FieldInstrContent _ (Just Optional) Nothing ) _ ) 
+    = cp where  cp (Just bv) = lift $ return $ encodeP bv
+                cp (Nothing) = nulL
+-- pm: No, Nullable: No
+bytevecF2Cop (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Constant iv))) _ ) 
+    = cp where  cp (Just bv) =  if ivToPrimitive iv == bv 
+                                then lift $ return BU.empty
+                                else throw $ OtherException "Template doesn't fit message."
+                cp (Nothing) = throw $ OtherException "Template doesn't fit message."
+
+-- pm: Yes, Nullable: No
+bytevecF2Cop (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Constant iv))) _ ) 
+    = cp where  cp (Just bv) =  if ivToPrimitive iv == bv
+                                then (lift $ setPMap True) >> (lift $ return BU.empty)
+                                else throw $ OtherException "Template doesn't fit message."
+                cp (Nothing) = (lift $ setPMap False) >> (lift $ return BU.empty)
+
+-- pm: Yes, Nullable: No
+bytevecF2Cop (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Default Nothing))) _ ) 
+    = throw $ S5 "No initial value given for mandatory default operator."
+
+-- pm: Yes, Nullable: No
+bytevecF2Cop (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Default (Just iv)))) _ ) 
+    = cp where  cp (Just bv) =  if ivToPrimitive iv == bv
+                                then (lift $ setPMap False) >> (lift $ return BU.empty)
+                                else (lift $ setPMap True) >> (lift $ return $ encodeP bv)
+                cp (Nothing) = throw $ OtherException "Template doesn't fit message."
+
+-- pm: Yes, Nullable: Yes
+bytevecF2Cop (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Default Nothing))) _ ) 
+    = cp where  cp (Just bv) = (lift $ setPMap True) >> (lift $ return $ encodeP bv)
+                cp (Nothing) = (lift $ setPMap False) >> (lift $ return BU.empty)
+-- pm: Yes, Nullable: Yes
+bytevecF2Cop (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Default (Just iv)))) _ ) 
+    = cp where  cp (Just bv) =  if ivToPrimitive iv == bv
+                                then (lift $ setPMap False) >> (lift $ return BU.empty)
+                                else (lift $ setPMap True) >> (lift $ return $ encodeP bv)
+                cp (Nothing) = (lift $ setPMap True) >> nulL
+-- pm: Yes, Nullable: No
+bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Copy oc))) _ ) 
+    = cp where  cp (Just bv) = do
+                                p <- lift $ prevValue fname oc
+                                case p of
+                                    (Assigned v) -> if assertType v == bv
+                                                    then (lift $ setPMap False) >> (lift $ return BU.empty)
+                                                    else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return $ encodeP bv)
+                                    Undefined ->  h' oc
+                                        where   h' (OpContext _ _ (Just iv)) =  if ivToPrimitive iv == bv
+                                                                                then (lift $ setPMap False) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return BU.empty)
+                                                                                else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return $ encodeP bv)
+                                                h' (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return $ encodeP bv)
+                                    Empty -> (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return $ encodeP bv)
+                cp (Nothing) = throw $ OtherException "Template doesn't fit message."
+-- pm: Yes, Nullable: Yes
+bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Copy oc))) _ ) 
+    = cp where  cp (Just bv) = do
+                                p <- lift $ prevValue fname oc
+                                case p of
+                                    (Assigned v) -> if assertType v == bv
+                                                    then (lift $ setPMap False) >> (lift $ return BU.empty)
+                                                    else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return $ encodeP bv)
+                                    Undefined -> h' oc
+                                        where   h' (OpContext _ _ (Just iv)) =  if ivToPrimitive iv == bv
+                                                                                then (lift $ setPMap False) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return BU.empty)
+                                                                                else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return $ encodeP bv)
+                                                h' (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return $ encodeP bv)
+                                    Empty -> (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return $ encodeP bv)
+                cp (Nothing) = do 
+                                p <- lift $ prevValue fname oc
+                                case p of
+                                    (Assigned _) ->  (lift $ setPMap True) >> (lift $ updatePrevValue fname oc Empty) >> nulL
+                                    Undefined -> h' oc
+                                        where   h' (OpContext _ _ (Just _)) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc Empty) >> nulL
+                                                h' (OpContext _ _ Nothing) = (lift $ setPMap False) >> (lift $ updatePrevValue fname oc Empty) >> (lift $ return BU.empty)
+                                    Empty -> (lift $ setPMap False) >> (lift $ return BU.empty)
+-- pm: Yes, Nullable: No
+bytevecF2Cop (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Increment _ ))) _ ) 
+    = throw $ S2 "Increment operator is only applicable to integer fields." 
+-- pm: Yes, Nullable: Yes
+bytevecF2Cop (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Increment _ ))) _ ) 
+    = throw $ S2 "Increment operator is only applicable to integer fields." 
+
+-- pm: No, Nullable: No
+bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Delta oc))) _ ) 
+    = cp where  cp (Just bv) = let  baseValue (Assigned p) = assertType p
+                                    baseValue (Undefined) = h oc
+                                        where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
+                                                h (OpContext _ _ Nothing) = defaultBaseValue
+                                    baseValue (Empty) = throw $ D6 "previous value in a delta operator can not be empty."
+                               in
+                                do
+                                    p <- lift $ prevValue fname oc
+                                    lift $ return $ encodeD $ delta_ bv (baseValue p)
+                cp (Nothing) = throw $ OtherException "Template doesn't fit message."
+
+-- pm: No, Nullable: Yes
+bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Delta oc))) _ ) 
+    = cp where  cp (Just bv) = let  baseValue (Assigned p) = assertType p
+                                    baseValue (Undefined) = h oc
+                                        where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
+                                                h (OpContext _ _ Nothing) = defaultBaseValue
+                                    baseValue (Empty) = throw $ D6 "previous value in a delta operator can not be empty."
+                                in
+                                    do 
+                                        p <- lift $ prevValue fname oc
+                                        (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return $ encodeD $ delta_ bv (baseValue p))
+                cp (Nothing) = nulL
+
+
+-- pm: Yes, Nullable: No
+bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail oc))) _ ) 
+    = cp where  cp (Just bv) = let  baseValue (Assigned p) = assertType p
+                                    baseValue (Undefined) = h oc
+                                        where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
+                                                h (OpContext _ _ Nothing) = defaultBaseValue
+
+                                    baseValue (Empty) = h oc
+                                        where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
+                                                h (OpContext _ _ Nothing) = defaultBaseValue
+                                in
+                                    do
+                                        p <- lift $ prevValue fname oc
+                                        case p of
+                                            (Assigned v) -> if assertType v == bv
+                                                            then (lift $ setPMap False) >> (lift $ return BU.empty)
+                                                            else (lift $ setPMap True) >> (lift $ return $ encodeT $ ftail_ bv (baseValue p))
+                                            Undefined -> h oc
+                                                where   h (OpContext _ _ (Just iv)) =   if ivToPrimitive iv == bv
+                                                                                        then (lift $ setPMap False) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return BU.empty)
+                                                                                        else (lift $ setPMap True) >> (lift $ return $ encodeT $ ftail_ bv (baseValue p))
+                                                        h (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ return $ encodeT $ ftail_ bv (baseValue p))
+                                            Empty -> (lift $ setPMap True) >> (lift $ return $ encodeT $ ftail_ bv (baseValue p))
+                cp (Nothing) = throw $ OtherException "Template doesn't fit message."
+
+-- pm: Yes, Nullable: Yes
+bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Tail oc))) _) 
+    = cp where  cp (Just bv) =  let baseValue (Assigned p) = assertType p
+                                    baseValue (Undefined) = h oc
+                                        where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
+                                                h (OpContext _ _ Nothing) = defaultBaseValue
+                                    baseValue (Empty) = h oc
+                                        where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
+                                                h (OpContext _ _ Nothing) = defaultBaseValue
+                                in
+                                    do
+                                        p <- lift $ prevValue fname oc
+                                        case p of
+                                            (Assigned v) -> if assertType v == bv
+                                                            then (lift $ setPMap False) >> (lift $ return BU.empty)
+                                                            else (lift $ setPMap True) >> (lift $ return $ encodeT $ ftail_ bv (baseValue p))
+                                            Undefined -> h oc
+                                                where   h (OpContext _ _ (Just iv)) =   if ivToPrimitive iv == bv
+                                                                                        then (lift $ setPMap False) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return BU.empty)
+                                                                                        else (lift $ setPMap True) >> (lift $ return $ encodeT $ ftail_ bv (baseValue p))
+                                                        h (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ return $ encodeT $ ftail_ bv (baseValue p))
+                                            Empty -> (lift $ setPMap True) >> (lift $ return $ encodeT $ ftail_ bv (baseValue p))
+                cp (Nothing) = do
+                                p <- lift $ prevValue fname oc
+                                case p of
+                                    (Assigned _) -> (lift $ setPMap True) >> (lift $ updatePrevValue fname oc Empty) >> nulL 
+                                    Undefined -> h oc
+                                        where   h (OpContext _ _ (Just _)) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc Empty) >> nulL
+                                                h (OpContext _ _ Nothing) = (lift $ updatePrevValue fname oc Empty) >> (lift $ return BU.empty)
+                                    Empty -> (lift $ setPMap False) >> (lift $ return BU.empty)
+
+-- |Maps an unicode field to its parser.
+unicodeF2Cop :: UnicodeStringField -> FCoparser (Maybe UnicodeString)
+unicodeF2Cop (UnicodeStringField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)
+    = cp where cp maybe_us = bytevecF2Cop (ByteVectorField (FieldInstrContent fname maybe_presence maybe_op) maybe_length) (fromString <$> maybe_us)
+
 nulL :: FBuilder 
 nulL = lift $ return $ BU.singleton 0x80
 
@@ -623,10 +805,6 @@ plusOne x | x >= 0 = x + 1
 plusOne x = x
                             
 
-unicodeF2Cop :: UnicodeStringField -> FCoparser (Maybe UnicodeString)
-unicodeF2Cop = undefined
-bytevecF2Cop :: ByteVectorField -> FCoparser (Maybe B.ByteString)
-bytevecF2Cop = undefined
 seqF2Cop :: Sequence -> FCoparser (Maybe Value)
 seqF2Cop = undefined
 groupF2Cop :: Group -> FCoparser (Maybe Value)
