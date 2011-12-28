@@ -1108,11 +1108,6 @@ templateIdentifier = do
 -- *Helper functions.
 --
 
--- |Create a unique fname out of a given one and a string.
-uniqueFName::NsName -> String -> NsName
-uniqueFName fname s = NsName (NameAttr(n ++ s)) ns ide
-    where (NsName (NameAttr n) ns ide) = fname
-
 -- |Decrement the value of an integer, when it is positive.
 minusOne::(Ord a, Num a) => a -> a
 minusOne x | x > 0 = x - 1

@@ -267,6 +267,175 @@ intF2Cop' (FieldInstrContent fname (Just Optional) (Just (Delta oc)))
                                         b <- lift $ baseValue <$> (prevValue fname oc)
                                         (lift $ updatePrevValue fname oc (Assigned (witnessType i))) >> (lift $ return $ encodeD $ plusOne $ (delta_ i b))
                     cp (Nothing) = nulL
+                    
+decF2Cop::DecimalField -> FCoparser (Maybe Decimal)
+
+-- If the presence attribute is not specified, the field is considered mandatory.
+decF2Cop (DecimalField fname Nothing maybe_either_op) 
+    = decF2Cop (DecimalField fname (Just Mandatory) maybe_either_op)
+
+-- pm: No, Nullable: No
+decF2Cop (DecimalField _ (Just Mandatory) Nothing)
+    = cp where  cp (Just d) = lift $ return $ encodeP d
+                cp (Nothing) = throw $ OtherException "Template doesn't fit template."
+
+-- om: No, Nullable: Yes
+decF2Cop (DecimalField _ (Just Optional) Nothing)
+    = cp where cp (Just (e, m)) = lift $ return $ encodeP $ (plusOne e, m)
+               cp (Nothing) = nulL
+
+-- pm: No, Nullable: No
+decF2Cop (DecimalField _ (Just Mandatory) (Just (Left (Constant _)))) 
+    = \_ -> lift $ return BU.empty
+
+-- pm: Yes, Nullable: No
+decF2Cop (DecimalField _ (Just Mandatory) (Just (Left (Default Nothing))))
+    = throw $ S5 "No initial value given for mandatory default operator."
+
+-- pm: Yes, Nullable: No
+decF2Cop (DecimalField _ (Just Mandatory) (Just (Left (Default (Just iv)))))
+    = cp where  cp (Just d) = if (d == ivToPrimitive iv) 
+                              then (lift $ setPMap False) >> (lift $ return BU.empty)
+                              else (lift $ setPMap True) >> (lift $ return $ encodeP d)
+                cp (Nothing) = throw $ OtherException "Template doesn't fit message."
+
+-- pm: Yes, Nullable: No
+decF2Cop (DecimalField fname (Just Mandatory) (Just (Left (Copy oc)))) 
+    = cp where  cp (Just d) = do
+                                p <- lift $ prevValue fname oc
+                                case p of
+                                    (Assigned v) -> if assertType v == d 
+                                                    then (lift $ setPMap False) >> (lift $ return BU.empty)
+                                                    else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType d))) >> (lift $ return $ encodeP d)
+                                    Undefined -> h' oc
+                                        where   h' (OpContext _ _ (Just iv)) =  if ivToPrimitive iv == d 
+                                                                                then lift $ return BU.empty
+                                                                                else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType d))) >> (lift $ return $ encodeP d)
+                                                h' (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType d))) >> (lift $ return $ encodeP d)
+                                    Empty -> (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType d))) >> (lift $ return $ encodeP d)
+                cp (Nothing) = throw $ OtherException "Template doesn't fit message."
+
+
+-- pm: Yes, Nullable: No
+decF2Cop (DecimalField _ (Just Mandatory) (Just (Left (Increment _)))) 
+    = throw $ S2 "Increment operator is only applicable to integer fields." 
+
+-- pm: No, Nullable: No
+decF2Cop (DecimalField fname (Just Mandatory) (Just (Left (Delta oc)))) 
+    = cp where  cp (Just d) =   let baseValue (Assigned p) = assertType p
+                                    baseValue (Undefined) = h oc
+                                        where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
+                                                h (OpContext _ _ Nothing) = defaultBaseValue
+                                    baseValue (Empty) = throw $ D6 "previous value in a delta operator can not be empty."
+
+                                in 
+                                    do
+                                        p <- lift $ prevValue fname oc
+                                        (lift $ updatePrevValue fname oc (Assigned (witnessType d))) >> (lift $ return $ encodeD $ delta_ d (baseValue p)) 
+                cp (Nothing) = throw $ OtherException "Template doesn't fit message."
+
+decF2Cop (DecimalField _ (Just Mandatory) (Just (Left (Tail _))))
+    = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields." 
+
+-- pm: Yes, Nullable: No
+decF2Cop (DecimalField _ (Just Optional) (Just (Left (Constant iv)))) 
+    = cp where  cp (Just d) =   if ivToPrimitive iv == d
+                                then (lift $ setPMap True) >> (lift $ return $ BU.empty)
+                                else throw $ OtherException "Template doesn't fit message."
+                cp (Nothing) = (lift $ setPMap False) >> (lift $ return $ BU.empty)
+
+-- pm: Yes, Nullable: Yes
+decF2Cop (DecimalField _ (Just Optional) (Just (Left (Default Nothing)))) 
+    = cp where  cp (Just d) = (lift $ setPMap True) >> (lift $ return $ encodeP d)
+                cp (Nothing) = (lift $ setPMap False) >> (return $ BU.empty)
+                -- TODO: why is this field nullable?
+            
+-- pm: Yes, Nullable: Yes
+decF2Cop (DecimalField _ (Just Optional) (Just (Left (Default (Just iv))))) 
+    = cp where  cp (Just d) =   if ivToPrimitive iv == d
+                                then (lift $ setPMap False) >> (lift $ return $ BU.empty)
+                                else (lift $ setPMap True) >> (lift $ return $ encodeP d)
+                cp (Nothing) = (lift $ setPMap True) >> nulL
+
+-- pm: Yes, Nullable: Yes
+decF2Cop (DecimalField fname (Just Optional) (Just (Left (Copy oc)))) 
+    = cp where  cp (Just d) = do
+                                p <- lift $ prevValue fname oc
+                                case p of
+                                    (Assigned v) -> if assertType v == d 
+                                                    then (lift $ setPMap False) >> (lift $ return $ BU.empty)
+                                                    else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType d))) >> (lift $ return $ encodeP d)
+                                    Undefined -> h' oc
+                                        where   h' (OpContext _ _ (Just iv)) =  if ivToPrimitive iv == d
+                                                                                then (lift $ setPMap False) >> (lift $ return BU.empty)
+                                                                                else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType d))) >> (lift $ return $ encodeP d)
+                                                h' (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType d))) >> (lift $ return $ encodeP d)
+                                    Empty -> (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType d))) >> (lift $ return $ encodeP d)
+                cp (Nothing) = do
+                                p <- lift $ prevValue fname oc
+                                case p of
+                                    (Assigned _) -> (lift $ setPMap True) >> (lift $ updatePrevValue fname oc Empty)  >> nulL
+                                    Undefined -> h' oc
+                                        where   h' (OpContext _ _ (Just _)) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc Empty) >> nulL
+                                                h' (OpContext _ _ Nothing) = (lift $ setPMap False) >> (lift $ updatePrevValue fname oc Empty) >> (lift $ return BU.empty)
+                                    Empty -> (lift $ setPMap False) >> (lift $ return BU.empty)
+
+
+-- pm: Yes, Nullable: Yes
+decF2Cop (DecimalField _ (Just Optional) (Just (Left (Increment _)))) 
+    = throw $ S2 "Increment operator is applicable only to integer fields."
+
+-- pm: No, Nullable: Yes
+decF2Cop (DecimalField fname (Just Optional) (Just (Left (Delta oc)))) 
+    = cp where  cp (Just d) =   let baseValue (Assigned p) = assertType p
+                                    baseValue (Undefined) = h oc
+                                        where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
+                                                h (OpContext _ _ Nothing) = defaultBaseValue
+                                    baseValue (Empty) = throw $ D6 "previous value in a delta operator can not be empty."
+                                in
+                                    do
+                                        p <- lift $ prevValue fname oc
+                                        (lift $ updatePrevValue fname oc (Assigned (witnessType d))) >> (lift $ return $ encodeD $ delta_ d (baseValue p))
+                cp (Nothing) = nulL
+
+-- pm: No, Nullable: Yes
+decF2Cop (DecimalField _ (Just Optional) (Just (Left (Tail _)))) 
+    = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields." 
+
+-- Both operators are handled individually as mandatory operators.
+decF2Cop (DecimalField fname (Just Mandatory) (Just (Right (DecFieldOp maybe_exOp maybe_maOp)))) 
+    = cp where cp (Just (e, m)) =   let fname' = uniqueFName fname "e"
+                                        fname'' = uniqueFName fname "m" 
+                                    in
+                                        do 
+                                            be <- intF2Cop (Int32Field (FieldInstrContent fname' (Just Mandatory) maybe_exOp)) (Just e) 
+                                            bm <- intF2Cop (Int64Field (FieldInstrContent fname'' (Just Mandatory) maybe_maOp)) (Just m)
+                                            lift $ return $ be `BU.append` bm
+               cp (Nothing) =   let fname' = uniqueFName fname "e"
+                                    fname'' = uniqueFName fname "m" 
+                                in
+                                    do 
+                                        be <- ((intF2Cop (Int32Field (FieldInstrContent fname' (Just Mandatory) maybe_exOp))) :: FCoparser (Maybe Int32))  Nothing 
+                                        bm <- ((intF2Cop (Int64Field (FieldInstrContent fname'' (Just Mandatory) maybe_maOp))) :: FCoparser (Maybe Int64)) Nothing 
+                                        lift $ return $ be `BU.append` bm
+
+
+-- The exponent field is considered as an optional field, the mantissa field as a mandatory field.
+decF2Cop (DecimalField fname (Just Optional) (Just (Right (DecFieldOp maybe_exOp maybe_maOp))))
+    = cp where cp (Just (e, m)) =   let fname' = uniqueFName fname "e"
+                                        fname'' = uniqueFName fname "m" 
+                                    in
+                                        do 
+                                            be <- intF2Cop (Int32Field (FieldInstrContent fname' (Just Optional) maybe_exOp)) (Just e) 
+                                            bm <- intF2Cop (Int64Field (FieldInstrContent fname'' (Just Mandatory) maybe_maOp)) (Just m)
+                                            lift $ return $ be `BU.append` bm
+               cp (Nothing) =   let fname' = uniqueFName fname "e"
+                                    fname'' = uniqueFName fname "m" 
+                                in
+                                    do 
+                                        be <- ((intF2Cop (Int32Field (FieldInstrContent fname' (Just Optional) maybe_exOp))) :: FCoparser (Maybe Int32))  Nothing 
+                                        bm <- ((intF2Cop (Int64Field (FieldInstrContent fname'' (Just Mandatory) maybe_maOp))) :: FCoparser (Maybe Int64)) Nothing 
+                                        lift $ return $ be `BU.append` bm
 
 nulL :: FBuilder 
 nulL = lift $ return $ BU.singleton 0x80
@@ -276,8 +445,6 @@ plusOne x | x >= 0 = x + 1
 plusOne x = x
                             
 
-decF2Cop :: DecimalField -> FCoparser (Maybe (Int32, Int64))
-decF2Cop = undefined
 asciiStrF2Cop :: AsciiStringField -> FCoparser (Maybe AsciiString)
 asciiStrF2Cop = undefined
 unicodeF2Cop :: UnicodeStringField -> FCoparser (Maybe UnicodeString)

@@ -63,7 +63,8 @@ contramap,
 sequenceD,
 prevValue,
 updatePrevValue,
-setPMap
+setPMap,
+uniqueFName
 )
 
 where
@@ -713,3 +714,8 @@ setPMap :: (Monad m) => Bool -> StateT Context m ()
 setPMap b = do 
                  st <- get
                  put (Context ((pm st) ++ [b]) (dict st))
+
+-- |Create a unique fname out of a given one and a string.
+uniqueFName::NsName -> String -> NsName
+uniqueFName fname s = NsName (NameAttr(n ++ s)) ns ide
+    where (NsName (NameAttr n) ns ide) = fname
