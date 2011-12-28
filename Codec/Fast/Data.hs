@@ -166,6 +166,7 @@ class Primitive a where
     delta            :: a -> Delta a -> a
     delta_           :: a -> a -> Delta a
     ftail            :: a -> a -> a
+    ftail_           :: a -> a -> a
     decodeP          :: A.Parser a
     decodeD          :: A.Parser (Delta a)
     decodeT          :: A.Parser a
@@ -207,6 +208,7 @@ instance Primitive Int32 where
     delta i (Di32 i') = i + i'
     delta_ i1 i2 = Di32 $ i1 - i2
     ftail = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
+    ftail_ = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     decodeP = int
     decodeD = Di32 <$> int
     decodeT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
@@ -226,6 +228,7 @@ instance Primitive Word32 where
     delta w (Dw32 i) = fromIntegral (fromIntegral w + i)
     delta_ w1 w2 = Dw32 (fromIntegral w1 - fromIntegral w2)
     ftail = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
+    ftail_ = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     decodeP = uint
     decodeD = Dw32 <$> int
     decodeT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
@@ -245,6 +248,7 @@ instance Primitive Int64 where
     delta i (Di64 i')= i + i'
     delta_ i1 i2 = Di64 (i1 - i2)
     ftail = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
+    ftail_ = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     decodeP = int
     decodeD = Di64 <$> int
     decodeT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
@@ -264,6 +268,7 @@ instance Primitive Word64 where
     delta w (Dw64 i) = fromIntegral (fromIntegral w + i)
     delta_ w1 w2 = Dw64 (fromIntegral w1 - fromIntegral w2)
     ftail = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields." 
+    ftail_ = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     decodeP = uint
     decodeD = Dw64 <$> int
     decodeT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
@@ -290,6 +295,7 @@ instance Primitive AsciiString where
                             l2 = map fst $ takeWhile (\(c1, c2) -> c1 == c2) (zip (reverse s1) (reverse s2))
                             
     ftail s1 s2 = take (length s1 - length s2) s1 ++ s2
+    ftail_ s1 s2 = take (length s1 - length s2) s1
     decodeP = asciiString
     decodeD = do 
                 l <- int
@@ -336,6 +342,7 @@ instance Primitive (Int32, Int64) where
     delta (e1, m1) (Ddec (e2, m2)) = (e1 + e2, m1 + m2)
     delta_ (e2, m2) (e1, m1) = Ddec (e2 - e1, m2 - m1)
     ftail = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
+    ftail_ = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     decodeP = do 
         e <- int::A.Parser Int32
         m <- int::A.Parser Int64
@@ -364,6 +371,7 @@ instance Primitive B.ByteString where
                     where   l1 = map fst $ takeWhile (\(c1, c2) -> c1 == c2) (zip bv1 bv2)
                             l2 = map fst $ takeWhile (\(c1, c2) -> c1 == c2) (zip (reverse bv1) (reverse bv2))
     ftail b1 b2 = B.take (B.length b1 - B.length b2) b1 `B.append` b2
+    ftail_ b1 b2 = B.take (B.length b1 - B.length b2) b1
     decodeP = byteVector
     decodeD = do 
                 l <- int
