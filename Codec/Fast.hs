@@ -35,11 +35,11 @@ import qualified Data.Binary.Builder as BU
 
 -- |Stateful parser for one message depending on templates and the tid2temp 
 -- converter function.
-message::Templates -> (Word32 -> String) -> StateT Context A.Parser (NsName, Maybe Value)
+message::Templates -> (Word32 -> TemplateNsName) -> StateT Context A.Parser (NsName, Maybe Value)
 message ts tid2tem = let env = initEnv ts tid2tem 
     in runReaderT segment' env
 
-_message :: Templates -> (NsName -> Word32) -> (NsName, Maybe Value) -> State Context BU.Builder
+_message :: Templates -> (TemplateNsName -> Word32) -> (NsName, Maybe Value) -> State Context BU.Builder
 _message ts tem2tid msg = let env = _initEnv ts tem2tid
     in runReaderT (_segment' msg) env
 

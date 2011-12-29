@@ -23,12 +23,12 @@ import qualified Data.Binary.Builder as BU
 
 data Env_ = Env_ {
     -- |All known templates.
-    templates :: M.Map NsName Template,
+    templates :: M.Map TemplateNsName Template,
     -- |The application needs to define how uint32 values are mapped to template names and vice versa.
     temp2tid :: NsName -> Word32
     }
 
-_initEnv :: Templates -> (NsName -> Word32) -> Env_
+_initEnv :: Templates -> (TemplateNsName -> Word32) -> Env_
 _initEnv = undefined
 
 type FBuilder = ReaderT Env_ (State Context) BU.Builder
@@ -47,6 +47,9 @@ _segment' (n, v) = do
     pmap <- _presenceMap ()
     return $ pmap `BU.append` tid
 
+_segment :: FCoparser ()
+_segment = _presenceMap
+
 _templateIdentifier :: FCoparser (NsName, Maybe Value)
 _templateIdentifier (n, v)  = 
     let _p = field2Cop  (IntField (UInt32Field (FieldInstrContent 
@@ -58,7 +61,7 @@ _templateIdentifier (n, v)  =
    do
        env <- ask
        tid <- _p (n, (Just . UI32 . temp2tid env) n)
-       msg <- template2Cop (templates env M.! n) (n, v)
+       msg <- template2Cop (templates env M.! (fname2tname n)) (n, v)
        return (tid `BU.append` msg)
 
 _presenceMap :: FCoparser ()
@@ -86,7 +89,7 @@ instr2Cop :: Instruction -> FCoparser (NsName, Maybe Value)
 instr2Cop (Instruction f) = field2Cop f 
 instr2Cop (TemplateReference (Just trc)) = \(n, v) -> do
     env <- ask
-    template2Cop (templates env M.! NsName name Nothing Nothing) (n, v) where (TemplateReferenceContent name _) = trc
+    template2Cop (templates env M.! (tempRefCont2TempNsName trc)) (n, v) 
 instr2Cop (TemplateReference Nothing) = _segment'
 
 field2Cop :: Field -> FCoparser (NsName, Maybe Value)
@@ -792,10 +795,39 @@ bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Tai
                                                 h (OpContext _ _ Nothing) = (lift $ updatePrevValue fname oc Empty) >> (lift $ return BU.empty)
                                     Empty -> (lift $ setPMap False) >> (lift $ return BU.empty)
 
--- |Maps an unicode field to its parser.
+-- |Maps an unicode field to its coparser.
 unicodeF2Cop :: UnicodeStringField -> FCoparser (Maybe UnicodeString)
 unicodeF2Cop (UnicodeStringField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)
     = cp where cp maybe_us = bytevecF2Cop (ByteVectorField (FieldInstrContent fname maybe_presence maybe_op) maybe_length) (fromString <$> maybe_us)
+
+seqF2Cop :: Sequence -> FCoparser (Maybe Value)
+seqF2Cop (Sequence fname maybe_presence _ _ maybe_length instrs) 
+    = cp where cp (Just (Sq w xs)) = let    lengthb = h maybe_presence maybe_length
+                                            fname' = uniqueFName fname "l" 
+                                            h p Nothing = (intF2Cop (UInt32Field (FieldInstrContent fname' p Nothing)) :: FCoparser (Maybe Word32)) (Just w)
+                                            h p (Just (Length Nothing op)) = (intF2Cop (UInt32Field (FieldInstrContent fname' p op)) :: FCoparser (Maybe Word32)) (Just w)
+                                            h p (Just (Length (Just fn) op)) = (intF2Cop (UInt32Field (FieldInstrContent fn p op)) :: FCoparser (Maybe Word32)) (Just w)
+
+                                            segmentb = do
+                                                            env <- ask
+                                                            if needsSegment instrs (templates env) then _segment () else (lift $ return BU.empty)
+                                            segs = map (sequenceD $ map instr2Cop instrs) xs
+                                            segs' = fmap mconcat $ sequence (map g segs) where g fb = do  
+                                                                                                        b1 <- fb
+                                                                                                        b2 <- segmentb
+                                                                                                        lift $ return (b2 `BU.append` b1)
+                                    in
+                                        do
+                                            bu1 <- lengthb
+                                            bu2 <- segs'
+                                            lift $ return $ (bu1 `BU.append` bu2)
+
+               cp (Just _) = throw $ OtherException "Template doesn't fit message."
+               cp (Nothing) =   lengthb where   lengthb = h maybe_presence maybe_length
+                                                fname' = uniqueFName fname "l" 
+                                                h p Nothing = (intF2Cop (UInt32Field (FieldInstrContent fname' p Nothing)) :: FCoparser (Maybe Word32)) Nothing 
+                                                h p (Just (Length Nothing op)) = (intF2Cop (UInt32Field (FieldInstrContent fname' p op)) :: FCoparser (Maybe Word32)) Nothing 
+                                                h p (Just (Length (Just fn) op)) = (intF2Cop (UInt32Field (FieldInstrContent fn p op)) :: FCoparser (Maybe Word32)) Nothing 
 
 nulL :: FBuilder 
 nulL = lift $ return $ BU.singleton 0x80
@@ -803,9 +835,6 @@ nulL = lift $ return $ BU.singleton 0x80
 plusOne :: (Ord a, Num a) => a -> a
 plusOne x | x >= 0 = x + 1 
 plusOne x = x
-                            
 
-seqF2Cop :: Sequence -> FCoparser (Maybe Value)
-seqF2Cop = undefined
 groupF2Cop :: Group -> FCoparser (Maybe Value)
 groupF2Cop = undefined

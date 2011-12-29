@@ -38,9 +38,9 @@ import Control.Exception
 -- |Environment of the parser.
 data Env = Env {
     -- |All known templates.
-    templates   ::M.Map String Template,
+    templates   ::M.Map TemplateNsName Template,
     -- |The application needs to define how uint32 values are mapped to template names.
-    tid2temp   ::Word32 -> String
+    tid2temp   ::Word32 -> TemplateNsName
     }
 
 type FParser a = ReaderT Env (StateT Context A.Parser) a
@@ -57,8 +57,7 @@ instr2P (Instruction f) = field2Parser f
 -- Static template reference.
 instr2P (TemplateReference (Just trc)) = do
     env <- ask
-    template2P (templates env M.! name) 
-    where (TemplateReferenceContent (NameAttr name) _) = trc
+    template2P (templates env M.! (tempRefCont2TempNsName trc)) 
 
 -- Dynamic template reference.  
 instr2P (TemplateReference Nothing) = segment'
@@ -783,8 +782,9 @@ seqF2P (Sequence fname maybe_presence _ _ maybe_length instrs)
         g i
         where   g Nothing = return (fname, Nothing)
                 g (Just i') = do
-                                        s <- ask >>= \env -> A.count (fromEnum i') (segmentDep instrs (templates env) >> mapM instr2P instrs)
-                                        return (fname, Just (Sq i' s))
+                                    env <- ask
+                                    s <- A.count (fromEnum i') ((when (needsSegment instrs (templates env)) segment) >> mapM instr2P instrs) 
+                                    return (fname, Just (Sq i' s))
                 -- get the correct parser for the length field.
                 fname' = uniqueFName fname "l" 
                 h p Nothing = intF2P (UInt32Field (FieldInstrContent fname' p Nothing))
@@ -864,12 +864,8 @@ segment = presenceMap
 segment'::FParser (NsName, Maybe Value)
 segment' = presenceMap >> templateIdentifier
 
--- |Returns newSegment | id, depending on presence bit usage of a group of fields.
-segmentDep::[Instruction] -> M.Map String Template -> FParser ()
-segmentDep ins ts = when (any (needsPm ts) ins) segment
-
 -- |New segment depending on the instructions in the group, creates a presence map for the group.
-segmentGrp::[Instruction] -> M.Map String Template -> FParser ()
+segmentGrp::[Instruction] -> M.Map TemplateNsName Template -> FParser ()
 segmentGrp ins ts = case any (needsPm ts) ins of
     True -> do
         st <- get
@@ -877,97 +873,6 @@ segmentGrp ins ts = case any (needsPm ts) ins of
         where pm' = replicate (length ins) True
     False -> return ()
 
--- |Decides wether an instruction uses the presence map or not. We need to know all the templates,
--- to process template reference instructions recursivly.
-needsPm::M.Map String Template -> Instruction -> Bool
--- static template reference
-needsPm ts (TemplateReference (Just (TemplateReferenceContent (NameAttr n) _))) = all (needsPm ts) (tInstructions t) where t = ts M.! n
--- dynamic template reference
-needsPm _ (TemplateReference Nothing) = False
-needsPm _ (Instruction (IntField (Int32Field fic))) = intFieldNeedsPm fic
-needsPm _ (Instruction (IntField (Int64Field fic))) = intFieldNeedsPm fic
-needsPm _ (Instruction (IntField (UInt32Field fic))) = intFieldNeedsPm fic
-needsPm _ (Instruction (IntField (UInt64Field fic))) = intFieldNeedsPm fic
-needsPm ts (Instruction (DecField (DecimalField fname Nothing eitherOp))) = needsPm ts (Instruction(DecField (DecimalField fname (Just Mandatory) eitherOp)))
-needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) Nothing ))) = False
-needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) (Just (Left (Constant _)))))) = False
-needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) (Just (Left (Default _)))))) = True
-needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) (Just (Left (Copy _)))))) = True
-needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) (Just (Left (Increment _)))))) = throw $ S2 "Increment operator is only applicable to integer fields." 
-needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) (Just (Left (Delta _)))))) = False
-needsPm _ (Instruction (DecField (DecimalField _ (Just Mandatory) (Just (Left (Tail _)))))) = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields." 
-needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) Nothing ))) = False
-needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) (Just (Left (Constant _)))))) = True
-needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) (Just (Left (Default _)))))) = True 
-needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) (Just (Left (Copy _)))))) = True
-needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) (Just (Left (Increment _)))))) = throw $ S2 "Increment operator is only applicable to integer fields." 
-needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) (Just (Left (Delta _)))))) = False
-needsPm _ (Instruction (DecField (DecimalField _ (Just Optional) (Just (Left (Tail _)))))) = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields." 
-needsPm ts (Instruction (DecField (DecimalField fname (Just Mandatory) (Just (Right (DecFieldOp maybe_opE maybe_opM)))))) = needsPm ts insE && needsPm ts insM 
-    where   insE = Instruction (IntField (Int32Field (FieldInstrContent fname (Just Mandatory) maybe_opE)))
-            insM =  Instruction (IntField (Int64Field (FieldInstrContent fname (Just Mandatory) maybe_opM)))
-needsPm ts (Instruction (DecField (DecimalField fname (Just Optional) (Just (Right (DecFieldOp maybe_opE maybe_opM)))))) = needsPm ts insE && needsPm ts insM 
-    where   insE = Instruction (IntField (Int32Field (FieldInstrContent fname (Just Optional) maybe_opE)))
-            insM =  Instruction (IntField (Int64Field (FieldInstrContent fname (Just Mandatory) maybe_opM)))
-needsPm ts (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent fname Nothing maybeOp)))) = needsPm ts (Instruction(AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Mandatory) maybeOp))))
-needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) Nothing)))) = False
-needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Constant _)))))) = False
-needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Default _)))))) = True
-needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Copy _)))))) = True
-needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Increment _)))))) = throw $ S2 "Increment operator is only applicable to integer fields." 
-needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Delta _)))))) =  False
-needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Tail _)))))) = True
-needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) Nothing)))) = False
-needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Constant _)))))) = True
-needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Default _)))))) = True
-needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Copy _)))))) = True
-needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Increment _)))))) = throw $ S2 "Increment operator is only applicable to integer fields." 
-needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Delta _)))))) = False
-needsPm _ (Instruction (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Tail _)))))) = True
-needsPm ts (Instruction (ByteVecField (ByteVectorField (FieldInstrContent fname Nothing maybeOp) maybe_length))) = needsPm ts (Instruction(ByteVecField (ByteVectorField (FieldInstrContent fname (Just Mandatory) maybeOp) maybe_length)))
-needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) Nothing) _))) = False
-needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) Nothing) _))) = False
-needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Constant _))) _))) = False
-needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just (Constant _))) _))) = True
-needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))) _))) = throw $ S5 " No initial value given for mandatory default operator."
-needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Default (Just _)))) _))) = True
-needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just (Default Nothing))) _))) = True
-needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Default (Just _)))) _))) = True
-needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Copy _ ))) _))) = True
-needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Copy _ ))) _))) = True
-needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Increment _))) _))) = throw $ S2 "Increment operator is only applicable to integer fields." 
-needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Increment _))) _))) = throw $ S2 "Increment operator is only applicable to integer fields." 
-needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Delta _))) _))) = False
-needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Delta _))) _))) = False
-needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Tail _))) _))) = True
-needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Tail _))) _))) = True
-needsPm ts (Instruction (UnicodeStrField (UnicodeStringField (FieldInstrContent fname maybe_presence maybe_op) maybe_length))) = needsPm ts (Instruction(ByteVecField (ByteVectorField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)))
-needsPm ts (Instruction (Seq s)) = all h (sInstructions s)
-    where   h (TemplateReference Nothing) = False
-            h (TemplateReference (Just (TemplateReferenceContent (NameAttr tname) _))) = all (needsPm ts) (tInstructions (ts M.! tname))
-            h f = needsPm ts f
-needsPm ts (Instruction (Grp g)) = all h (gInstructions g)
-    where   h (TemplateReference Nothing) = False
-            h (TemplateReference (Just (TemplateReferenceContent (NameAttr tname) _))) = all (needsPm ts) (tInstructions (ts M.! tname))
-            h f = needsPm ts f
-
--- |Maps a integer field to a triple (DictionaryName, Key, Value).
-intFieldNeedsPm::FieldInstrContent -> Bool
-intFieldNeedsPm (FieldInstrContent fname Nothing maybeOp) = intFieldNeedsPm $ FieldInstrContent fname (Just Mandatory) maybeOp
-intFieldNeedsPm (FieldInstrContent _ (Just Mandatory) Nothing) = False
-intFieldNeedsPm (FieldInstrContent _ (Just Mandatory) (Just (Constant _))) = False
-intFieldNeedsPm (FieldInstrContent _ (Just Mandatory) (Just (Default _))) = True
-intFieldNeedsPm (FieldInstrContent _ (Just Mandatory) (Just (Copy _))) = True
-intFieldNeedsPm (FieldInstrContent _ (Just Mandatory) (Just (Increment _))) = True
-intFieldNeedsPm (FieldInstrContent _ (Just Mandatory) (Just (Delta _))) = False
-intFieldNeedsPm (FieldInstrContent _ (Just Mandatory) (Just (Tail _))) = throw $ S2 " Tail operator can not be applied on an integer type field." 
-intFieldNeedsPm (FieldInstrContent _ (Just Optional) Nothing) = False
-intFieldNeedsPm (FieldInstrContent _ (Just Optional) (Just (Constant _))) = True
-intFieldNeedsPm (FieldInstrContent _ (Just Optional) (Just (Default _))) = True
-intFieldNeedsPm (FieldInstrContent _ (Just Optional) (Just (Copy _))) = True
-intFieldNeedsPm (FieldInstrContent _ (Just Optional) (Just (Increment _))) = True
-intFieldNeedsPm (FieldInstrContent _ (Just Optional) (Just (Delta _))) = False
-intFieldNeedsPm (FieldInstrContent _ (Just Optional) (Just (Tail _))) = throw $ S2 " Tail operator can not be applied on an integer type field." 
 
 -- |The initial state of the parser depending on the templates.
 initState::Templates -> Context
@@ -1082,9 +987,10 @@ dictOfOpContext (OpContext (Just (DictionaryAttr d)) (Just k) _) _ = (d, K k, Un
 
 -- |The environment of the parser depending on the templates and
 -- the tid2temp function provided by the application.
-initEnv::Templates -> (Word32 -> String) -> Env
+initEnv::Templates -> (Word32 -> TemplateNsName) -> Env
 initEnv ts f = Env (M.fromList [(h t,t) | t <- tsTemplates ts]) f
-    where h (Template (TemplateNsName (NameAttr n) _ _) _ _ _ _) = n
+    where h (Template tn _ _ _ _) = tn
+
 -- |Parses template identifier and returns the corresponding parser.
 -- template identifier is considered a mandatory copy operator UIn32 field.
 -- TODO: Check wether mandatory is right.
