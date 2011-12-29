@@ -797,11 +797,11 @@ groupF2P (Group fname Nothing maybe_dict maybe_typeref instrs)
     = groupF2P (Group fname (Just Mandatory) maybe_dict maybe_typeref instrs)
 
 groupF2P (Group fname (Just Mandatory) _ _ instrs) 
-    = ask >>= \env -> (fname,) . Just . Gr <$> (segmentGrp instrs (templates env) >> mapM instr2P instrs)
+    = ask >>= \env -> (fname,) . Just . Gr <$> ((when (any (needsPm (templates env)) instrs) segment) >> mapM instr2P instrs)
 
 groupF2P (Group fname (Just Optional) _ _ instrs) 
     = ifPresentElse 
-    (ask >>= \env -> (fname,) . Just . Gr <$> (segmentGrp instrs (templates env) >> mapM instr2P instrs)) 
+    (ask >>= \env -> (fname,) . Just . Gr <$> ((when (any (needsPm (templates env)) instrs) segment) >> mapM instr2P instrs)) 
     (return (fname, Nothing))
 
 -- *Raw Parsers for basic FAST primitives
@@ -863,16 +863,6 @@ segment = presenceMap
 -- |Parses presence map and template identifier.
 segment'::FParser (NsName, Maybe Value)
 segment' = presenceMap >> templateIdentifier
-
--- |New segment depending on the instructions in the group, creates a presence map for the group.
-segmentGrp::[Instruction] -> M.Map TemplateNsName Template -> FParser ()
-segmentGrp ins ts = case any (needsPm ts) ins of
-    True -> do
-        st <- get
-        put (Context pm' (dict st))
-        where pm' = replicate (length ins) True
-    False -> return ()
-
 
 -- |The initial state of the parser depending on the templates.
 initState::Templates -> Context
@@ -988,8 +978,7 @@ dictOfOpContext (OpContext (Just (DictionaryAttr d)) (Just k) _) _ = (d, K k, Un
 -- |The environment of the parser depending on the templates and
 -- the tid2temp function provided by the application.
 initEnv::Templates -> (Word32 -> TemplateNsName) -> Env
-initEnv ts f = Env (M.fromList [(h t,t) | t <- tsTemplates ts]) f
-    where h (Template tn _ _ _ _) = tn
+initEnv ts f = Env (M.fromList [(tName t,t) | t <- tsTemplates ts]) f
 
 -- |Parses template identifier and returns the corresponding parser.
 -- template identifier is considered a mandatory copy operator UIn32 field.

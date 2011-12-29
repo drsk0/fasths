@@ -25,11 +25,11 @@ data Env_ = Env_ {
     -- |All known templates.
     templates :: M.Map TemplateNsName Template,
     -- |The application needs to define how uint32 values are mapped to template names and vice versa.
-    temp2tid :: NsName -> Word32
+    temp2tid :: TemplateNsName -> Word32
     }
 
 _initEnv :: Templates -> (TemplateNsName -> Word32) -> Env_
-_initEnv = undefined
+_initEnv ts f = Env_ (M.fromList [(tName t,t) | t <- tsTemplates ts]) f
 
 type FBuilder = ReaderT Env_ (State Context) BU.Builder
 type FCoparser a = a -> FBuilder
@@ -60,7 +60,7 @@ _templateIdentifier (n, v)  =
    in
    do
        env <- ask
-       tid <- _p (n, (Just . UI32 . temp2tid env) n)
+       tid <- _p (n, (Just . UI32 . temp2tid env . fname2tname) n)
        msg <- template2Cop (templates env M.! (fname2tname n)) (n, v)
        return (tid `BU.append` msg)
 
@@ -823,11 +823,40 @@ seqF2Cop (Sequence fname maybe_presence _ _ maybe_length instrs)
                                             lift $ return $ (bu1 `BU.append` bu2)
 
                cp (Just _) = throw $ OtherException "Template doesn't fit message."
+               -- we need this since we don't have a 'fromValue' function for sequences.
                cp (Nothing) =   lengthb where   lengthb = h maybe_presence maybe_length
                                                 fname' = uniqueFName fname "l" 
                                                 h p Nothing = (intF2Cop (UInt32Field (FieldInstrContent fname' p Nothing)) :: FCoparser (Maybe Word32)) Nothing 
                                                 h p (Just (Length Nothing op)) = (intF2Cop (UInt32Field (FieldInstrContent fname' p op)) :: FCoparser (Maybe Word32)) Nothing 
                                                 h p (Just (Length (Just fn) op)) = (intF2Cop (UInt32Field (FieldInstrContent fn p op)) :: FCoparser (Maybe Word32)) Nothing 
+
+groupF2Cop :: Group -> FCoparser (Maybe Value)
+groupF2Cop (Group fname Nothing maybe_dict maybe_typeref instrs)
+    = groupF2Cop (Group fname (Just Mandatory) maybe_dict maybe_typeref instrs)
+
+groupF2Cop (Group _ (Just Mandatory) _ _ instrs) 
+    = cp where  cp  (Just (Gr xs)) = do
+                                        env <- ask
+                                        if any (needsPm (templates env)) instrs 
+                                        then do 
+                                                b1 <- (sequenceD (map instr2Cop instrs)) xs
+                                                b2 <- _segment ()
+                                                lift $ return (b2 `BU.append` b1)
+                                        else (sequenceD (map instr2Cop instrs)) xs
+                cp (Just _) = throw $ OtherException "Template doesn't fit message."
+                cp (Nothing) = throw $ OtherException "Template doesn't fit message."
+
+groupF2Cop (Group _ (Just Optional) _ _ instrs) 
+    = cp where  cp  (Just (Gr xs)) = (lift $ setPMap True) >> (do
+                                                                env <- ask
+                                                                if any (needsPm (templates env)) instrs 
+                                                                then do 
+                                                                        b1 <- (sequenceD (map instr2Cop instrs)) xs
+                                                                        b2 <- _segment ()
+                                                                        lift $ return (b2 `BU.append` b1)
+                                                                else (sequenceD (map instr2Cop instrs)) xs)
+                cp (Just _) = throw $ OtherException "Template doesn't fit message."
+                cp (Nothing) = (lift $ setPMap False) >> (lift $ return $ BU.empty)
 
 nulL :: FBuilder 
 nulL = lift $ return $ BU.singleton 0x80
@@ -835,6 +864,3 @@ nulL = lift $ return $ BU.singleton 0x80
 plusOne :: (Ord a, Num a) => a -> a
 plusOne x | x >= 0 = x + 1 
 plusOne x = x
-
-groupF2Cop :: Group -> FCoparser (Maybe Value)
-groupF2Cop = undefined
