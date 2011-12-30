@@ -616,6 +616,7 @@ anySBEEntity :: A.Parser B.ByteString
 anySBEEntity = takeTill' stopBitSet
 
 _anySBEEntity :: Coparser B.ByteString
+_anySBEEntity bs | B.null bs = BU.empty
 _anySBEEntity bs = BU.fromByteString (B.init bs `B.append` B.singleton (setBit (B.last bs) 7))
 
 -- |Like takeTill, but takes the matching byte as well.
@@ -625,9 +626,7 @@ takeTill' f = do
     c <- A.take 1
     return (str `B.append` c)
 
--- |Test wether the stop bit is set of a Char. (Note: Chars are converted to
--- Word8's. 
--- TODO: Is this unsafe?
+-- |Test wether the stop bit is set of a Char.
 stopBitSet :: Word8 -> Bool
 stopBitSet c = testBit c 7
 
@@ -661,27 +660,33 @@ _uint = _anySBEEntity . uintBS
 uintBS :: (Bits a, Eq a, Integral a) => a -> B.ByteString
 uintBS ui = if ui' /= 0 
             then uintBS ui' `B.snoc` (fromIntegral (ui .&. 127) :: Word8)
-            else B.empty
+            else B.singleton (fromIntegral ui :: Word8)
             where ui' = shiftR ui 7
 
 -- |Signed integer parser, doesn't check for bounds.
 int :: (Bits a) => A.Parser a
 int = do
-    bs <- anySBEEntity
-    return (if testBit (B.head bs) 6 
-            then B.foldl h (shiftL (-1) 7 .|. fromIntegral (setBit (B.head bs) 7)) (B.tail bs)
-            else B.foldl h 0 bs)
-    where   
-            h::(Bits a, Num a) => a -> Word8 -> a
-            h r w = fromIntegral (clearBit w 7) .|. shiftL r 7
+        bs <- anySBEEntity
+        return (if testBit (B.head bs) 6 
+                then B.foldl h (shiftL (-1) 6 .|. fromIntegral (B.head bs)) (B.tail bs)
+                else B.foldl h 0 bs)
+        where   
+                h :: (Bits a, Num a) => a -> Word8 -> a
+                h r w = fromIntegral (clearBit w 7) .|. shiftL r 7
 
 _int :: (Bits a, Ord a, Integral a) => Coparser a
 _int  = _anySBEEntity . intBS 
 
 intBS :: (Bits a, Ord a, Integral a) => a -> B.ByteString
-intBS i =    if i < 0 
-             then setBit (B.head (uintBS i)) 6 `B.cons` B.tail (uintBS i)
-             else uintBS i
+intBS i =   if i < 0 
+            then h i 
+            else   if (testBit (B.head (uintBS i)) 6)
+                   then (B.singleton 0) `mappend` (uintBS i)
+                   else uintBS i
+            where h x = if x' /= -1 || not (testBit (fromIntegral x :: Word8) 6)
+                        then h x' `B.snoc` (fromIntegral (x .&. 127) :: Word8)
+                        else B.singleton (fromIntegral (x .&. 127) :: Word8)
+                        where x' = shiftR x 7
 
 -- |ASCII string field parser, non-Nullable.
 asciiString :: A.Parser AsciiString
