@@ -298,11 +298,11 @@ instance Primitive AsciiString where
     delta s1 (Dascii (l, s2)) | l < 0 = s2 ++ s1' where s1' = genericDrop (-l) s1
     delta s1 (Dascii (l, s2)) | l >= 0 = s1' ++ s2 where s1' = genericTake (genericLength s1 - l) s1
     delta _ _ = throw $ D4 "Type mismatch."
-    delta_ s1 s2 =  if ((genericLength l1) :: Int32) >= genericLength l2 
-                    then Dascii (genericLength s2 - genericLength l1, genericDrop ((genericLength l1) :: Int32) s1)
+    delta_ s1 s2 =  if (genericLength l1 :: Int32) >= genericLength l2 
+                    then Dascii (genericLength s2 - genericLength l1, genericDrop (genericLength l1 :: Int32) s1)
                     else Dascii (genericLength l2 - genericLength s2, genericTake ((genericLength s1 - genericLength l2) :: Int32) s1)
-                    where   l1 = map fst $ takeWhile (\(c1, c2) -> c1 == c2) (zip s1 s2)
-                            l2 = map fst $ takeWhile (\(c1, c2) -> c1 == c2) (zip (reverse s1) (reverse s2))
+                    where   l1 = map fst $ takeWhile (uncurry (==) ) (zip s1 s2)
+                            l2 = map fst $ takeWhile (uncurry (==)) (zip (reverse s1) (reverse s2))
                             
     ftail s1 s2 = take (length s1 - length s2) s1 ++ s2
     ftail_ s1 s2 = take (length s1 - length s2) s1
@@ -375,11 +375,11 @@ instance Primitive B.ByteString where
     delta bv (Dbs (l, bv')) | l < 0 = bv'' `B.append` bv' where bv'' = genericDrop (-l) bv 
     delta bv (Dbs (l, bv')) | l >= 0 = bv'' `B.append` bv' where bv'' = genericTake (genericLength bv - l) bv
     delta _ _ = throw $ D4 "Type mismatch."
-    delta_ bv1 bv2 =  if ((genericLength l1) :: Int32) >= genericLength l2 
-                    then Dbs (genericLength bv2 - genericLength l1, genericDrop ((genericLength l1) :: Int32) bv1)
+    delta_ bv1 bv2 =  if (genericLength l1 :: Int32) >= genericLength l2 
+                    then Dbs (genericLength bv2 - genericLength l1, genericDrop (genericLength l1 :: Int32) bv1)
                     else Dbs (genericLength l2 - genericLength bv2, genericTake ((genericLength bv1 - genericLength l2) :: Int32) bv1)
-                    where   l1 = map fst $ takeWhile (\(c1, c2) -> c1 == c2) (zip bv1 bv2)
-                            l2 = map fst $ takeWhile (\(c1, c2) -> c1 == c2) (zip (reverse bv1) (reverse bv2))
+                    where   l1 = map fst $ takeWhile (uncurry (==)) (zip bv1 bv2)
+                            l2 = map fst $ takeWhile (uncurry (==)) (zip (reverse bv1) (reverse bv2))
     ftail b1 b2 = B.take (B.length b1 - B.length b2) b1 `B.append` b2
     ftail_ b1 b2 = B.take (B.length b1 - B.length b2) b1
     decodeP = byteVector
@@ -738,7 +738,7 @@ uppv d k v = do
 setPMap :: (Monad m) => Bool -> StateT Context m ()
 setPMap b = do 
                  st <- get
-                 put (Context ((pm st) ++ [b]) (dict st))
+                 put (Context (pm st ++ [b]) (dict st))
 
 -- |Create a unique fname out of a given one and a string.
 uniqueFName::NsName -> String -> NsName
@@ -752,7 +752,7 @@ needsSegment ins ts = any (needsPm ts) ins
 -- to process template reference instructions recursivly.
 needsPm::M.Map TemplateNsName Template -> Instruction -> Bool
 -- static template reference
-needsPm ts (TemplateReference (Just trc)) = all (needsPm ts) (tInstructions t) where t = ts M.! (tempRefCont2TempNsName trc)
+needsPm ts (TemplateReference (Just trc)) = all (needsPm ts) (tInstructions t) where t = ts M.! tempRefCont2TempNsName trc
 -- dynamic template reference
 needsPm _ (TemplateReference Nothing) = False
 needsPm _ (Instruction (IntField (Int32Field fic))) = intFieldNeedsPm fic
@@ -815,11 +815,11 @@ needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just
 needsPm ts (Instruction (UnicodeStrField (UnicodeStringField (FieldInstrContent fname maybe_presence maybe_op) maybe_length))) = needsPm ts (Instruction(ByteVecField (ByteVectorField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)))
 needsPm ts (Instruction (Seq s)) = all h (sInstructions s)
     where   h (TemplateReference Nothing) = False
-            h (TemplateReference (Just trc)) = all (needsPm ts) (tInstructions (ts M.! (tempRefCont2TempNsName trc)))
+            h (TemplateReference (Just trc)) = all (needsPm ts) (tInstructions (ts M.! tempRefCont2TempNsName trc))
             h f = needsPm ts f
 needsPm ts (Instruction (Grp g)) = all h (gInstructions g)
     where   h (TemplateReference Nothing) = False
-            h (TemplateReference (Just trc)) = all (needsPm ts) (tInstructions (ts M.! (tempRefCont2TempNsName trc)))
+            h (TemplateReference (Just trc)) = all (needsPm ts) (tInstructions (ts M.! tempRefCont2TempNsName trc))
             h f = needsPm ts f
 
 -- |Maps a integer field to a triple (DictionaryName, Key, Value).
