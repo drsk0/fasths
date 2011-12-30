@@ -42,7 +42,7 @@ data Env = Env {
 -- |The environment of the parser depending on the templates and
 -- the tid2temp function provided by the application.
 initEnv::Templates -> (Word32 -> TemplateNsName) -> Env
-initEnv ts f = Env (M.fromList [(tName t,t) | t <- tsTemplates ts]) f
+initEnv ts = Env (M.fromList [(tName t,t) | t <- tsTemplates ts])
 
 type FParser a = ReaderT Env (StateT Context A.Parser) a
 
@@ -93,7 +93,7 @@ instr2P (Instruction f) = field2Parser f
 -- Static template reference.
 instr2P (TemplateReference (Just trc)) = do
     env <- ask
-    template2P (templates env M.! (tempRefCont2TempNsName trc)) 
+    template2P (templates env M.! tempRefCont2TempNsName trc) 
 -- Dynamic template reference.  
 instr2P (TemplateReference Nothing) = segment'
 
@@ -208,7 +208,7 @@ intF2P' (FieldInstrContent _ (Just Optional) (Just (Default Nothing)))
 intF2P' (FieldInstrContent fname (Just Optional) (Just (Copy oc)))
     = ifPresentElse
     (
-    nULL *> (lift $ updatePrevValue fname oc Empty >> return Nothing)
+    nULL *> lift (updatePrevValue fname oc Empty >> return Nothing)
     <|> do 
         i <- l2 decodeP
         lift $ updatePrevValue fname oc (Assigned (witnessType i))
@@ -229,7 +229,7 @@ intF2P' (FieldInstrContent fname (Just Optional) (Just (Copy oc)))
 intF2P' (FieldInstrContent fname (Just Optional) (Just (Increment oc)))
     = ifPresentElse
     (
-    nULL *> (lift $ updatePrevValue fname oc Empty >> return Nothing)
+    nULL *> lift (updatePrevValue fname oc Empty >> return Nothing)
     <|> do 
         i <- l2 decodeP
         lift $ updatePrevValue fname oc (Assigned (witnessType i))
@@ -262,7 +262,7 @@ intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Delta oc)))
     in
         do 
             d <- l2 decodeD
-            i <- (flip  delta d <$> (baseValue <$> (lift $ prevValue fname oc)))
+            i <- flip  delta d <$> (baseValue <$> lift (prevValue fname oc))
             lift $ updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i)
 
 -- pm: No, Nullable: Yes
@@ -277,7 +277,7 @@ intF2P' (FieldInstrContent fname (Just Optional) (Just (Delta oc)))
         in
             do 
                 d <- l2 decodeD
-                i <- (flip delta (minusOne d) <$> (baseValue <$> (lift $ prevValue fname oc)))
+                i <- flip delta (minusOne d) <$> (baseValue <$> lift (prevValue fname oc))
                 lift $ updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i)
 
 -- |Maps an decimal field to its parser.
@@ -289,7 +289,7 @@ decF2P (DecimalField fname Nothing maybe_either_op)
 
 -- pm: Np, Nullable: No
 decF2P (DecimalField _ (Just Mandatory) Nothing)
-    = Just <$> (l2 decodeP)
+    = Just <$> l2 decodeP
 
 -- om: No, Nullable: Yes
 decF2P (DecimalField _ (Just Optional) Nothing)
@@ -347,7 +347,7 @@ decF2P (DecimalField fname (Just Mandatory) (Just (Left (Delta oc))))
     in
         do 
             d <- l2 decodeD
-            d' <- (flip  delta d <$> (baseValue <$> (lift $ prevValue fname oc)))
+            d' <- flip  delta d <$> (baseValue <$> lift (prevValue fname oc))
             lift $ updatePrevValue fname oc (Assigned (witnessType d')) >> return (Just d')
 
 decF2P (DecimalField _ (Just Mandatory) (Just (Left (Tail _))))
@@ -369,7 +369,7 @@ decF2P (DecimalField _ (Just Optional) (Just (Left (Default (Just iv)))))
 decF2P (DecimalField fname (Just Optional) (Just (Left (Copy oc)))) 
     = ifPresentElse
     (
-    nULL *> (lift $ updatePrevValue fname oc Empty >> return Nothing)
+    nULL *> lift (updatePrevValue fname oc Empty >> return Nothing)
     <|> do
             d <- l2 decodeP
             lift $ updatePrevValue fname oc (Assigned (witnessType d))
@@ -402,7 +402,7 @@ decF2P (DecimalField fname (Just Optional) (Just (Left (Delta oc))))
         in
             do 
                 d <- l2 decodeD
-                d' <- (flip delta d <$> (baseValue <$> (lift $ prevValue fname oc)))
+                d' <- flip delta d <$> (baseValue <$> lift (prevValue fname oc))
                 lift $ updatePrevValue fname oc (Assigned (witnessType d')) >> return (Just d')
 
 -- pm: No, Nullable: Yes
@@ -507,7 +507,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (De
     in
         do 
             str <- l2 decodeD
-            str' <- (flip delta str <$> (baseValue <$> (lift $ prevValue fname oc)))
+            str' <- flip delta str <$> (baseValue <$> lift (prevValue fname oc))
             lift $ updatePrevValue fname oc (Assigned (witnessType str')) >> return (Just str')
 
 -- pm: Yes, Nullable: No
@@ -556,7 +556,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Default
 asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Copy oc))))
     = ifPresentElse
     (
-    nULL *> (lift $ updatePrevValue fname oc Empty >> return Nothing)
+    nULL *> lift (updatePrevValue fname oc Empty >> return Nothing)
     <|>
         do 
             s <- rmPreamble' <$> l2 decodeP
@@ -589,14 +589,14 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Del
         in
             do 
                 (Dascii d) <- l2 decodeD
-                str <- (flip delta (Dascii (fst d, rmPreamble' (snd d))) <$> (baseValue <$> (lift $ prevValue fname oc))) 
+                str <- flip delta (Dascii (fst d, rmPreamble' (snd d))) <$> (baseValue <$> lift (prevValue fname oc)) 
                 lift $ updatePrevValue fname oc (Assigned (witnessType str)) >> return (Just str))
 
 -- pm: Yes, Nullable: Yes
 asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Tail oc))))
     = ifPresentElse
     (
-    nULL *> (lift $ updatePrevValue fname oc Empty >> return Nothing)
+    nULL *> lift (updatePrevValue fname oc Empty >> return Nothing)
     <|> let baseValue (Assigned p) = return (assertType p)
             baseValue (Undefined) = h oc
                 where   h (OpContext _ _ (Just iv)) = return (ivToPrimitive iv)
@@ -691,7 +691,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Copy
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Copy oc))) _ ) 
     = ifPresentElse
     (
-    nULL *> (lift $ updatePrevValue fname oc Empty >> return Nothing)
+    nULL *> lift (updatePrevValue fname oc Empty >> return Nothing)
     <|> do
             bv <- l2 decodeP
             lift $ updatePrevValue fname oc (Assigned (witnessType bv))
@@ -725,7 +725,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Delt
     in
         do 
             bv <- l2 decodeD
-            Just <$> (flip delta bv <$> (baseValue <$> (lift $ prevValue fname oc)))
+            Just <$> (flip delta bv <$> (baseValue <$> lift (prevValue fname oc)))
 
 -- pm: No, Nullable: Yes
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Delta oc))) _ ) 
@@ -738,7 +738,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Delta
         in
             do 
                 bv <- l2 decodeD
-                bv' <- (flip delta bv <$> (baseValue <$> (lift $ prevValue fname oc)))
+                bv' <- flip delta bv <$> (baseValue <$> lift (prevValue fname oc))
                 lift $ updatePrevValue fname oc (Assigned (witnessType bv')) >> return (Just bv'))
 
 
@@ -777,7 +777,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail
 bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Tail oc))) _ ) 
     = ifPresentElse
     (
-    nULL *> (lift $ updatePrevValue fname oc Empty >> return Nothing)
+    nULL *> lift (updatePrevValue fname oc Empty >> return Nothing)
     <|> let baseValue (Assigned p) = return (assertType p)
             baseValue (Undefined) = h oc
                 where   h (OpContext _ _ (Just iv)) = return (ivToPrimitive iv)
@@ -807,7 +807,7 @@ unicodeF2P::UnicodeStringField -> FParser (Maybe UnicodeString)
 unicodeF2P (UnicodeStringField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)
     = do 
         m_bv <- bytevecF2P (ByteVectorField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)
-        return (m_bv >>= return . toString) -- Maybe is itself a monad.
+        return (fmap toString m_bv) -- Maybe is itself a monad.
 
 -- |Maps a sequence field to its parser.
 seqF2P::Sequence -> FParser (NsName, Maybe Value)
@@ -818,7 +818,7 @@ seqF2P (Sequence fname maybe_presence _ _ maybe_length instrs)
         where   g Nothing = return (fname, Nothing)
                 g (Just i') = do
                                     env <- ask
-                                    s <- A.count (fromEnum i') ((when (needsSegment instrs (templates env)) segment) >> mapM instr2P instrs) 
+                                    s <- A.count (fromEnum i') (when (needsSegment instrs (templates env)) segment >> mapM instr2P instrs) 
                                     return (fname, Just (Sq i' s))
                 -- get the correct parser for the length field.
                 fname' = uniqueFName fname "l" 
@@ -832,11 +832,11 @@ groupF2P (Group fname Nothing maybe_dict maybe_typeref instrs)
     = groupF2P (Group fname (Just Mandatory) maybe_dict maybe_typeref instrs)
 
 groupF2P (Group fname (Just Mandatory) _ _ instrs) 
-    = ask >>= \env -> (fname,) . Just . Gr <$> ((when (any (needsPm (templates env)) instrs) segment) >> mapM instr2P instrs)
+    = ask >>= \env -> (fname,) . Just . Gr <$> (when (any (needsPm (templates env)) instrs) segment >> mapM instr2P instrs)
 
 groupF2P (Group fname (Just Optional) _ _ instrs) 
     = ifPresentElse 
-    (ask >>= \env -> (fname,) . Just . Gr <$> ((when (any (needsPm (templates env)) instrs) segment) >> mapM instr2P instrs)) 
+    (ask >>= \env -> (fname,) . Just . Gr <$> (when (any (needsPm (templates env)) instrs) segment >> mapM instr2P instrs)) 
     (return (fname, Nothing))
 
 -- |nULL parser.
