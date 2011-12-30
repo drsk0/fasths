@@ -12,7 +12,6 @@ import qualified Data.Map as M
 import Data.ByteString.UTF8 (fromString)
 import Data.Word
 import Data.Int
-import Data.Bits
 import Data.Monoid
 import Control.Monad.Reader
 import Control.Monad.State
@@ -69,14 +68,6 @@ _presenceMap () = do
     st <- get
     return $ _anySBEEntity (pmToBs $ pm st)
 
-pmToBs :: [Bool] -> B.ByteString
-pmToBs xs = B.pack (map h (sublistsOfLength 7 xs))
-    where   h :: [Bool] -> Word8
-            h = fst . foldl (\(r,n) y -> if y then (setBit r n, n-1) else (r, n-1)) (0, 6)
-
-sublistsOfLength :: Int -> [a] -> [[a]]
-sublistsOfLength _ [] = []
-sublistsOfLength n xs = take n xs : sublistsOfLength n (drop n xs)
 
 template2Cop :: Template -> FCoparser (NsName, Maybe Value)
 template2Cop t = f
@@ -103,9 +94,6 @@ field2Cop (UnicodeStrField f@(UnicodeStringField (FieldInstrContent fname _ _ ) 
 field2Cop (ByteVecField f@(ByteVectorField (FieldInstrContent fname _ _ ) _ )) = contramap (fmap fromValue . assertNameIs fname) (bytevecF2Cop f)
 field2Cop (Seq s) = contramap (assertNameIs (sFName s)) (seqF2Cop s)
 field2Cop (Grp g) = contramap (assertNameIs (gFName g)) (groupF2Cop g)
-
-assertNameIs :: NsName -> (NsName, a) -> a
-assertNameIs n1 (n2, x) = if n1 == n2 then x else throw $ OtherException "Template doesn't fit message."
 
 intF2Cop :: (Primitive a, Num a, Ord a, Ord (Delta a), Num (Delta a)) => IntegerField -> FCoparser (Maybe a)
 intF2Cop (Int32Field fic) = intF2Cop' fic 

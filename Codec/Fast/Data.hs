@@ -68,7 +68,11 @@ setPMap,
 uniqueFName,
 needsSegment,
 needsPm,
-tempRefCont2TempNsName
+tempRefCont2TempNsName,
+pmToBs,
+bsToPm,
+assertNameIs,
+initState
 )
 
 where
@@ -76,6 +80,8 @@ where
 import Prelude hiding (exponent, dropWhile, reverse, zip)
 import Data.ListLike (dropWhile, genericDrop, genericTake, genericLength, reverse, zip)
 import Data.Char (digitToInt)
+import Data.Maybe (catMaybes)
+import Data.List (groupBy)
 import Data.Bits
 import qualified Data.ByteString as B
 import Data.ByteString.Char8 (unpack, pack) 
@@ -833,3 +839,132 @@ intFieldNeedsPm (FieldInstrContent _ (Just Optional) (Just (Copy _))) = True
 intFieldNeedsPm (FieldInstrContent _ (Just Optional) (Just (Increment _))) = True
 intFieldNeedsPm (FieldInstrContent _ (Just Optional) (Just (Delta _))) = False
 intFieldNeedsPm (FieldInstrContent _ (Just Optional) (Just (Tail _))) = throw $ S2 " Tail operator can not be applied on an integer type field." 
+
+-- |Convert a bytestring into a presence map.
+bsToPm::B.ByteString -> [Bool]
+bsToPm bs = concatMap h (B.unpack bs) 
+    where   h::Word8 -> [Bool]
+            h w = map (testBit w) [6,5..0] 
+
+pmToBs :: [Bool] -> B.ByteString
+pmToBs xs = B.pack (map h (sublistsOfLength 7 xs))
+    where   h :: [Bool] -> Word8
+            h = fst . foldl (\(r,n) y -> if y then (setBit r n, n-1) else (r, n-1)) (0, 6)
+
+sublistsOfLength :: Int -> [a] -> [[a]]
+sublistsOfLength _ [] = []
+sublistsOfLength n xs = take n xs : sublistsOfLength n (drop n xs)
+
+assertNameIs :: NsName -> (NsName, a) -> a
+assertNameIs n1 (n2, x) = if n1 == n2 then x else throw $ OtherException "Template doesn't fit message."
+
+-- |The initial state of the parser depending on the templates.
+initState::Templates -> Context
+initState ts = Context [] (M.fromList [(k,d) | d@(Dictionary k _) <- concatMap initDicts (tsTemplates ts)])
+
+-- |Creates a list of dictionaries depending on the fields of a template.
+initDicts::Template -> [Dictionary]
+initDicts t = createDicts $ catMaybes $ concatMap h (tInstructions t)
+    where   h (TemplateReference _) = []
+            h (Instruction f) = dictOfField f
+
+-- |Maps triples of the form (DictionaryName, Key, Value) to a list of dictionaries.
+createDicts::[(String, DictKey, DictValue)] -> [Dictionary]
+createDicts es =  map h (groupBy (\ (d, _ , _) (d', _ , _) -> d == d') es)
+    where   h xs = Dictionary name (M.fromList (map (\(_,y,z) -> (y,z)) xs))
+                where (name, _, _) = head xs
+
+-- |Maps a field to a triple (DictionaryName, Key, Value).
+dictOfField::Field -> [Maybe (String, DictKey, DictValue)]
+dictOfField (IntField (Int32Field (FieldInstrContent fname maybePr maybeOp))) = [dictOfIntField $ FieldInstrContent fname maybePr maybeOp] 
+dictOfField (IntField (Int64Field (FieldInstrContent fname maybePr maybeOp))) = [dictOfIntField $ FieldInstrContent fname maybePr maybeOp]
+dictOfField (IntField (UInt32Field (FieldInstrContent fname maybePr maybeOp))) = [dictOfIntField $ FieldInstrContent fname maybePr maybeOp]
+dictOfField (IntField (UInt64Field (FieldInstrContent fname maybePr maybeOp))) = [dictOfIntField $ FieldInstrContent fname maybePr maybeOp]
+dictOfField (DecField (DecimalField fname Nothing eitherOp)) = dictOfField $ DecField $ DecimalField fname (Just Mandatory) eitherOp
+dictOfField (DecField (DecimalField _ (Just Mandatory) Nothing )) = [Nothing]
+dictOfField (DecField (DecimalField _ (Just Mandatory) (Just (Left (Constant _))))) = [Nothing]
+dictOfField (DecField (DecimalField _ (Just Mandatory) (Just (Left (Default Nothing))))) = throw $ S5 " No initial value given for mandatory default operator."
+dictOfField (DecField (DecimalField _ (Just Mandatory) (Just (Left (Default (Just _)))))) = [Nothing]
+dictOfField (DecField (DecimalField fname (Just Mandatory) (Just (Left (Copy oc))))) = [Just $ dictOfOpContext oc fname]
+dictOfField (DecField (DecimalField _ (Just Mandatory) (Just (Left (Increment _))))) = throw $ S2 "Increment operator is only applicable to integer fields." 
+dictOfField (DecField (DecimalField fname (Just Mandatory) (Just (Left (Delta oc))))) = [Just $ dictOfOpContext oc fname]
+dictOfField (DecField (DecimalField _ (Just Mandatory) (Just (Left (Tail _))))) = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields." 
+dictOfField (DecField (DecimalField _ (Just Optional) Nothing )) = [Nothing]
+dictOfField (DecField (DecimalField _ (Just Optional) (Just (Left (Constant _))))) = [Nothing]
+dictOfField (DecField (DecimalField _ (Just Optional) (Just (Left (Default Nothing))))) = [Nothing]
+dictOfField (DecField (DecimalField _ (Just Optional) (Just (Left (Default (Just _)))))) = [Nothing]
+dictOfField (DecField (DecimalField fname (Just Optional) (Just (Left (Copy oc))))) = [Just $ dictOfOpContext oc fname]
+dictOfField (DecField (DecimalField _ (Just Optional) (Just (Left (Increment _))))) = throw $ S2 "Increment operator is only applicable to integer fields." 
+dictOfField (DecField (DecimalField fname (Just Optional) (Just (Left (Delta oc))))) = [Just $ dictOfOpContext oc fname]
+dictOfField (DecField (DecimalField _ (Just Optional) (Just (Left (Tail _))))) = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields." 
+dictOfField (DecField (DecimalField fname (Just Optional) (Just (Right (DecFieldOp maybe_opE maybe_opM))))) = dictOfField (IntField (Int32Field (FieldInstrContent (uniqueFName fname "e") (Just Optional) maybe_opE))) 
+    ++ dictOfField (IntField (Int64Field (FieldInstrContent (uniqueFName fname "m") (Just Mandatory) maybe_opM)))
+dictOfField (DecField (DecimalField fname (Just Mandatory) (Just (Right (DecFieldOp maybe_opE maybe_opM))))) = dictOfField (IntField (Int32Field (FieldInstrContent (uniqueFName fname "e") (Just Mandatory) maybe_opE)))
+    ++ dictOfField (IntField (Int64Field (FieldInstrContent (uniqueFName fname "m") (Just Mandatory) maybe_opM)))
+dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname Nothing maybeOp))) = dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Mandatory) maybeOp)))
+dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) Nothing))) = [Nothing]
+dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Constant _))))) = [Nothing]
+dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))))) = throw $ S5 " No initial value given for mandatory default operator."
+dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Default (Just _)))))) = [Nothing]
+dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Mandatory) (Just (Copy oc))))) = [Just $ dictOfOpContext oc fname]
+dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Increment _))))) = throw $ S2 "Increment operator is only applicable to integer fields." 
+dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Mandatory) (Just (Delta oc))))) = [Just $ dictOfOpContext oc fname]
+dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Mandatory) (Just (Tail oc))))) = [Just $ dictOfOpContext oc fname]
+dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) Nothing))) = [Nothing]
+dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Constant _))))) = [Nothing]
+dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Default Nothing))))) = [Nothing]
+dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Default (Just _)))))) = [Nothing]
+dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Optional) (Just (Copy oc))))) = [Just $ dictOfOpContext oc fname]
+dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Increment _))))) = throw $ S2 "Increment operator is only applicable to integer fields." 
+dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Optional) (Just (Delta oc))))) = [Just $ dictOfOpContext oc fname]
+dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Optional) (Just (Tail oc))))) = [Just $ dictOfOpContext oc fname]
+dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname Nothing maybeOp) maybe_length)) = dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Mandatory) maybeOp) maybe_length))
+dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) Nothing) _)) = [Nothing]
+dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) Nothing) _)) = [Nothing]
+dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Constant _))) _)) = [Nothing]
+dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just (Constant _))) _)) = [Nothing]
+dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))) _)) = throw $ S5 " No initial value given for mandatory default operator."
+dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Default (Just _)))) _)) = [Nothing]
+dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just (Default Nothing))) _)) = [Nothing]
+dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Default (Just _)))) _)) = [Nothing]
+dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Copy oc))) _)) = [Just $ dictOfOpContext oc fname]
+dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Copy oc))) _)) = [Just $ dictOfOpContext oc fname]
+dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Increment _))) _)) = throw $ S2 "Increment operator is only applicable to integer fields." 
+dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Increment _))) _)) = throw $ S2 "Increment operator is only applicable to integer fields." 
+dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Delta oc))) _)) = [Just $ dictOfOpContext oc fname]
+dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Delta oc))) _)) = [Just $ dictOfOpContext oc fname]
+dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail oc))) _)) = [Just $ dictOfOpContext oc fname] 
+dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Tail oc))) _)) = [Just $ dictOfOpContext oc fname]
+dictOfField (UnicodeStrField (UnicodeStringField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)) = dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname maybe_presence maybe_op) maybe_length))
+dictOfField (Seq s) = concatMap h (sInstructions s)
+    where   h (TemplateReference _) = [Nothing]
+            h (Instruction f) = dictOfField f
+dictOfField (Grp g) = concatMap h (gInstructions g)
+    where   h (TemplateReference _) = [Nothing]
+            h (Instruction f) = dictOfField f
+
+-- |Maps a integer field to a triple (DictionaryName, Key, Value).
+dictOfIntField::FieldInstrContent -> Maybe (String, DictKey, DictValue)
+dictOfIntField (FieldInstrContent fname Nothing maybeOp) = dictOfIntField $ FieldInstrContent fname (Just Mandatory) maybeOp
+dictOfIntField (FieldInstrContent _ (Just Mandatory) Nothing) =  Nothing
+dictOfIntField (FieldInstrContent _ (Just Mandatory) (Just (Constant _))) = Nothing
+dictOfIntField (FieldInstrContent _ (Just Mandatory) (Just (Default _))) = Nothing
+dictOfIntField (FieldInstrContent fname (Just Mandatory) (Just (Copy oc))) = Just $ dictOfOpContext oc fname
+dictOfIntField (FieldInstrContent fname (Just Mandatory) (Just (Increment oc))) = Just $ dictOfOpContext oc fname
+dictOfIntField (FieldInstrContent fname (Just Mandatory) (Just (Delta oc))) = Just $ dictOfOpContext oc fname
+dictOfIntField (FieldInstrContent _ (Just Mandatory) (Just (Tail _))) = throw $ S2 " Tail operator can not be applied on an integer type field." 
+dictOfIntField (FieldInstrContent _ (Just Optional) Nothing) =  Nothing
+dictOfIntField (FieldInstrContent _ (Just Optional) (Just (Constant _))) = Nothing
+dictOfIntField (FieldInstrContent _ (Just Optional) (Just (Default _))) = Nothing
+dictOfIntField (FieldInstrContent fname (Just Optional) (Just (Copy oc))) = Just $ dictOfOpContext oc fname
+dictOfIntField (FieldInstrContent fname (Just Optional) (Just (Increment oc))) = Just $ dictOfOpContext oc fname
+dictOfIntField (FieldInstrContent fname (Just Optional) (Just (Delta oc))) = Just $ dictOfOpContext oc fname
+dictOfIntField (FieldInstrContent _ (Just Optional) (Just (Tail _))) = throw $ S2 " Tail operator can not be applied on an integer type field." 
+
+-- |Outputs a triple (DictionaryName, Key, Value) depending on OpContext and 
+-- the NsName of a field.
+dictOfOpContext::OpContext -> NsName -> (String, DictKey, DictValue)
+dictOfOpContext (OpContext Nothing Nothing _) n = ("global", N n, Undefined)
+dictOfOpContext (OpContext (Just (DictionaryAttr d)) Nothing _) n = (d, N n, Undefined)
+dictOfOpContext (OpContext Nothing (Just k) _) _ = ("global", K k, Undefined)
+dictOfOpContext (OpContext (Just (DictionaryAttr d)) (Just k) _) _ = (d, K k, Undefined)

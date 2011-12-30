@@ -12,13 +12,12 @@
 module Codec.Fast.Parser 
 (
 Context (..),
-initState,
 initEnv,
 segment'
 )
 where 
 
-import Prelude as P hiding (dropWhile)
+import Prelude hiding (dropWhile)
 import qualified Data.ByteString as B
 import Data.ByteString.UTF8 (toString)
 import qualified Data.Attoparsec as A
@@ -27,10 +26,7 @@ import Control.Monad.Reader
 import Control.Applicative 
 import Data.Int
 import Data.Word 
-import Data.Bits (testBit)
 import qualified Data.Map as M
-import Data.Maybe (catMaybes)
-import Data.List (groupBy)
 import Codec.Fast.Data as F
 import Control.Exception
 
@@ -43,7 +39,48 @@ data Env = Env {
     tid2temp   ::Word32 -> TemplateNsName
     }
 
+-- |The environment of the parser depending on the templates and
+-- the tid2temp function provided by the application.
+initEnv::Templates -> (Word32 -> TemplateNsName) -> Env
+initEnv ts f = Env (M.fromList [(tName t,t) | t <- tsTemplates ts]) f
+
 type FParser a = ReaderT Env (StateT Context A.Parser) a
+
+-- |Parses the beginning of a new segment.
+segment::FParser ()
+segment = presenceMap
+
+-- |Parses presence map and template identifier.
+segment'::FParser (NsName, Maybe Value)
+segment' = presenceMap >> templateIdentifier
+
+-- |Parses template identifier and returns the corresponding parser.
+-- template identifier is considered a mandatory copy operator UIn32 field.
+-- TODO: Check wether mandatory is right.
+-- TODO: Which token should this key have, define a policy?
+templateIdentifier::FParser (NsName, Maybe Value)
+templateIdentifier = do
+    (_ , maybe_i) <- p
+    case maybe_i of
+        (Just (UI32 i')) -> do 
+            env <- ask
+            template2P (templates env M.! tid2temp env i')
+        (Just _) ->  throw $ OtherException "Coding error: templateId field must be of type I."
+        Nothing -> throw $ OtherException "Failed to parse template identifier."
+
+    where p = field2Parser (IntField (UInt32Field (FieldInstrContent 
+                            (NsName (NameAttr "templateId") Nothing Nothing) 
+                            (Just Mandatory) 
+                            (Just (Copy (OpContext (Just (DictionaryAttr "global")) (Just (NsKey(KeyAttr (Token "tid")) Nothing)) Nothing)))
+                            )))
+
+-- |Parse PreseneceMap.
+presenceMap::FParser ()
+presenceMap = do
+    bs <- l2 anySBEEntity
+    -- update state
+    st <- get
+    put (Context (bsToPm bs) (dict st))
 
 -- |Maps a template to its corresponding parser.
 -- We treat a template as a group with NsName equal the TemplateNsName.
@@ -53,12 +90,10 @@ template2P t = (tname2fname (tName t), ) <$> Just . Gr <$> mapM instr2P (tInstru
 -- |Maps an instruction to its corresponding parser.
 instr2P :: Instruction -> FParser (NsName, Maybe Value)
 instr2P (Instruction f) = field2Parser f
-
 -- Static template reference.
 instr2P (TemplateReference (Just trc)) = do
     env <- ask
     template2P (templates env M.! (tempRefCont2TempNsName trc)) 
-
 -- Dynamic template reference.  
 instr2P (TemplateReference Nothing) = segment'
 
@@ -804,9 +839,6 @@ groupF2P (Group fname (Just Optional) _ _ instrs)
     (ask >>= \env -> (fname,) . Just . Gr <$> ((when (any (needsPm (templates env)) instrs) segment) >> mapM instr2P instrs)) 
     (return (fname, Nothing))
 
--- *Raw Parsers for basic FAST primitives
--- These parsers are unaware of nullability, presence map, deltas etc.
-
 -- |nULL parser.
 nULL :: FParser (Maybe a)
 nULL = l2 nULL'
@@ -829,179 +861,14 @@ rmPreamble' (['\0','\0','\0']) = "\NUL"
 -- overlong string.
 rmPreamble' s = filter (/= '\0') s
 
--- *Presence map parsers. 
-
--- |Parse PreseneceMap.
-presenceMap::FParser ()
-presenceMap = do
-    bs <- l2 anySBEEntity
-    -- update state
-    st <- get
-    put (Context (bsToPm bs) (dict st))
-
--- |Convert a bytestring into a presence map.
-bsToPm::B.ByteString -> [Bool]
-bsToPm bs = concatMap h (B.unpack bs) 
-    where   h::Word8 -> [Bool]
-            h w = map (testBit w) [6,5..0] 
-
 ifPresentElse::FParser a -> FParser a -> FParser a
 ifPresentElse p1 p2 = do 
                         s <- get
-                        put (Context (P.tail (pm s)) (dict s))
+                        put (Context (tail (pm s)) (dict s))
                         let pmap = pm s in
                             if head pmap 
                             then p1
                             else p2
-
--- *Stream parsers.
-
--- |Parses the beginning of a new segment.
-segment::FParser ()
-segment = presenceMap
-
--- |Parses presence map and template identifier.
-segment'::FParser (NsName, Maybe Value)
-segment' = presenceMap >> templateIdentifier
-
--- |The initial state of the parser depending on the templates.
-initState::Templates -> Context
-initState ts = Context [] (M.fromList [(k,d) | d@(Dictionary k _) <- concatMap initDicts (tsTemplates ts)])
-
--- |Creates a list of dictionaries depending on the fields of a template.
-initDicts::Template -> [Dictionary]
-initDicts t = createDicts $ catMaybes $ concatMap h (tInstructions t)
-    where   h (TemplateReference _) = []
-            h (Instruction f) = dictOfField f
-
--- |Maps triples of the form (DictionaryName, Key, Value) to a list of dictionaries.
-createDicts::[(String, DictKey, DictValue)] -> [Dictionary]
-createDicts es =  map h (groupBy (\ (d, _ , _) (d', _ , _) -> d P.== d') es)
-    where   h xs = Dictionary name (M.fromList (map (\(_,y,z) -> (y,z)) xs))
-                where (name, _, _) = head xs
-
--- |Maps a field to a triple (DictionaryName, Key, Value).
-dictOfField::Field -> [Maybe (String, DictKey, DictValue)]
-dictOfField (IntField (Int32Field (FieldInstrContent fname maybePr maybeOp))) = [dictOfIntField $ FieldInstrContent fname maybePr maybeOp] 
-dictOfField (IntField (Int64Field (FieldInstrContent fname maybePr maybeOp))) = [dictOfIntField $ FieldInstrContent fname maybePr maybeOp]
-dictOfField (IntField (UInt32Field (FieldInstrContent fname maybePr maybeOp))) = [dictOfIntField $ FieldInstrContent fname maybePr maybeOp]
-dictOfField (IntField (UInt64Field (FieldInstrContent fname maybePr maybeOp))) = [dictOfIntField $ FieldInstrContent fname maybePr maybeOp]
-dictOfField (DecField (DecimalField fname Nothing eitherOp)) = dictOfField $ DecField $ DecimalField fname (Just Mandatory) eitherOp
-dictOfField (DecField (DecimalField _ (Just Mandatory) Nothing )) = [Nothing]
-dictOfField (DecField (DecimalField _ (Just Mandatory) (Just (Left (Constant _))))) = [Nothing]
-dictOfField (DecField (DecimalField _ (Just Mandatory) (Just (Left (Default Nothing))))) = throw $ S5 " No initial value given for mandatory default operator."
-dictOfField (DecField (DecimalField _ (Just Mandatory) (Just (Left (Default (Just _)))))) = [Nothing]
-dictOfField (DecField (DecimalField fname (Just Mandatory) (Just (Left (Copy oc))))) = [Just $ dictOfOpContext oc fname]
-dictOfField (DecField (DecimalField _ (Just Mandatory) (Just (Left (Increment _))))) = throw $ S2 "Increment operator is only applicable to integer fields." 
-dictOfField (DecField (DecimalField fname (Just Mandatory) (Just (Left (Delta oc))))) = [Just $ dictOfOpContext oc fname]
-dictOfField (DecField (DecimalField _ (Just Mandatory) (Just (Left (Tail _))))) = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields." 
-dictOfField (DecField (DecimalField _ (Just Optional) Nothing )) = [Nothing]
-dictOfField (DecField (DecimalField _ (Just Optional) (Just (Left (Constant _))))) = [Nothing]
-dictOfField (DecField (DecimalField _ (Just Optional) (Just (Left (Default Nothing))))) = [Nothing]
-dictOfField (DecField (DecimalField _ (Just Optional) (Just (Left (Default (Just _)))))) = [Nothing]
-dictOfField (DecField (DecimalField fname (Just Optional) (Just (Left (Copy oc))))) = [Just $ dictOfOpContext oc fname]
-dictOfField (DecField (DecimalField _ (Just Optional) (Just (Left (Increment _))))) = throw $ S2 "Increment operator is only applicable to integer fields." 
-dictOfField (DecField (DecimalField fname (Just Optional) (Just (Left (Delta oc))))) = [Just $ dictOfOpContext oc fname]
-dictOfField (DecField (DecimalField _ (Just Optional) (Just (Left (Tail _))))) = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields." 
-dictOfField (DecField (DecimalField fname (Just Optional) (Just (Right (DecFieldOp maybe_opE maybe_opM))))) = dictOfField (IntField (Int32Field (FieldInstrContent (uniqueFName fname "e") (Just Optional) maybe_opE))) 
-    ++ dictOfField (IntField (Int64Field (FieldInstrContent (uniqueFName fname "m") (Just Mandatory) maybe_opM)))
-dictOfField (DecField (DecimalField fname (Just Mandatory) (Just (Right (DecFieldOp maybe_opE maybe_opM))))) = dictOfField (IntField (Int32Field (FieldInstrContent (uniqueFName fname "e") (Just Mandatory) maybe_opE)))
-    ++ dictOfField (IntField (Int64Field (FieldInstrContent (uniqueFName fname "m") (Just Mandatory) maybe_opM)))
-dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname Nothing maybeOp))) = dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Mandatory) maybeOp)))
-dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) Nothing))) = [Nothing]
-dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Constant _))))) = [Nothing]
-dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))))) = throw $ S5 " No initial value given for mandatory default operator."
-dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Default (Just _)))))) = [Nothing]
-dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Mandatory) (Just (Copy oc))))) = [Just $ dictOfOpContext oc fname]
-dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Increment _))))) = throw $ S2 "Increment operator is only applicable to integer fields." 
-dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Mandatory) (Just (Delta oc))))) = [Just $ dictOfOpContext oc fname]
-dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Mandatory) (Just (Tail oc))))) = [Just $ dictOfOpContext oc fname]
-dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) Nothing))) = [Nothing]
-dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Constant _))))) = [Nothing]
-dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Default Nothing))))) = [Nothing]
-dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Default (Just _)))))) = [Nothing]
-dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Optional) (Just (Copy oc))))) = [Just $ dictOfOpContext oc fname]
-dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Increment _))))) = throw $ S2 "Increment operator is only applicable to integer fields." 
-dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Optional) (Just (Delta oc))))) = [Just $ dictOfOpContext oc fname]
-dictOfField (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Optional) (Just (Tail oc))))) = [Just $ dictOfOpContext oc fname]
-dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname Nothing maybeOp) maybe_length)) = dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Mandatory) maybeOp) maybe_length))
-dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) Nothing) _)) = [Nothing]
-dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) Nothing) _)) = [Nothing]
-dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Constant _))) _)) = [Nothing]
-dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just (Constant _))) _)) = [Nothing]
-dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))) _)) = throw $ S5 " No initial value given for mandatory default operator."
-dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Default (Just _)))) _)) = [Nothing]
-dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just (Default Nothing))) _)) = [Nothing]
-dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Default (Just _)))) _)) = [Nothing]
-dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Copy oc))) _)) = [Just $ dictOfOpContext oc fname]
-dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Copy oc))) _)) = [Just $ dictOfOpContext oc fname]
-dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Increment _))) _)) = throw $ S2 "Increment operator is only applicable to integer fields." 
-dictOfField (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Increment _))) _)) = throw $ S2 "Increment operator is only applicable to integer fields." 
-dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Delta oc))) _)) = [Just $ dictOfOpContext oc fname]
-dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Delta oc))) _)) = [Just $ dictOfOpContext oc fname]
-dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail oc))) _)) = [Just $ dictOfOpContext oc fname] 
-dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Tail oc))) _)) = [Just $ dictOfOpContext oc fname]
-dictOfField (UnicodeStrField (UnicodeStringField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)) = dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname maybe_presence maybe_op) maybe_length))
-dictOfField (Seq s) = concatMap h (sInstructions s)
-    where   h (TemplateReference _) = [Nothing]
-            h (Instruction f) = dictOfField f
-dictOfField (Grp g) = concatMap h (gInstructions g)
-    where   h (TemplateReference _) = [Nothing]
-            h (Instruction f) = dictOfField f
-
--- |Maps a integer field to a triple (DictionaryName, Key, Value).
-dictOfIntField::FieldInstrContent -> Maybe (String, DictKey, DictValue)
-dictOfIntField (FieldInstrContent fname Nothing maybeOp) = dictOfIntField $ FieldInstrContent fname (Just Mandatory) maybeOp
-dictOfIntField (FieldInstrContent _ (Just Mandatory) Nothing) =  Nothing
-dictOfIntField (FieldInstrContent _ (Just Mandatory) (Just (Constant _))) = Nothing
-dictOfIntField (FieldInstrContent _ (Just Mandatory) (Just (Default _))) = Nothing
-dictOfIntField (FieldInstrContent fname (Just Mandatory) (Just (Copy oc))) = Just $ dictOfOpContext oc fname
-dictOfIntField (FieldInstrContent fname (Just Mandatory) (Just (Increment oc))) = Just $ dictOfOpContext oc fname
-dictOfIntField (FieldInstrContent fname (Just Mandatory) (Just (Delta oc))) = Just $ dictOfOpContext oc fname
-dictOfIntField (FieldInstrContent _ (Just Mandatory) (Just (Tail _))) = throw $ S2 " Tail operator can not be applied on an integer type field." 
-dictOfIntField (FieldInstrContent _ (Just Optional) Nothing) =  Nothing
-dictOfIntField (FieldInstrContent _ (Just Optional) (Just (Constant _))) = Nothing
-dictOfIntField (FieldInstrContent _ (Just Optional) (Just (Default _))) = Nothing
-dictOfIntField (FieldInstrContent fname (Just Optional) (Just (Copy oc))) = Just $ dictOfOpContext oc fname
-dictOfIntField (FieldInstrContent fname (Just Optional) (Just (Increment oc))) = Just $ dictOfOpContext oc fname
-dictOfIntField (FieldInstrContent fname (Just Optional) (Just (Delta oc))) = Just $ dictOfOpContext oc fname
-dictOfIntField (FieldInstrContent _ (Just Optional) (Just (Tail _))) = throw $ S2 " Tail operator can not be applied on an integer type field." 
-
--- |Outputs a triple (DictionaryName, Key, Value) depending on OpContext and 
--- the NsName of a field.
-dictOfOpContext::OpContext -> NsName -> (String, DictKey, DictValue)
-dictOfOpContext (OpContext Nothing Nothing _) n = ("global", N n, Undefined)
-dictOfOpContext (OpContext (Just (DictionaryAttr d)) Nothing _) n = (d, N n, Undefined)
-dictOfOpContext (OpContext Nothing (Just k) _) _ = ("global", K k, Undefined)
-dictOfOpContext (OpContext (Just (DictionaryAttr d)) (Just k) _) _ = (d, K k, Undefined)
-
--- |The environment of the parser depending on the templates and
--- the tid2temp function provided by the application.
-initEnv::Templates -> (Word32 -> TemplateNsName) -> Env
-initEnv ts f = Env (M.fromList [(tName t,t) | t <- tsTemplates ts]) f
-
--- |Parses template identifier and returns the corresponding parser.
--- template identifier is considered a mandatory copy operator UIn32 field.
--- TODO: Check wether mandatory is right.
--- TODO: Which token should this key have, define a policy?
-templateIdentifier::FParser (NsName, Maybe Value)
-templateIdentifier = do
-    (_ , maybe_i) <- p
-    case maybe_i of
-        (Just (UI32 i')) -> do 
-            env <- ask
-            template2P (templates env M.! tid2temp env i')
-        (Just _) ->  throw $ OtherException "Coding error: templateId field must be of type I."
-        Nothing -> throw $ OtherException "Failed to parse template identifier."
-
-    where p = field2Parser (IntField (UInt32Field (FieldInstrContent 
-                            (NsName (NameAttr "templateId") Nothing Nothing) 
-                            (Just Mandatory) 
-                            (Just (Copy (OpContext (Just (DictionaryAttr "global")) (Just (NsKey(KeyAttr (Token "tid")) Nothing)) Nothing)))
-                            )))
-
--- *Helper functions.
---
 
 -- |Decrement the value of an integer, when it is positive.
 minusOne::(Ord a, Num a) => a -> a
