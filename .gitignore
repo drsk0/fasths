@@ -6,4 +6,5 @@ tags
 *.o
 *.ghci
 parseFile
+runTest
 debug*

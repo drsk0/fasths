@@ -72,7 +72,9 @@ tempRefCont2TempNsName,
 pmToBs,
 bsToPm,
 assertNameIs,
-initState
+initState,
+-- testing properties.
+prop_decodeP_dot_encodeP_is_ID
 )
 
 where
@@ -84,6 +86,7 @@ import Data.Maybe (catMaybes)
 import Data.List (groupBy)
 import Data.Bits
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as BL
 import Data.ByteString.Char8 (unpack, pack) 
 import Data.Int
 import Data.Word
@@ -186,6 +189,9 @@ class Primitive a where
 
     decodeT = decodeP
     encodeT = encodeP
+
+prop_decodeP_dot_encodeP_is_ID :: (Primitive a, Eq a) => a -> Bool
+prop_decodeP_dot_encodeP_is_ID x = A.maybeResult (A.feed (A.parse decodeP ((B.concat . BL.toChunks . BU.toLazyByteString . encodeP) x)) B.empty) == Just x
 
 -- |The values in a messages.
 data Value = I32 Int32
