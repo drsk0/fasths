@@ -7,7 +7,7 @@
 -- Stability   :  experimental
 -- Portability :  unknown
 --
-{-#LANGUAGE TypeSynonymInstances, GeneralizedNewtypeDeriving, FlexibleInstances, GADTs, MultiParamTypeClasses, ExistentialQuantification, TypeFamilies, DeriveDataTypeable #-}
+{-#LANGUAGE FlexibleContexts, TypeSynonymInstances, GeneralizedNewtypeDeriving, FlexibleInstances, GADTs, MultiParamTypeClasses, ExistentialQuantification, TypeFamilies, DeriveDataTypeable #-}
 
 module Codec.Fast.Data 
 (
@@ -73,14 +73,28 @@ pmToBs,
 bsToPm,
 assertNameIs,
 initState,
+rmPreamble,
+rmPreamble',
+addPreamble,
+addPreamble',
+-- testing data.
+Bit7String (..),
 -- testing properties.
-prop_decodeP_dot_encodeP_is_ID
+prop_decodeP_dot_encodeP_is_ID,
+prop_decodeP_dot_encodeP_is_ID_AsciiString,
+prop_decodeP_dot_encodeP_is_ID_AsciiString',
+prop_decodeD_dot_encodeD_is_ID,
+prop_decodeT_dot_encodeT_is_ID,
+prop_decodeT_dot_encodeT_is_ID_AsciiString,
+prop_fromValue_dot_toValue_is_ID,
+prop_delta_dot_delta__is_ID,
+prop_ftail_dot_ftail__is_ID
 )
 
 where
 
 import Prelude hiding (exponent, dropWhile, reverse, zip)
-import Data.ListLike (dropWhile, genericDrop, genericTake, genericLength, reverse, zip)
+import Data.ListLike (ListLike, dropWhile, genericDrop, genericTake, genericLength, reverse, zip)
 import Data.Char (digitToInt)
 import Data.Maybe (catMaybes)
 import Data.List (groupBy)
@@ -193,6 +207,39 @@ class Primitive a where
 prop_decodeP_dot_encodeP_is_ID :: (Primitive a, Eq a) => a -> Bool
 prop_decodeP_dot_encodeP_is_ID x = A.maybeResult (A.feed (A.parse decodeP ((B.concat . BL.toChunks . BU.toLazyByteString . encodeP) x)) B.empty) == Just x
 
+newtype Bit7String = Bit7String String deriving (Show)
+
+prop_decodeP_dot_encodeP_is_ID_AsciiString :: Bit7String -> Bool
+prop_decodeP_dot_encodeP_is_ID_AsciiString (Bit7String s)  = A.maybeResult (A.feed (A.parse (fmap rmPreamble decodeP) ((B.concat . BL.toChunks . BU.toLazyByteString . encodeP . addPreamble) s')) B.empty) 
+                                                == 
+                                                Just s' where s' = rmPreamble s
+
+prop_decodeP_dot_encodeP_is_ID_AsciiString' :: Bit7String -> Bool
+prop_decodeP_dot_encodeP_is_ID_AsciiString' (Bit7String s) = A.maybeResult (A.feed (A.parse (fmap rmPreamble' decodeP) ((B.concat . BL.toChunks . BU.toLazyByteString . encodeP . addPreamble') s')) B.empty) 
+                                                == 
+                                                Just s' where s' = rmPreamble' s
+
+prop_decodeD_dot_encodeD_is_ID :: (Primitive a, Eq (Delta a)) => Delta a -> Bool
+prop_decodeD_dot_encodeD_is_ID x = A.maybeResult (A.feed (A.parse decodeD ((B.concat . BL.toChunks . BU.toLazyByteString . encodeD) x)) B.empty) == Just x
+
+prop_decodeT_dot_encodeT_is_ID :: (Primitive a, Eq a) => a -> Bool
+prop_decodeT_dot_encodeT_is_ID x = A.maybeResult (A.feed (A.parse decodeT ((B.concat . BL.toChunks . BU.toLazyByteString . encodeT) x)) B.empty) == Just x
+
+prop_decodeT_dot_encodeT_is_ID_AsciiString :: Bit7String -> Bool
+prop_decodeT_dot_encodeT_is_ID_AsciiString (Bit7String s) = A.maybeResult (A.feed (A.parse (fmap rmPreamble decodeT) ((B.concat . BL.toChunks . BU.toLazyByteString . encodeT . addPreamble) s')) B.empty) 
+                                                    == 
+                                                    Just s' where s' = rmPreamble s
+
+prop_fromValue_dot_toValue_is_ID :: (Primitive a, Eq a) => a -> Bool
+prop_fromValue_dot_toValue_is_ID x = (fromValue . toValue) x == x
+
+prop_delta_dot_delta__is_ID :: (Primitive a, Eq a) => (a, a) -> Bool
+prop_delta_dot_delta__is_ID (x, y) = delta y (delta_ x y) == x
+
+prop_ftail_dot_ftail__is_ID :: (ListLike a c, Primitive a, Eq a) => (a, a) -> Bool
+prop_ftail_dot_ftail__is_ID (x, y) | (genericLength x :: Word32) >= genericLength y = ftail y (ftail_ x y) == x
+prop_ftail_dot_ftail__is_ID _ = True
+
 -- |The values in a messages.
 data Value = I32 Int32
            | UI32 Word32
@@ -301,17 +348,19 @@ instance Primitive AsciiString where
     fromValue _ = throw $ OtherException "Type mismatch."
     defaultBaseValue = ""
     ivToPrimitive = text
-    delta s1 (Dascii (l, s2)) | l < 0 = s2 ++ s1' where s1' = genericDrop (-l) s1
+    delta s1 (Dascii (l, s2)) | l < 0 = s2 ++ s1' where s1' = genericDrop (-(l + 1)) s1
     delta s1 (Dascii (l, s2)) | l >= 0 = s1' ++ s2 where s1' = genericTake (genericLength s1 - l) s1
     delta _ _ = throw $ D4 "Type mismatch."
     delta_ s1 s2 =  if (genericLength l1 :: Int32) >= genericLength l2 
                     then Dascii (genericLength s2 - genericLength l1, genericDrop (genericLength l1 :: Int32) s1)
-                    else Dascii (genericLength l2 - genericLength s2, genericTake ((genericLength s1 - genericLength l2) :: Int32) s1)
+                    else Dascii (genericLength l2 - genericLength s2 - 1, genericTake ((genericLength s1 - genericLength l2) :: Int32) s1)
                     where   l1 = map fst $ takeWhile (uncurry (==) ) (zip s1 s2)
                             l2 = map fst $ takeWhile (uncurry (==)) (zip (reverse s1) (reverse s2))
                             
     ftail s1 s2 = take (length s1 - length s2) s1 ++ s2
-    ftail_ s1 s2 = take (length s1 - length s2) s1
+    ftail_ s1 s2 | (genericLength s1 :: Word32) > genericLength s2 = s1
+    ftail_ s1 s2 | (genericLength s1 :: Word32) == genericLength s2 = map fst (dropWhile (\(x, y) -> x == y) (zip s1 s2))
+    ftail_ _ _ = throw $ OtherException "Can't encode a smaller string with a tail operator."
     decodeP = asciiString
     decodeD = do 
                 l <- int
@@ -321,29 +370,13 @@ instance Primitive AsciiString where
     encodeP = _asciiString
     encodeD = (encodeP `append` encodeP) . (\(Dascii (i, s)) -> (i, s))
 
-{-instance Primitive UnicodeString  where-}
-    {-data TypeWitness UnicodeString = TypeWitnessUNI UnicodeString -}
-    {-assertType (TypeWitnessUNI s) = s-}
-    {-assertType _ = error "Type mismatch."-}
-    {-type Delta UnicodeString = (Int32, B.ByteString)-}
-    {-defaultBaseValue = ""-}
-    {-ivToPrimitive = text-}
-    {-delta s d =  B.unpack (delta (B.pack s) d)-}
-    {-ftail s1 s2 = B.unpack (ftail (B.pack s1) s2)-}
-    {-decodeP = B.unpack <$> byteVector-}
-    {-decodeD = do-}
-                {-l <- int-}
-                {-bv <- decodeP-}
-                {-return (l, bv)-}
-    {-decodeT = decodeP-}
-
 instance Primitive (Int32, Int64) where
-    newtype Delta (Int32, Int64) = Ddec (Int32, Int64)
+    newtype Delta (Int32, Int64) = Ddec (Int32, Int64) deriving (Eq, Show)
     witnessType = TypeWitnessDec
     assertType (TypeWitnessDec (e, m)) = (e, m)
     assertType _ = throw $ D4 "Type mismatch."
-    toValue (e, m) = Dec $ encodeFloat (fromIntegral m) (fromIntegral e)
-    fromValue (Dec d) = (fromIntegral $ snd d', fromIntegral $ fst d') where d' = decodeFloat d
+    toValue (e, m) = Dec $ (fromIntegral m) * 10^^e
+    fromValue (Dec d) = undefined
     -- TODO: Might overflow for huge values in fromIntegral.
     fromValue _ = throw $ D4 "Type mismatch."
     defaultBaseValue = (0, 0)
@@ -360,8 +393,8 @@ instance Primitive (Int32, Int64) where
     ftail = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     ftail_ = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     decodeP = do 
-        e <- int::A.Parser Int32
-        m <- int::A.Parser Int64
+        e <- int :: A.Parser Int32
+        m <- int :: A.Parser Int64
         return (e, m)
     decodeD = Ddec <$> decodeP
     decodeT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
@@ -369,7 +402,7 @@ instance Primitive (Int32, Int64) where
     encodeD = encodeP . (\(Ddec (e, m)) -> (e, m))
 
 instance Primitive B.ByteString where
-    newtype Delta B.ByteString = Dbs (Int32, B.ByteString)
+    newtype Delta B.ByteString = Dbs (Int32, B.ByteString) deriving (Eq, Show)
     witnessType = TypeWitnessBS
     assertType (TypeWitnessBS bs) = bs
     assertType _ = throw $ D4 "Type mismatch."
@@ -378,16 +411,18 @@ instance Primitive B.ByteString where
     fromValue _ = throw $ D4 "Type mismatch."
     defaultBaseValue = B.empty
     ivToPrimitive iv = B.pack (map (toEnum . digitToInt) (filter whiteSpace (text iv)))
-    delta bv (Dbs (l, bv')) | l < 0 = bv'' `B.append` bv' where bv'' = genericDrop (-l) bv 
-    delta bv (Dbs (l, bv')) | l >= 0 = bv'' `B.append` bv' where bv'' = genericTake (genericLength bv - l) bv
+    delta bv1 (Dbs (l, bv2)) | l < 0 = bv2 `B.append` bv'' where bv'' = genericDrop (-(l + 1)) bv1 
+    delta bv1 (Dbs (l, bv2)) | l >= 0 = bv'' `B.append` bv2 where bv'' = genericTake (genericLength bv1 - l) bv1
     delta _ _ = throw $ D4 "Type mismatch."
-    delta_ bv1 bv2 =  if (genericLength l1 :: Int32) >= genericLength l2 
-                    then Dbs (genericLength bv2 - genericLength l1, genericDrop (genericLength l1 :: Int32) bv1)
-                    else Dbs (genericLength l2 - genericLength bv2, genericTake ((genericLength bv1 - genericLength l2) :: Int32) bv1)
-                    where   l1 = map fst $ takeWhile (uncurry (==)) (zip bv1 bv2)
-                            l2 = map fst $ takeWhile (uncurry (==)) (zip (reverse bv1) (reverse bv2))
+    delta_ bv1 bv2 =  if (genericLength l1 :: Word32) >= genericLength l2 
+                    then Dbs (genericLength bv2 - genericLength l1, genericDrop (genericLength l1 :: Word32) bv1)
+                    else Dbs (genericLength l2 - genericLength bv2 - 1, genericTake ((genericLength bv1 - genericLength l2) :: Word32) bv1)
+                    where   l1 = takeWhile (uncurry (==)) (zip bv1 bv2)
+                            l2 = takeWhile (uncurry (==)) (zip (reverse bv1) (reverse bv2))
     ftail b1 b2 = B.take (B.length b1 - B.length b2) b1 `B.append` b2
-    ftail_ b1 b2 = B.take (B.length b1 - B.length b2) b1
+    ftail_ b1 b2 | (genericLength b1 :: Word32) > genericLength b2 = b1
+    ftail_ b1 b2 | (genericLength b1 :: Word32) == genericLength b2 = B.pack (map fst (dropWhile (\(x, y) -> x == y) (B.zip b1 b2)))
+    ftail_ _ _ = throw $ OtherException "Can't encode a smaller string with a tail operator."
     decodeP = byteVector
     decodeD = do 
                 l <- int
@@ -979,3 +1014,29 @@ dictOfOpContext (OpContext Nothing Nothing _) n = ("global", N n, Undefined)
 dictOfOpContext (OpContext (Just (DictionaryAttr d)) Nothing _) n = (d, N n, Undefined)
 dictOfOpContext (OpContext Nothing (Just k) _) _ = ("global", K k, Undefined)
 dictOfOpContext (OpContext (Just (DictionaryAttr d)) (Just k) _) _ = (d, K k, Undefined)
+
+-- |Remove Preamble of an ascii string, non-Nullable situation.
+rmPreamble :: AsciiString -> AsciiString
+rmPreamble (['\0']) = []
+rmPreamble (['\0', '\0']) = "\NUL"
+-- overlong string.
+rmPreamble s = dropWhile(== '\0') s
+
+-- |Remove preamble of an ascii string, NULLable situation.
+rmPreamble'::AsciiString -> AsciiString
+rmPreamble' (['\0','\0']) = []
+rmPreamble' (['\0','\0','\0']) = "\NUL"
+-- overlong string.
+rmPreamble' s = dropWhile (== '\0') s
+
+addPreamble :: AsciiString -> AsciiString
+addPreamble [] = (['\0'])
+addPreamble "\NUL" = (['\0','\0'])
+addPreamble s = dropWhile (== '\0') s
+
+addPreamble' :: AsciiString -> AsciiString
+addPreamble' [] = (['\0','\0'])
+addPreamble' "\NUL" = (['\0','\0','\0'])
+addPreamble' s = dropWhile(== '\0') s
+
+

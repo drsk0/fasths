@@ -847,19 +847,6 @@ nULL = l2 nULL'
             _ <- A.word8 0x80
             return Nothing
     
--- |Remove Preamble of an ascii string, non-Nullable situation.
-rmPreamble::AsciiString -> AsciiString
-rmPreamble (['\0']) = []
-rmPreamble (['\0', '\0']) = "\NUL"
--- overlong string.
-rmPreamble s = filter (/= '\0') s
-
--- |Remove preamble of an ascii string, NULLable situation.
-rmPreamble'::AsciiString -> AsciiString
-rmPreamble' (['\0','\0']) = []
-rmPreamble' (['\0','\0','\0']) = "\NUL"
--- overlong string.
-rmPreamble' s = filter (/= '\0') s
 
 ifPresentElse::FParser a -> FParser a -> FParser a
 ifPresentElse p1 p2 = do 
