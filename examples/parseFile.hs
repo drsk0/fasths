@@ -77,6 +77,3 @@ tid2temp 51 =TemplateNsName (NameAttr "MDSnapshoFullRefresh_51") Nothing (Just (
 tid2temp 1 =TemplateNsName (NameAttr "MDLogon") Nothing (Just (IdAttr (Token "1 ")))
 tid2temp 2 =TemplateNsName (NameAttr "MDLogout") Nothing (Just (IdAttr (Token "2 ")))
 tid2temp i = error ("Template id unknown." ++ " " ++ show i)
-
-simpleTemplateNsName :: String -> TemplateNsName
-simpleTemplateNsName s = TemplateNsName (NameAttr s) Nothing Nothing
