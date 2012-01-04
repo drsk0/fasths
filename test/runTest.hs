@@ -37,9 +37,14 @@ instance Arbitrary (Delta B.ByteString) where
     arbitrary = fmap Dbs (arbitrary :: Gen (Int32, B.ByteString))
     shrink (Dbs (i, bs)) = map Dbs (zip (shrink i) (replicate (length $ shrink i) bs))
 
-instance Arbitrary Bit7String where
-    arbitrary = fmap (Bit7String . unpack .  (B.filter (\w -> not (testBit w 7)) . pack)) (arbitrary :: Gen String)
-    shrink (Bit7String s) = map Bit7String (shrink s)
+bit7String :: Gen String
+bit7String = fmap (unpack . B.map (\w -> clearBit w 7) . pack) (arbitrary :: Gen String)
+
+normalizedDec :: Gen (Int32, Int64)
+normalizedDec = fmap normalize (arbitrary :: Gen (Int32, Int64))
+    where   normalize (_, 0) = (0, 0)
+            normalize (e, m) | m `mod` 10 == 0 = normalize (e + 1, m `div` 10)
+            normalize (e, m) = (e, m)
 
 main :: IO ()
 main = do
@@ -49,8 +54,8 @@ main = do
     quickCheck (prop_decodeP_dot_encodeP_is_ID :: Int64 -> Bool)
     quickCheck (prop_decodeP_dot_encodeP_is_ID :: Word64 -> Bool)
     quickCheck (prop_decodeP_dot_encodeP_is_ID :: (Int32, Int64) -> Bool)
-    quickCheck prop_decodeP_dot_encodeP_is_ID_AsciiString
-    quickCheck prop_decodeP_dot_encodeP_is_ID_AsciiString'
+    quickCheck (forAll (fmap addPreamble bit7String) ((prop_decodeP_dot_encodeP_is_ID) :: AsciiString -> Bool))
+    quickCheck (forAll (fmap addPreamble' bit7String) ((prop_decodeP_dot_encodeP_is_ID) :: AsciiString -> Bool))
     quickCheck (prop_decodeP_dot_encodeP_is_ID :: B.ByteString -> Bool)
 
     putStr "\n[*] Checking 'decodeD . encodeD = id'\n"
@@ -62,7 +67,7 @@ main = do
     quickCheck (prop_decodeD_dot_encodeD_is_ID :: (Delta B.ByteString) -> Bool)
 
     putStr "\n[*] Checking 'decodeT . encodeT = id'\n"
-    quickCheck prop_decodeT_dot_encodeT_is_ID_AsciiString
+    quickCheck (forAll (fmap addPreamble bit7String) (prop_decodeT_dot_encodeT_is_ID :: AsciiString -> Bool))
     quickCheck (prop_decodeT_dot_encodeT_is_ID :: B.ByteString -> Bool)
 
     putStr "\n[*] Checking 'fromValue . toValue = id'\n"
@@ -70,7 +75,7 @@ main = do
     quickCheck (prop_fromValue_dot_toValue_is_ID :: Word32 -> Bool)
     quickCheck (prop_fromValue_dot_toValue_is_ID :: Int64 -> Bool)
     quickCheck (prop_fromValue_dot_toValue_is_ID :: Word64 -> Bool)
-    quickCheck (prop_fromValue_dot_toValue_is_ID :: (Int32, Int64) -> Bool)
+    quickCheck $ expectFailure (forAll normalizedDec (prop_fromValue_dot_toValue_is_ID :: (Int32, Int64) -> Bool))
     quickCheck (prop_fromValue_dot_toValue_is_ID :: AsciiString -> Bool)
     quickCheck (prop_fromValue_dot_toValue_is_ID :: B.ByteString -> Bool)
 
@@ -86,3 +91,6 @@ main = do
     putStr "\n[*] Checking 'ftail . ftail_ = id'\n"
     quickCheck (prop_ftail_dot_ftail__is_ID :: (AsciiString, AsciiString) -> Bool)
     quickCheck (prop_ftail_dot_ftail__is_ID :: (B.ByteString, B.ByteString) -> Bool)
+
+    putStr "\n[*] Checking 'rmPreamble . addPreamble = id'\n"
+    quickCheck (prop_rmPreamble_dot_addPreamble_is_ID)

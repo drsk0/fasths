@@ -77,18 +77,14 @@ rmPreamble,
 rmPreamble',
 addPreamble,
 addPreamble',
--- testing data.
-Bit7String (..),
 -- testing properties.
 prop_decodeP_dot_encodeP_is_ID,
-prop_decodeP_dot_encodeP_is_ID_AsciiString,
-prop_decodeP_dot_encodeP_is_ID_AsciiString',
 prop_decodeD_dot_encodeD_is_ID,
 prop_decodeT_dot_encodeT_is_ID,
-prop_decodeT_dot_encodeT_is_ID_AsciiString,
 prop_fromValue_dot_toValue_is_ID,
 prop_delta_dot_delta__is_ID,
-prop_ftail_dot_ftail__is_ID
+prop_ftail_dot_ftail__is_ID,
+prop_rmPreamble_dot_addPreamble_is_ID,
 )
 
 where
@@ -99,6 +95,7 @@ import Data.Char (digitToInt)
 import Data.Maybe (catMaybes)
 import Data.List (groupBy)
 import Data.Bits
+import Numeric
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import Data.ByteString.Char8 (unpack, pack) 
@@ -207,31 +204,14 @@ class Primitive a where
 prop_decodeP_dot_encodeP_is_ID :: (Primitive a, Eq a) => a -> Bool
 prop_decodeP_dot_encodeP_is_ID x = A.maybeResult (A.feed (A.parse decodeP ((B.concat . BL.toChunks . BU.toLazyByteString . encodeP) x)) B.empty) == Just x
 
-newtype Bit7String = Bit7String String deriving (Show)
-
-prop_decodeP_dot_encodeP_is_ID_AsciiString :: Bit7String -> Bool
-prop_decodeP_dot_encodeP_is_ID_AsciiString (Bit7String s)  = A.maybeResult (A.feed (A.parse (fmap rmPreamble decodeP) ((B.concat . BL.toChunks . BU.toLazyByteString . encodeP . addPreamble) s')) B.empty) 
-                                                == 
-                                                Just s' where s' = rmPreamble s
-
-prop_decodeP_dot_encodeP_is_ID_AsciiString' :: Bit7String -> Bool
-prop_decodeP_dot_encodeP_is_ID_AsciiString' (Bit7String s) = A.maybeResult (A.feed (A.parse (fmap rmPreamble' decodeP) ((B.concat . BL.toChunks . BU.toLazyByteString . encodeP . addPreamble') s')) B.empty) 
-                                                == 
-                                                Just s' where s' = rmPreamble' s
-
 prop_decodeD_dot_encodeD_is_ID :: (Primitive a, Eq (Delta a)) => Delta a -> Bool
 prop_decodeD_dot_encodeD_is_ID x = A.maybeResult (A.feed (A.parse decodeD ((B.concat . BL.toChunks . BU.toLazyByteString . encodeD) x)) B.empty) == Just x
 
 prop_decodeT_dot_encodeT_is_ID :: (Primitive a, Eq a) => a -> Bool
 prop_decodeT_dot_encodeT_is_ID x = A.maybeResult (A.feed (A.parse decodeT ((B.concat . BL.toChunks . BU.toLazyByteString . encodeT) x)) B.empty) == Just x
 
-prop_decodeT_dot_encodeT_is_ID_AsciiString :: Bit7String -> Bool
-prop_decodeT_dot_encodeT_is_ID_AsciiString (Bit7String s) = A.maybeResult (A.feed (A.parse (fmap rmPreamble decodeT) ((B.concat . BL.toChunks . BU.toLazyByteString . encodeT . addPreamble) s')) B.empty) 
-                                                    == 
-                                                    Just s' where s' = rmPreamble s
-
 prop_fromValue_dot_toValue_is_ID :: (Primitive a, Eq a) => a -> Bool
-prop_fromValue_dot_toValue_is_ID x = (fromValue . toValue) x == x
+prop_fromValue_dot_toValue_is_ID x =  (f . fromValue . f) x == f x where f = toValue
 
 prop_delta_dot_delta__is_ID :: (Primitive a, Eq a) => (a, a) -> Bool
 prop_delta_dot_delta__is_ID (x, y) = delta y (delta_ x y) == x
@@ -239,6 +219,9 @@ prop_delta_dot_delta__is_ID (x, y) = delta y (delta_ x y) == x
 prop_ftail_dot_ftail__is_ID :: (ListLike a c, Primitive a, Eq a) => (a, a) -> Bool
 prop_ftail_dot_ftail__is_ID (x, y) | (genericLength x :: Word32) >= genericLength y = ftail y (ftail_ x y) == x
 prop_ftail_dot_ftail__is_ID _ = True
+
+prop_rmPreamble_dot_addPreamble_is_ID :: AsciiString -> Bool
+prop_rmPreamble_dot_addPreamble_is_ID s = (rmPreamble . addPreamble) s == s && (rmPreamble' . addPreamble') s == s
 
 -- |The values in a messages.
 data Value = I32 Int32
@@ -251,7 +234,7 @@ data Value = I32 Int32
            | B  B.ByteString
            | Sq Word32 [[(NsName, Maybe Value)]]
            | Gr [(NsName, Maybe Value)]
-           deriving (Show)
+           deriving (Show, Eq)
 
 -- |Some basic types, renamed for readability.
 type UnicodeString = String
@@ -376,8 +359,11 @@ instance Primitive (Int32, Int64) where
     assertType (TypeWitnessDec (e, m)) = (e, m)
     assertType _ = throw $ D4 "Type mismatch."
     toValue (e, m) = Dec $ (fromIntegral m) * 10^^e
-    fromValue (Dec d) = undefined
-    -- TODO: Might overflow for huge values in fromIntegral.
+    fromValue (Dec 0.0) = (0, 0)
+    fromValue (Dec d) | d > 0.0 = (fromIntegral e  - genericLength digits, m) 
+        where   (digits, e) = floatToDigits 10 d
+                m = foldl (\r x -> 10*r + (fromIntegral x)) 0 digits
+    fromValue (Dec d) = (e, -1 * m) where (e, m) = fromValue (Dec (-1 * d))
     fromValue _ = throw $ D4 "Type mismatch."
     defaultBaseValue = (0, 0)
     ivToPrimitive (InitialValueAttr s) = let    s' = trimWhiteSpace s 
@@ -1020,23 +1006,23 @@ rmPreamble :: AsciiString -> AsciiString
 rmPreamble (['\0']) = []
 rmPreamble (['\0', '\0']) = "\NUL"
 -- overlong string.
-rmPreamble s = dropWhile(== '\0') s
+rmPreamble s = s
 
 -- |Remove preamble of an ascii string, NULLable situation.
 rmPreamble'::AsciiString -> AsciiString
 rmPreamble' (['\0','\0']) = []
 rmPreamble' (['\0','\0','\0']) = "\NUL"
 -- overlong string.
-rmPreamble' s = dropWhile (== '\0') s
+rmPreamble' s = s
 
 addPreamble :: AsciiString -> AsciiString
 addPreamble [] = (['\0'])
 addPreamble "\NUL" = (['\0','\0'])
-addPreamble s = dropWhile (== '\0') s
+addPreamble s = s
 
 addPreamble' :: AsciiString -> AsciiString
 addPreamble' [] = (['\0','\0'])
 addPreamble' "\NUL" = (['\0','\0','\0'])
-addPreamble' s = dropWhile(== '\0') s
+addPreamble' s = s
 
 
