@@ -46,6 +46,15 @@ normalizedDec = fmap normalize (arbitrary :: Gen (Int32, Int64))
             normalize (e, m) | m `mod` 10 == 0 = normalize (e + 1, m `div` 10)
             normalize (e, m) = (e, m)
 
+nonOverlongString :: Gen AsciiString
+nonOverlongString = (arbitrary :: Gen AsciiString) `suchThat` (not . overlong)
+
+overlong :: AsciiString -> Bool
+overlong [] = False
+overlong "\0" = False
+overlong ('\0':_) = True
+overlong _ = False
+
 main :: IO ()
 main = do
     putStr "\n[*] Checking 'decodeP . encodeP = id'\n"
@@ -76,6 +85,7 @@ main = do
     quickCheck (prop_fromValue_dot_toValue_is_ID :: Int64 -> Bool)
     quickCheck (prop_fromValue_dot_toValue_is_ID :: Word64 -> Bool)
     quickCheck $ expectFailure (forAll normalizedDec (prop_fromValue_dot_toValue_is_ID :: (Int32, Int64) -> Bool))
+    -- fails for imprecision of floating point operations.
     quickCheck (prop_fromValue_dot_toValue_is_ID :: AsciiString -> Bool)
     quickCheck (prop_fromValue_dot_toValue_is_ID :: B.ByteString -> Bool)
 
@@ -93,4 +103,4 @@ main = do
     quickCheck (prop_ftail_dot_ftail__is_ID :: (B.ByteString, B.ByteString) -> Bool)
 
     putStr "\n[*] Checking 'rmPreamble . addPreamble = id'\n"
-    quickCheck (prop_rmPreamble_dot_addPreamble_is_ID)
+    quickCheck (forAll nonOverlongString prop_rmPreamble_dot_addPreamble_is_ID)

@@ -1006,23 +1006,23 @@ rmPreamble :: AsciiString -> AsciiString
 rmPreamble (['\0']) = []
 rmPreamble (['\0', '\0']) = "\NUL"
 -- overlong string.
-rmPreamble s = s
+rmPreamble s = dropWhile (=='\0') s
 
 -- |Remove preamble of an ascii string, NULLable situation.
 rmPreamble'::AsciiString -> AsciiString
 rmPreamble' (['\0','\0']) = []
 rmPreamble' (['\0','\0','\0']) = "\NUL"
 -- overlong string.
-rmPreamble' s = s
+rmPreamble' s = dropWhile (=='\0') s
 
 addPreamble :: AsciiString -> AsciiString
 addPreamble [] = (['\0'])
 addPreamble "\NUL" = (['\0','\0'])
-addPreamble s = s
+addPreamble s = dropWhile (=='\0') s
 
 addPreamble' :: AsciiString -> AsciiString
 addPreamble' [] = (['\0','\0'])
 addPreamble' "\NUL" = (['\0','\0','\0'])
-addPreamble' s = s
+addPreamble' s = dropWhile (=='\0') s
 
 
