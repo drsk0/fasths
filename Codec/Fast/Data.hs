@@ -150,6 +150,10 @@ data Context = Context {
     dict :: M.Map String Dictionary
     }
 
+-- |The initial state of the parser depending on the templates.
+initState::Templates -> Context
+initState ts = Context [] (M.fromList [(k,d) | d@(Dictionary k _) <- concatMap initDicts (tsTemplates ts)])
+
 -- | We need type witnesses to handle manipulation of dictionaries with entries of all possible 
 -- primitive types in generic code.
 data TypeWitness a where 
@@ -890,9 +894,6 @@ sublistsOfLength n xs = take n xs : sublistsOfLength n (drop n xs)
 assertNameIs :: NsName -> (NsName, a) -> a
 assertNameIs n1 (n2, x) = if n1 == n2 then x else throw $ OtherException "Template doesn't fit message."
 
--- |The initial state of the parser depending on the templates.
-initState::Templates -> Context
-initState ts = Context [] (M.fromList [(k,d) | d@(Dictionary k _) <- concatMap initDicts (tsTemplates ts)])
 
 -- |Creates a list of dictionaries depending on the fields of a template.
 initDicts::Template -> [Dictionary]

@@ -35,6 +35,8 @@ import Codec.Fast.Parser
 import Codec.Fast.Coparser
 import Codec.Fast.TemplateParser
 import qualified Data.Binary.Builder as BU
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as BL
 
 -- |Stateful parser for one message depending on templates and the tid2temp 
 -- converter function.
@@ -52,3 +54,12 @@ reset :: (MonadState Context m) => Templates -> m ()
 reset ts = put (initState ts)
 
 -- NOTE: Blocks are not supported at the time.
+
+prop_decode_template_encode_template_is_ID :: Template -> (NsName, Maybe Value) -> Bool
+prop_decode_template_encode_template_is_ID t maybe_v = A.maybeResult (A.feed (A.parse parser bs) B.empty) == Just maybe_v
+    where   parser = evalStateT (runReaderT (template2P t) initialEnv) initialState
+            bs = (B.concat . BL.toChunks . BU.toLazyByteString) (evalState (runReaderT ((template2Cop t) maybe_v) initialEnv_) initialState)
+            initialEnv = initEnv templates (const $ tName t)
+            initialEnv_ = _initEnv templates (const 0)
+            initialState = initState templates 
+            templates = Templates Nothing Nothing Nothing [t]

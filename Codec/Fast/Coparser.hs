@@ -3,7 +3,8 @@
 module Codec.Fast.Coparser 
 (
 _segment',
-_initEnv
+_initEnv,
+template2Cop,
 )
 where 
 
@@ -68,13 +69,11 @@ _presenceMap () = do
     st <- get
     return $ _anySBEEntity (pmToBs $ pm st)
 
-
 template2Cop :: Template -> FCoparser (NsName, Maybe Value)
 template2Cop t = f
     where f (_, Just (Gr g)) = sequenceD (map instr2Cop (tInstructions t)) g
           f (_, _) = throw $ OtherException "Template doesn't fit message."
           -- TODO: Are there cases that shoudn't trigger an exception?
-        
 
 instr2Cop :: Instruction -> FCoparser (NsName, Maybe Value)
 instr2Cop (Instruction f) = field2Cop f 

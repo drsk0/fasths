@@ -13,7 +13,8 @@ module Codec.Fast.Parser
 (
 Context (..),
 initEnv,
-segment'
+segment',
+template2P
 )
 where 
 
@@ -87,6 +88,7 @@ presenceMap = do
 template2P :: Template -> FParser (NsName, Maybe Value)
 template2P t = (tname2fname (tName t), ) <$> Just . Gr <$> mapM instr2P (tInstructions t)
 
+
 -- |Maps an instruction to its corresponding parser.
 instr2P :: Instruction -> FParser (NsName, Maybe Value)
 instr2P (Instruction f) = field2Parser f
@@ -111,7 +113,6 @@ field2Parser (UnicodeStrField f@(UnicodeStringField (FieldInstrContent fname _ _
 field2Parser (ByteVecField f@(ByteVectorField (FieldInstrContent fname _ _ ) _ )) = (fname, ) <$> fmap toValue <$> bytevecF2P f
 field2Parser (Seq s) = seqF2P s
 field2Parser (Grp g) = groupF2P g
-
 
 -- |Maps an integer field to its parser.
 intF2P :: (Primitive a, Num a, Ord a,  Ord (Delta a), Num (Delta a)) => IntegerField -> FParser (Maybe a)
