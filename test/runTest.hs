@@ -9,45 +9,24 @@ import Data.Int
 import Data.Word
 import qualified Data.ByteString as B
 
-instance Arbitrary B.ByteString where
-    arbitrary = fmap B.pack (listOf (arbitrary :: Gen Word8))
-    shrink = shrinkNothing
+newtype SimpleTemplate = ST Template
 
-instance Arbitrary (Delta Int32) where
-    arbitrary = fmap Di32 (arbitrary :: Gen Int32)
-    shrink (Di32 i) = map Di32 $ (shrink :: (Int32 -> [Int32])) i
+instance Arbitrary SimpleTemplate where
+    arbitrary = do
+                    n <- arbitrary
+                    ns <- arbitrary
+                    d <- arbitrary
+                    t <- arbitrary
+                    i <- arbitrary
+                    return $ ST $ Template  n ns d t [i]
 
-instance Arbitrary (Delta Int64) where
-    arbitrary = fmap Di64 (arbitrary :: Gen Int64)
-    shrink (Di64 i) = map Di64 $ (shrink :: (Int64 -> [Int64])) i
+newtype SimpleTemplateMsgPair = STMP (Template, [(NsName, Maybe Value)]) deriving Show
 
-instance Arbitrary (Delta Word32) where
-    arbitrary = fmap Dw32 (arbitrary :: Gen Int32)
-    shrink (Dw32 i) = map Dw32 $ (shrink :: (Int32 -> [Int32])) i
-
-instance Arbitrary (Delta Word64) where
-    arbitrary = fmap Dw64 (arbitrary :: Gen Int64)
-    shrink (Dw64 i) = map Dw64 $ (shrink :: (Int64 -> [Int64])) i
-
-instance Arbitrary (Delta (Int32, Int64)) where
-    arbitrary = fmap Ddec (arbitrary :: Gen (Int32, Int64))
-    shrink (Ddec (e, m)) = map Ddec $ (shrink :: (Int32, Int64) -> [(Int32, Int64)]) (e, m)
-
-instance Arbitrary (Delta B.ByteString) where
-    arbitrary = fmap Dbs (arbitrary :: Gen (Int32, B.ByteString))
-    shrink (Dbs (i, bs)) = map Dbs (zip (shrink i) (replicate (length $ shrink i) bs))
-
-instance Arbitrary Template where
-    arbitrary = undefined
-    shrink = undefined
-
-newtype TemplateMsgPair = TMP (Template, [(NsName, Maybe Value)]) deriving Show
-
-instance Arbitrary TemplateMsgPair where
+instance Arbitrary SimpleTemplateMsgPair where
     arbitrary = do 
-                    t <- arbitrary :: Gen Template
+                    (ST t) <- arbitrary
                     msgs <- listOf $ arbitraryMsgForTemplate t
-                    return $ TMP (t, msgs)
+                    return $ STMP (t, msgs)
     shrink = undefined
 
 newtype Bit7String = B7S String deriving Show
@@ -65,7 +44,6 @@ instance Arbitrary NormalizedDecimal where
                 normalize (e, m) = (e, m)
     shrink = (map ND) . (shrink :: (Int32, Int64) -> [(Int32, Int64)]) . (\(ND d) -> d)
 
-
 newtype NonOverlongString = NOS AsciiString deriving Show
 
 instance Arbitrary NonOverlongString where
@@ -77,7 +55,6 @@ instance Arbitrary NonOverlongString where
             overlong ('\0':_) = True
             overlong _ = False
     shrink = (map NOS) . (shrink :: String -> [String]) . (\(NOS s) -> s)
-
 
 arbitraryMsgForTemplate :: Template -> Gen (NsName, Maybe Value)
 arbitraryMsgForTemplate = undefined
@@ -132,4 +109,4 @@ main = do
     putStr "\n[*] Checking 'rmPreamble . addPreamble = id'\n"
     quickCheck (prop_rmPreamble_dot_addPreamble_is_ID . (\(NOS s) -> s))
     
-    {-quickCheck ((uncurry $ prop_decode_template_encode_template_is_ID) . (\(TMP p) -> p))-}
+    quickCheck ((uncurry $ prop_decode_template_encode_template_is_ID) . (\(STMP p) -> p))

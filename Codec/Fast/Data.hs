@@ -109,6 +109,7 @@ import Control.Applicative
 import Control.Monad.State
 import Control.Exception
 import Data.Typeable
+import Test.QuickCheck hiding ((.&.))
 
 -- | FAST exception.
 data FASTException = S1 String
@@ -265,6 +266,10 @@ instance Primitive Int32 where
     encodeP = _int
     encodeD  =  encodeP . (\(Di32 i) -> i)
 
+instance Arbitrary (Delta Int32) where
+    arbitrary = fmap Di32 (arbitrary :: Gen Int32)
+    shrink (Di32 i) = map Di32 $ (shrink :: (Int32 -> [Int32])) i
+
 instance Primitive Word32 where
     newtype Delta Word32 = Dw32 Int32 deriving (Num, Ord, Show, Eq)
     witnessType = TypeWitnessW32
@@ -284,6 +289,10 @@ instance Primitive Word32 where
     decodeT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     encodeP = _uint
     encodeD =  encodeP . (\(Dw32 w) -> w)
+
+instance Arbitrary (Delta Word32) where
+    arbitrary = fmap Dw32 (arbitrary :: Gen Int32)
+    shrink (Dw32 i) = map Dw32 $ (shrink :: (Int32 -> [Int32])) i
 
 instance Primitive Int64 where
     newtype Delta Int64 = Di64 Int64 deriving (Num, Ord, Show, Eq)
@@ -305,6 +314,10 @@ instance Primitive Int64 where
     encodeP = _int
     encodeD =  encodeP . (\(Di64 i) -> i)
 
+instance Arbitrary (Delta Int64) where
+    arbitrary = fmap Di64 (arbitrary :: Gen Int64)
+    shrink (Di64 i) = map Di64 $ (shrink :: (Int64 -> [Int64])) i
+
 instance Primitive Word64 where
     newtype Delta Word64 = Dw64 Int64 deriving (Num, Ord, Show, Eq)
     witnessType = TypeWitnessW64
@@ -324,6 +337,10 @@ instance Primitive Word64 where
     decodeT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     encodeP = _uint
     encodeD = encodeP . (\(Dw64 w) -> w)
+
+instance Arbitrary (Delta Word64) where
+    arbitrary = fmap Dw64 (arbitrary :: Gen Int64)
+    shrink (Dw64 i) = map Dw64 $ (shrink :: (Int64 -> [Int64])) i
 
 instance Primitive AsciiString where
     newtype Delta AsciiString = Dascii (Int32, String)
@@ -391,6 +408,10 @@ instance Primitive (Int32, Int64) where
     encodeP = encodeP `append` encodeP
     encodeD = encodeP . (\(Ddec (e, m)) -> (e, m))
 
+instance Arbitrary (Delta (Int32, Int64)) where
+    arbitrary = fmap Ddec (arbitrary :: Gen (Int32, Int64))
+    shrink (Ddec (e, m)) = map Ddec $ (shrink :: (Int32, Int64) -> [(Int32, Int64)]) (e, m)
+
 instance Primitive B.ByteString where
     newtype Delta B.ByteString = Dbs (Int32, B.ByteString) deriving (Eq, Show)
     witnessType = TypeWitnessBS
@@ -421,6 +442,14 @@ instance Primitive B.ByteString where
     encodeP = _byteVector
     encodeD = (encodeP `append` encodeP) . (\(Dbs (i, bs)) -> (i, bs)) 
 
+instance Arbitrary (Delta B.ByteString) where
+    arbitrary = fmap Dbs (arbitrary :: Gen (Int32, B.ByteString))
+    shrink (Dbs (i, bs)) = map Dbs (zip (shrink i) (replicate (length $ shrink i) bs))
+
+instance Arbitrary B.ByteString where
+    arbitrary = fmap B.pack (listOf (arbitrary :: Gen Word8))
+    shrink = shrinkNothing
+
 --
 -- The following definitions follow allmost one to one the FAST specification.
 --
@@ -433,6 +462,14 @@ data Templates = Templates {
     tsTemplates       :: [Template]
     } deriving (Show)
 
+instance Arbitrary Templates where
+    arbitrary = do
+                n <- arbitrary
+                ns <- arbitrary
+                d <- arbitrary
+                ts <- arbitrary
+                return $ Templates n ns d ts 
+
 -- |FAST template.
 data Template = Template {
     tName         :: TemplateNsName,
@@ -442,22 +479,46 @@ data Template = Template {
     tInstructions :: [Instruction]
     } deriving (Show)
 
+instance Arbitrary Template where
+    arbitrary = do
+                    n <- arbitrary
+                    ns <- arbitrary
+                    d <- arbitrary
+                    tr <- arbitrary
+                    is <- arbitrary
+                    return $ Template n ns d tr is
+
 -- |A typeRef element of a template.
 data TypeRef = TypeRef {
     trName :: NameAttr,
     trNs   :: Maybe NsAttr
     } deriving (Show)
 
+instance Arbitrary TypeRef where
+    arbitrary = do
+                    n <- arbitrary 
+                    ns <- arbitrary
+                    return $ TypeRef n ns
+
 -- |An Instruction in a template is either a field instruction or a template reference.
 data Instruction = Instruction Field
                     |TemplateReference (Maybe TemplateReferenceContent)
                     deriving (Show)
+
+instance Arbitrary Instruction where
+    arbitrary = oneof [liftM Instruction arbitrary, liftM TemplateReference arbitrary]
 
 -- |This is a helper data structure, NOT defined in the reference.
 data TemplateReferenceContent = TemplateReferenceContent {
         trcName       :: NameAttr,
         trcTemplateNs :: Maybe TemplateNsAttr
         } deriving (Show)
+
+instance Arbitrary TemplateReferenceContent where
+    arbitrary = do
+                    n <- arbitrary
+                    ns <- arbitrary
+                    return $ TemplateReferenceContent n ns
 
 tempRefCont2TempNsName :: TemplateReferenceContent -> TemplateNsName
 tempRefCont2TempNsName (TemplateReferenceContent n maybe_ns) = TemplateNsName n maybe_ns Nothing 
@@ -469,6 +530,13 @@ data FieldInstrContent = FieldInstrContent {
     ficFieldOp  :: Maybe FieldOp
     } deriving (Show)
 
+instance Arbitrary FieldInstrContent where
+    arbitrary = do
+                    n <- arbitrary
+                    p <- arbitrary
+                    op <- arbitrary
+                    return $ FieldInstrContent n p op
+
 -- |FAST field instructions.
 data Field = IntField IntegerField
            | DecField DecimalField
@@ -479,12 +547,18 @@ data Field = IntField IntegerField
            | Grp Group
 			deriving (Show)
 
+instance Arbitrary Field where
+    arbitrary = oneof [liftM IntField arbitrary, liftM DecField arbitrary, liftM AsciiStrField arbitrary, liftM UnicodeStrField arbitrary, liftM ByteVecField arbitrary, liftM Seq arbitrary, liftM Grp arbitrary]
+
 -- |Integer Fields.
 data IntegerField = Int32Field FieldInstrContent
                     |UInt32Field FieldInstrContent
                     |Int64Field FieldInstrContent
                     |UInt64Field FieldInstrContent
                     deriving (Show)
+
+instance Arbitrary IntegerField where
+    arbitrary = oneof [fmap Int32Field arbitrary, fmap UInt32Field arbitrary, fmap Int64Field arbitrary, fmap UInt64Field arbitrary]
 
 -- |Decimal Field.
 data DecimalField = DecimalField {
@@ -493,8 +567,18 @@ data DecimalField = DecimalField {
         dfiFieldOp  :: Maybe (Either FieldOp DecFieldOp)
         } deriving (Show)
 
+instance Arbitrary DecimalField where
+    arbitrary = do
+                n <- arbitrary
+                p <- arbitrary
+                op <- arbitrary
+                return $ DecimalField n p op
+
 -- |Ascii string field.
 data AsciiStringField = AsciiStringField FieldInstrContent deriving (Show)
+
+instance Arbitrary AsciiStringField where
+    arbitrary = fmap AsciiStringField arbitrary
 
 -- |Unicode string field.
 data UnicodeStringField = UnicodeStringField {
@@ -502,11 +586,23 @@ data UnicodeStringField = UnicodeStringField {
         usfLength  :: Maybe ByteVectorLength
         } deriving (Show)
 
+instance Arbitrary UnicodeStringField where
+    arbitrary = do
+                c <- arbitrary
+                l <- arbitrary
+                return $ UnicodeStringField c l
+
 -- |Bytevector field.
 data ByteVectorField = ByteVectorField {
         bvfContent :: FieldInstrContent,
         bvfLength  :: Maybe ByteVectorLength
         } deriving (Show)
+
+instance Arbitrary ByteVectorField where
+    arbitrary = do
+                c <- arbitrary
+                l <- arbitrary
+                return $ ByteVectorField c l
 
 -- |Sequence field.
 data Sequence = Sequence {
@@ -518,6 +614,16 @@ data Sequence = Sequence {
         sInstructions :: [Instruction]
         } deriving (Show)
 
+instance Arbitrary Sequence where
+    arbitrary = do
+                n <- arbitrary
+                p <- arbitrary
+                d <- arbitrary
+                tr <- arbitrary
+                l <- arbitrary
+                is <- arbitrary
+                return $ Sequence n p d tr l is
+
 -- |Group field.
 data Group = Group {
         gFName        :: NsName,
@@ -527,12 +633,24 @@ data Group = Group {
         gInstructions :: [Instruction]
         } deriving (Show)
 
+instance Arbitrary Group where
+    arbitrary = do
+                n <- arbitrary
+                p <- arbitrary
+                d <- arbitrary
+                tr <- arbitrary
+                is <- arbitrary
+                return $ Group n p d tr is
+
 -- |ByteVectorLenght is logically a uInt32, but it is not a field instruction 
 -- and it is not physically present in the stream. Obviously no field operator 
 -- is needed.
 data ByteVectorLength = ByteVectorLength {
     bvlNsName::NsName
     } deriving (Show)
+
+instance Arbitrary ByteVectorLength where
+    arbitrary = fmap ByteVectorLength arbitrary
 
 -- |SeqLength is logically a uInt32. The name maybe 'implicit' or 'explicit' 
 -- in the template.
@@ -547,9 +665,18 @@ data Length = Length {
     lFieldOp :: Maybe FieldOp
     } deriving (Show)
 
+instance Arbitrary Length where
+    arbitrary = do 
+                    l <- arbitrary
+                    op <- arbitrary
+                    return $ Length l op
+
 
 -- |Presence of a field value is either mandatory or optional.
 data PresenceAttr = Mandatory | Optional deriving (Show)
+
+instance Arbitrary PresenceAttr where
+    arbitrary = oneof [return Mandatory, return Optional ]
 
 -- |FAST field operators.
 data FieldOp = Constant InitialValueAttr
@@ -559,12 +686,21 @@ data FieldOp = Constant InitialValueAttr
              | Delta OpContext
              | Tail OpContext
 				deriving (Show)
+
+instance Arbitrary FieldOp where
+    arbitrary = oneof [fmap Constant arbitrary, fmap Default arbitrary, fmap Copy arbitrary, fmap Increment arbitrary, fmap Delta arbitrary, fmap Tail arbitrary]
  
 -- |The decimal field operator consists of two standart operators.
 data DecFieldOp = DecFieldOp {
     dfoExponent :: Maybe FieldOp,
     dfoMantissa :: Maybe FieldOp
     } deriving (Show)
+
+instance Arbitrary DecFieldOp where
+    arbitrary = do
+                    ex <- arbitrary
+                    ma <- arbitrary
+                    return $ DecFieldOp ex ma
 
 -- |Dictionary consists of a name and a list of key value pairs.
 data Dictionary = Dictionary String (M.Map DictKey DictValue)
@@ -586,9 +722,16 @@ data OpContext = OpContext {
     ocInitialValue :: Maybe InitialValueAttr
     } deriving (Show)
 
+instance Arbitrary OpContext where
+    arbitrary = do
+                    d <- arbitrary
+                    ns <- arbitrary
+                    iv <- arbitrary
+                    return $ OpContext d ns iv
+
 -- |Dictionary attribute. Three predefined dictionaries are "template", "type" 
 -- and "global".
-data DictionaryAttr = DictionaryAttr String deriving (Show)
+newtype DictionaryAttr = DictionaryAttr String deriving (Show, Arbitrary)
 
 -- |nsKey attribute.
 data NsKey = NsKey {
@@ -596,16 +739,27 @@ data NsKey = NsKey {
     nkNs  :: Maybe NsAttr
     } deriving (Eq, Ord, Show)
 
+instance Arbitrary NsKey where  
+    arbitrary = do 
+                    k <- arbitrary
+                    ns <- arbitrary
+                    return $ NsKey k ns
+
 -- |Key attribute.
 data KeyAttr = KeyAttr {
     kaToken :: Token
     } deriving (Eq, Ord, Show)
 
+instance Arbitrary KeyAttr where
+    arbitrary = fmap KeyAttr arbitrary
 -- |Initial value attribute. The value is a string of unicode characters and needs to 
 -- be converted to the type of the field in question.
 data InitialValueAttr = InitialValueAttr {
     text :: UnicodeString
     } deriving (Show)
+
+instance Arbitrary InitialValueAttr where
+    arbitrary = arbitrary
 
 -- |A full name in a template is given by a namespace URI and localname. For 
 -- application types, fields and operator keys the namespace URI is given by 
@@ -616,8 +770,22 @@ data InitialValueAttr = InitialValueAttr {
 -- |A full name for an application type, field or operator key.
 data NsName = NsName NameAttr (Maybe NsAttr) (Maybe IdAttr) deriving (Eq, Ord, Show)
 
+instance Arbitrary NsName where
+    arbitrary = do 
+                    n <- arbitrary
+                    ns <- arbitrary
+                    i <- arbitrary
+                    return $ NsName n ns i
+
 -- |A full name for a template.
 data TemplateNsName = TemplateNsName NameAttr (Maybe TemplateNsAttr) (Maybe IdAttr) deriving (Show, Eq, Ord)
+
+instance Arbitrary TemplateNsName where
+    arbitrary =  do
+                    n <- arbitrary
+                    ns <- arbitrary
+                    i <- arbitrary
+                    return $ TemplateNsName n ns i
 
 -- |Translates a TemplateNsName into a NsName. Its the same anyway.
 tname2fname :: TemplateNsName -> NsName
@@ -629,11 +797,11 @@ fname2tname (NsName n (Just (NsAttr ns)) maybe_id) = TemplateNsName n (Just (Tem
 fname2tname (NsName n Nothing maybe_id) = TemplateNsName n Nothing maybe_id
 
 -- |The very basic name related attributes.
-newtype NameAttr = NameAttr String deriving (Eq, Ord, Show)
-newtype NsAttr = NsAttr String deriving (Eq, Ord, Show)
-newtype TemplateNsAttr = TemplateNsAttr String deriving (Eq, Ord, Show)
-newtype IdAttr = IdAttr Token deriving (Eq, Ord, Show)
-newtype Token = Token String deriving (Eq, Ord, Show)
+newtype NameAttr = NameAttr String deriving (Eq, Ord, Show, Arbitrary)
+newtype NsAttr = NsAttr String deriving (Eq, Ord, Show, Arbitrary)
+newtype TemplateNsAttr = TemplateNsAttr String deriving (Eq, Ord, Show, Arbitrary)
+newtype IdAttr = IdAttr Token deriving (Eq, Ord, Show, Arbitrary)
+newtype Token = Token String deriving (Eq, Ord, Show, Arbitrary)
 
 
 -- |Get a Stopbit encoded entity.
