@@ -22,7 +22,9 @@ Token (..),
 IdAttr (..),
 Value (..),
 parseTemplateXML,
-initState
+initState,
+-- quickcheck properties.
+prop_decode_template_encode_template_is_ID
 ) 
 where
 
@@ -55,10 +57,10 @@ reset ts = put (initState ts)
 
 -- NOTE: Blocks are not supported at the time.
 
-prop_decode_template_encode_template_is_ID :: Template -> (NsName, Maybe Value) -> Bool
-prop_decode_template_encode_template_is_ID t maybe_v = A.maybeResult (A.feed (A.parse parser bs) B.empty) == Just maybe_v
-    where   parser = evalStateT (runReaderT (template2P t) initialEnv) initialState
-            bs = (B.concat . BL.toChunks . BU.toLazyByteString) (evalState (runReaderT ((template2Cop t) maybe_v) initialEnv_) initialState)
+prop_decode_template_encode_template_is_ID :: Template -> [(NsName, Maybe Value)] -> Bool
+prop_decode_template_encode_template_is_ID t msgs = A.maybeResult (A.feed (A.parse parser bs) B.empty) == Just msgs
+    where   parser = evalStateT (A.many1 (runReaderT (template2P t) initialEnv)) initialState
+            bs = B.concat $ map (\v -> (B.concat . BL.toChunks . BU.toLazyByteString) (evalState (runReaderT ((template2Cop t) v) initialEnv_) initialState)) msgs
             initialEnv = initEnv templates (const $ tName t)
             initialEnv_ = _initEnv templates (const 0)
             initialState = initState templates 
