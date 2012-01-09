@@ -58,10 +58,7 @@ reset ts = put (initState ts)
 -- NOTE: Blocks are not supported at the time.
 
 prop_decode_template_encode_template_is_ID :: Template -> [(NsName, Maybe Value)] -> Bool
-prop_decode_template_encode_template_is_ID t msgs = A.maybeResult (A.feed (A.parse parser bs) B.empty) == Just msgs
-    where   parser = evalStateT (A.many1 (runReaderT (template2P t) initialEnv)) initialState
-            bs = B.concat $ map (\v -> (B.concat . BL.toChunks . BU.toLazyByteString) (evalState (runReaderT ((template2Cop t) v) initialEnv_) initialState)) msgs
-            initialEnv = initEnv templates (const $ tName t)
-            initialEnv_ = _initEnv templates (const 0)
-            initialState = initState templates 
+prop_decode_template_encode_template_is_ID t msgs = A.maybeResult (A.feed (A.parse (A.many1 parser) bs) B.empty) == Just msgs
+    where   parser = evalStateT (message templates (const $ tName t)) (initState templates)
+            bs = B.concat $ map (B.concat . BL.toChunks . BU.toLazyByteString) (evalState (mapM (_message templates (const 0)) msgs) (initState templates))
             templates = Templates Nothing Nothing Nothing [t]
