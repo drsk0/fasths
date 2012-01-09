@@ -1,3 +1,12 @@
+-- |
+-- Module      :  Codec.Fast.Parser
+-- Copyright   :  Robin S. Krom 2011
+-- License     :  BSD3
+-- 
+-- Maintainer  :  Robin S. Krom
+-- Stability   :  experimental
+-- Portability :  unknown
+--
 {-#LANGUAGE TypeSynonymInstances, FlexibleContexts #-}
 
 module Codec.Fast.Coparser 
