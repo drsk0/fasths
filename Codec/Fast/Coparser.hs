@@ -61,15 +61,16 @@ _segment = _presenceMap
 
 _templateIdentifier :: FCoparser (NsName, Maybe Value)
 _templateIdentifier (n, v)  = 
-    let _p = field2Cop  (IntField (UInt32Field (FieldInstrContent 
-                        (NsName (NameAttr "templateId") Nothing Nothing) 
+    let tidname = NsName (NameAttr "templateId") Nothing Nothing 
+        _p = field2Cop  (IntField (UInt32Field (FieldInstrContent 
+                        tidname 
                         (Just Mandatory) 
                         (Just (Copy (OpContext (Just (DictionaryAttr "global")) (Just (NsKey(KeyAttr (Token "tid")) Nothing)) Nothing)))
                         )))
    in
    do
        env <- ask
-       tid <- _p (n, (Just . UI32 . temp2tid env . fname2tname) n)
+       tid <- _p (tidname, (Just . UI32 . temp2tid env . fname2tname) n)
        msg <- template2Cop (templates env M.! (fname2tname n)) (n, v)
        return (tid `BU.append` msg)
 
@@ -81,7 +82,7 @@ _presenceMap () = do
 template2Cop :: Template -> FCoparser (NsName, Maybe Value)
 template2Cop t = f
     where f (_, Just (Gr g)) = sequenceD (map instr2Cop (tInstructions t)) g
-          f (_, _) = throw $ OtherException "Template doesn't fit message."
+          f (fname, _) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
           -- TODO: Are there cases that shoudn't trigger an exception?
 
 instr2Cop :: Instruction -> FCoparser (NsName, Maybe Value)
@@ -115,9 +116,9 @@ intF2Cop' :: (Primitive a, Num a, Ord a, Ord (Delta a), Num (Delta a)) => FieldI
 intF2Cop' (FieldInstrContent fname Nothing maybe_op) = intF2Cop' (FieldInstrContent fname (Just Mandatory) maybe_op)
 
 -- pm: No, Nullable: No
-intF2Cop' (FieldInstrContent _ (Just Mandatory) Nothing) 
+intF2Cop' (FieldInstrContent fname (Just Mandatory) Nothing) 
     = cp where cp (Just i) = lift $ return $ encodeP i
-               cp (Nothing) = throw $ OtherException "Template doesn't fit message."
+               cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
 
 -- pm: No, Nullable: Yes
 intF2Cop' (FieldInstrContent _ (Just Optional) Nothing)
@@ -152,7 +153,7 @@ intF2Cop' (FieldInstrContent fname (Just Mandatory) (Just (Copy oc)))
                                                 h' (OpContext _ _ Nothing) = lift $ setPMap True >> updatePrevValue fname oc (Assigned (witnessType i)) >> (lift $ return $ encodeP i)
                                     Empty -> (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType i))) >> (lift $ return $ encodeP i)
 
-               cp (Nothing) = throw $ OtherException "Template doesn't fit message."
+               cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
 
 -- pm: Yes, Nullable: No
 intF2Cop' (FieldInstrContent fname (Just Mandatory) (Just (Increment oc)))
@@ -169,7 +170,7 @@ intF2Cop' (FieldInstrContent fname (Just Mandatory) (Just (Increment oc)))
                                                 h' (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType i))) >> (lift $ return $ encodeP i)
                                     Empty -> (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType i))) >> (lift $ return $ encodeP i)
 
-               cp (Nothing) = throw $ OtherException "Template doesn't fit message."
+               cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field: "  ++ show fname
 
 -- pm: -, Nullable: -
 intF2Cop' (FieldInstrContent _ (Just Mandatory) (Just (Tail _)))
@@ -180,9 +181,9 @@ intF2Cop' (FieldInstrContent _ (Just Optional) (Just (Tail _)))
     = throw $ S2 "Tail operator can not be applied on an integer type field." 
 
 -- pm: Yes, Nullable: No
-intF2Cop' (FieldInstrContent _ (Just Optional) (Just (Constant iv)))
+intF2Cop' (FieldInstrContent fname (Just Optional) (Just (Constant iv)))
     = cp where cp (Just i) | i == ivToPrimitive iv = (lift $ setPMap True) >> (lift $ return BU.empty)
-               cp (Just _) = throw $ OtherException "Template doesn't fit message."
+               cp (Just _) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
                cp (Nothing) = (lift $ setPMap False) >> (lift $ return $ BU.empty)
 
 -- pm: Yes, Nullable: Yes
@@ -253,7 +254,7 @@ intF2Cop' (FieldInstrContent fname (Just Mandatory) (Just (Delta oc)))
                                       do 
                                         b <- lift $ baseValue <$> (prevValue fname oc)
                                         (lift $ updatePrevValue fname oc (Assigned (witnessType i))) >> (lift $ return $ encodeD $ plusOne $ (delta_ i b))
-                    cp (Nothing) = throw $ OtherException "Template doesn't fit message." 
+                    cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
 
 -- pm: No, Nullable: Yes
 intF2Cop' (FieldInstrContent fname (Just Optional) (Just (Delta oc)))
@@ -275,9 +276,9 @@ decF2Cop (DecimalField fname Nothing maybe_either_op)
     = decF2Cop (DecimalField fname (Just Mandatory) maybe_either_op)
 
 -- pm: No, Nullable: No
-decF2Cop (DecimalField _ (Just Mandatory) Nothing)
+decF2Cop (DecimalField fname (Just Mandatory) Nothing)
     = cp where  cp (Just d) = lift $ return $ encodeP d
-                cp (Nothing) = throw $ OtherException "Template doesn't fit template."
+                cp (Nothing) = throw $ EncoderException $ "Template doesn't fit template, in the field: " ++ show fname
 
 -- om: No, Nullable: Yes
 decF2Cop (DecimalField _ (Just Optional) Nothing)
@@ -293,11 +294,11 @@ decF2Cop (DecimalField _ (Just Mandatory) (Just (Left (Default Nothing))))
     = throw $ S5 "No initial value given for mandatory default operator."
 
 -- pm: Yes, Nullable: No
-decF2Cop (DecimalField _ (Just Mandatory) (Just (Left (Default (Just iv)))))
+decF2Cop (DecimalField fname (Just Mandatory) (Just (Left (Default (Just iv)))))
     = cp where  cp (Just d) = if (d == ivToPrimitive iv) 
                               then (lift $ setPMap False) >> (lift $ return BU.empty)
                               else (lift $ setPMap True) >> (lift $ return $ encodeP d)
-                cp (Nothing) = throw $ OtherException "Template doesn't fit message."
+                cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
 
 -- pm: Yes, Nullable: No
 decF2Cop (DecimalField fname (Just Mandatory) (Just (Left (Copy oc)))) 
@@ -313,7 +314,7 @@ decF2Cop (DecimalField fname (Just Mandatory) (Just (Left (Copy oc))))
                                                                                 else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType d))) >> (lift $ return $ encodeP d)
                                                 h' (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType d))) >> (lift $ return $ encodeP d)
                                     Empty -> (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType d))) >> (lift $ return $ encodeP d)
-                cp (Nothing) = throw $ OtherException "Template doesn't fit message."
+                cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
 
 
 -- pm: Yes, Nullable: No
@@ -332,16 +333,16 @@ decF2Cop (DecimalField fname (Just Mandatory) (Just (Left (Delta oc))))
                                     do
                                         p <- lift $ prevValue fname oc
                                         (lift $ updatePrevValue fname oc (Assigned (witnessType d))) >> (lift $ return $ encodeD $ delta_ d (baseValue p)) 
-                cp (Nothing) = throw $ OtherException "Template doesn't fit message."
+                cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
 
 decF2Cop (DecimalField _ (Just Mandatory) (Just (Left (Tail _))))
     = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields." 
 
 -- pm: Yes, Nullable: No
-decF2Cop (DecimalField _ (Just Optional) (Just (Left (Constant iv)))) 
+decF2Cop (DecimalField fname (Just Optional) (Just (Left (Constant iv)))) 
     = cp where  cp (Just d) =   if ivToPrimitive iv == d
                                 then (lift $ setPMap True) >> (lift $ return $ BU.empty)
-                                else throw $ OtherException "Template doesn't fit message."
+                                else throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
                 cp (Nothing) = (lift $ setPMap False) >> (lift $ return $ BU.empty)
 
 -- pm: Yes, Nullable: Yes
@@ -443,9 +444,9 @@ asciiStrF2Cop :: AsciiStringField -> FCoparser (Maybe AsciiString)
 asciiStrF2Cop (AsciiStringField(FieldInstrContent fname Nothing maybe_op))
     = asciiStrF2Cop (AsciiStringField(FieldInstrContent fname (Just Mandatory) maybe_op))
 -- pm: No, Nullable: No
-asciiStrF2Cop (AsciiStringField(FieldInstrContent _ (Just Mandatory) Nothing))
+asciiStrF2Cop (AsciiStringField(FieldInstrContent fname (Just Mandatory) Nothing))
     = cp where  cp (Just s) = lift $ return $ encodeP s
-                cp (Nothing) = throw $ OtherException "Template doesn't fit message." 
+                cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
 
 -- pm: No, Nullable: Yes
 asciiStrF2Cop (AsciiStringField(FieldInstrContent _ (Just Optional) Nothing))
@@ -461,11 +462,11 @@ asciiStrF2Cop (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Defa
     = throw $ S5 "No initial value given for mandatory default operator."
 
 -- pm: Yes, Nullable: No
-asciiStrF2Cop (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Default (Just iv)))))
+asciiStrF2Cop (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Default (Just iv)))))
     = cp where  cp (Just s) = if ivToPrimitive iv == s 
                               then (lift $ setPMap False) >> (lift $ return $ BU.empty)
                               else (lift $ setPMap True) >> (lift $ return $ encodeP $ addPreamble s)
-                cp (Nothing) = throw $ OtherException "Template doesn't fit message."
+                cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
 
 -- pm: Yes, Nullable: No
 asciiStrF2Cop (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Copy oc))))
@@ -481,7 +482,7 @@ asciiStrF2Cop (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (
                                                                                 else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType s))) >> (lift $ return $ encodeP $ addPreamble s)
                                                 h' (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType s))) >> (lift $ return $ encodeP $ addPreamble s)
                                     Empty -> (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType s))) >> (lift $ return $ encodeP $ addPreamble s)
-                cp (Nothing) = throw $ OtherException "Template doesn't fit message."
+                cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
 
 -- pm: Yes, Nullable: No
 asciiStrF2Cop (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Increment _))))
@@ -498,7 +499,7 @@ asciiStrF2Cop (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (
                                 do
                                     p <- lift $ prevValue fname oc
                                     (lift $ updatePrevValue fname oc (Assigned (witnessType s))) >> (lift $ return $ encodeD $ delta_ s (baseValue p))
-                cp (Nothing) = throw $ OtherException "Template doesn't fit message."
+                cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field " ++ show fname
 
 -- pm: Yes, Nullable: No
 asciiStrF2Cop (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Tail oc))))
@@ -523,13 +524,13 @@ asciiStrF2Cop (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (
                                                                                         else (lift $ setPMap True) >> (lift $ return $ encodeT $ ftail_ s (baseValue p))
                                                         h (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ return $ encodeT $ ftail_ s (baseValue p))
                                             Empty -> (lift $ setPMap True) >> (lift $ return $ encodeT $ ftail_ s (baseValue p))
-                cp (Nothing) = throw $ OtherException "Template doesn't fit message."
+                cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
 
 -- pm: Yes, Nullable: No
-asciiStrF2Cop (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Constant iv)))) 
+asciiStrF2Cop (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Constant iv)))) 
     = cp where  cp (Just s) =   if ivToPrimitive iv == s
                                 then (lift $ setPMap True) >> (lift $ return BU.empty)
-                                else throw $ OtherException "Template doesn't fit message."
+                                else throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
                 cp (Nothing) = (lift $ setPMap False) >> (lift $ return BU.empty)
 
 -- pm: Yes, Nullable: Yes
@@ -621,26 +622,26 @@ bytevecF2Cop (ByteVectorField (FieldInstrContent fname Nothing maybe_op) len)
     = bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Mandatory) maybe_op) len)
 
 -- pm: No, Nullable: No
-bytevecF2Cop (ByteVectorField (FieldInstrContent _ (Just Mandatory) Nothing ) _ ) 
+bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Mandatory) Nothing ) _ ) 
     = cp where  cp (Just bv) = lift $ return $ encodeP bv
-                cp (Nothing) = throw $ OtherException "Template doesn't fit message."
+                cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
 
 -- pm: No, Nullable: Yes
 bytevecF2Cop (ByteVectorField (FieldInstrContent _ (Just Optional) Nothing ) _ ) 
     = cp where  cp (Just bv) = lift $ return $ encodeP bv
                 cp (Nothing) = nulL
 -- pm: No, Nullable: No
-bytevecF2Cop (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Constant iv))) _ ) 
+bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just (Constant iv))) _ ) 
     = cp where  cp (Just bv) =  if ivToPrimitive iv == bv 
                                 then lift $ return BU.empty
-                                else throw $ OtherException "Template doesn't fit message."
-                cp (Nothing) = throw $ OtherException "Template doesn't fit message."
+                                else throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
+                cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
 
 -- pm: Yes, Nullable: No
-bytevecF2Cop (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Constant iv))) _ ) 
+bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Constant iv))) _ ) 
     = cp where  cp (Just bv) =  if ivToPrimitive iv == bv
                                 then (lift $ setPMap True) >> (lift $ return BU.empty)
-                                else throw $ OtherException "Template doesn't fit message."
+                                else throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
                 cp (Nothing) = (lift $ setPMap False) >> (lift $ return BU.empty)
 
 -- pm: Yes, Nullable: No
@@ -648,11 +649,11 @@ bytevecF2Cop (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Defaul
     = throw $ S5 "No initial value given for mandatory default operator."
 
 -- pm: Yes, Nullable: No
-bytevecF2Cop (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Default (Just iv)))) _ ) 
+bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Default (Just iv)))) _ ) 
     = cp where  cp (Just bv) =  if ivToPrimitive iv == bv
                                 then (lift $ setPMap False) >> (lift $ return BU.empty)
                                 else (lift $ setPMap True) >> (lift $ return $ encodeP bv)
-                cp (Nothing) = throw $ OtherException "Template doesn't fit message."
+                cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
 
 -- pm: Yes, Nullable: Yes
 bytevecF2Cop (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Default Nothing))) _ ) 
@@ -678,7 +679,7 @@ bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Co
                                                                                 else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return $ encodeP bv)
                                                 h' (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return $ encodeP bv)
                                     Empty -> (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return $ encodeP bv)
-                cp (Nothing) = throw $ OtherException "Template doesn't fit message."
+                cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
 -- pm: Yes, Nullable: Yes
 bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Copy oc))) _ ) 
     = cp where  cp (Just bv) = do
@@ -719,7 +720,7 @@ bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(De
                                 do
                                     p <- lift $ prevValue fname oc
                                     lift $ return $ encodeD $ delta_ bv (baseValue p)
-                cp (Nothing) = throw $ OtherException "Template doesn't fit message."
+                cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
 
 -- pm: No, Nullable: Yes
 bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Delta oc))) _ ) 
@@ -758,7 +759,7 @@ bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Ta
                                                                                         else (lift $ setPMap True) >> (lift $ return $ encodeT $ ftail_ bv (baseValue p))
                                                         h (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ return $ encodeT $ ftail_ bv (baseValue p))
                                             Empty -> (lift $ setPMap True) >> (lift $ return $ encodeT $ ftail_ bv (baseValue p))
-                cp (Nothing) = throw $ OtherException "Template doesn't fit message."
+                cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
 
 -- pm: Yes, Nullable: Yes
 bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Tail oc))) _) 
@@ -818,7 +819,7 @@ seqF2Cop (Sequence fname maybe_presence _ _ maybe_length instrs)
                                             bu2 <- segs'
                                             lift $ return $ (bu1 `BU.append` bu2)
 
-               cp (Just _) = throw $ OtherException "Template doesn't fit message."
+               cp (Just _) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
                -- we need this since we don't have a 'fromValue' function for sequences.
                cp (Nothing) =   lengthb where   lengthb = h maybe_presence maybe_length
                                                 fname' = uniqueFName fname "l" 
@@ -830,7 +831,7 @@ groupF2Cop :: Group -> FCoparser (Maybe Value)
 groupF2Cop (Group fname Nothing maybe_dict maybe_typeref instrs)
     = groupF2Cop (Group fname (Just Mandatory) maybe_dict maybe_typeref instrs)
 
-groupF2Cop (Group _ (Just Mandatory) _ _ instrs) 
+groupF2Cop (Group fname (Just Mandatory) _ _ instrs) 
     = cp where  cp  (Just (Gr xs)) = do
                                         env <- ask
                                         if any (needsPm (templates env)) instrs 
@@ -839,10 +840,10 @@ groupF2Cop (Group _ (Just Mandatory) _ _ instrs)
                                                 b2 <- _segment ()
                                                 lift $ return (b2 `BU.append` b1)
                                         else (sequenceD (map instr2Cop instrs)) xs
-                cp (Just _) = throw $ OtherException "Template doesn't fit message."
-                cp (Nothing) = throw $ OtherException "Template doesn't fit message."
+                cp (Just _) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
+                cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
 
-groupF2Cop (Group _ (Just Optional) _ _ instrs) 
+groupF2Cop (Group fname (Just Optional) _ _ instrs) 
     = cp where  cp  (Just (Gr xs)) = (lift $ setPMap True) >> (do
                                                                 env <- ask
                                                                 if any (needsPm (templates env)) instrs 
@@ -851,7 +852,7 @@ groupF2Cop (Group _ (Just Optional) _ _ instrs)
                                                                         b2 <- _segment ()
                                                                         lift $ return (b2 `BU.append` b1)
                                                                 else (sequenceD (map instr2Cop instrs)) xs)
-                cp (Just _) = throw $ OtherException "Template doesn't fit message."
+                cp (Just _) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
                 cp (Nothing) = (lift $ setPMap False) >> (lift $ return $ BU.empty)
 
 nulL :: FBuilder 

@@ -138,6 +138,7 @@ data FASTException = S1 String
                    | R7 String
                    | R8 String
                    | R9 String
+                   | EncoderException String
                    | OtherException String
                    deriving (Show, Typeable)
 
@@ -1062,7 +1063,7 @@ sublistsOfLength _ [] = []
 sublistsOfLength n xs = take n xs : sublistsOfLength n (drop n xs)
 
 assertNameIs :: NsName -> (NsName, a) -> a
-assertNameIs n1 (n2, x) = if n1 == n2 then x else throw $ OtherException "Template doesn't fit message."
+assertNameIs n1 (n2, x) = if n1 == n2 then x else throw $ OtherException $ "Template doesn't fit message, in the field: " ++ show n1
 
 
 -- |Creates a list of dictionaries depending on the fields of a template.
