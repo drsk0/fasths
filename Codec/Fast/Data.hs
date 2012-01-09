@@ -506,7 +506,9 @@ data Instruction = Instruction Field
                     deriving (Show)
 
 instance Arbitrary Instruction where
-    arbitrary = oneof [liftM Instruction arbitrary, liftM TemplateReference arbitrary]
+    arbitrary = liftM Instruction arbitrary
+    {-arbitrary = oneof [liftM Instruction arbitrary, liftM TemplateReference arbitrary]-}
+    -- TemplateReferences are really hard to test.
 
 -- |This is a helper data structure, NOT defined in the reference.
 data TemplateReferenceContent = TemplateReferenceContent {
@@ -621,7 +623,7 @@ instance Arbitrary Sequence where
                 d <- arbitrary
                 tr <- arbitrary
                 l <- arbitrary
-                is <- arbitrary
+                is <- listOf arbitrary
                 return $ Sequence n p d tr l is
 
 -- |Group field.
@@ -639,7 +641,7 @@ instance Arbitrary Group where
                 p <- arbitrary
                 d <- arbitrary
                 tr <- arbitrary
-                is <- arbitrary
+                is <- listOf arbitrary
                 return $ Group n p d tr is
 
 -- |ByteVectorLenght is logically a uInt32, but it is not a field instruction 

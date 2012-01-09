@@ -1,12 +1,15 @@
-{-#Language FlexibleInstances, TypeSynonymInstances #-} 
+{-# LANGUAGE FlexibleContexts, TupleSections, TypeFamilies #-}
 
 import Test.QuickCheck
 import Codec.Fast.Data
 import Codec.Fast
 import Data.ByteString.Char8 (unpack, pack) 
+import Data.ByteString.UTF8 (toString)
 import Data.Bits
 import Data.Int
 import Data.Word
+import Control.Applicative 
+import Control.Exception
 import qualified Data.ByteString as B
 
 newtype SimpleTemplate = ST Template
@@ -27,7 +30,6 @@ instance Arbitrary SimpleTemplateMsgPair where
                     (ST t) <- arbitrary
                     msgs <- listOf $ arbitraryMsgForTemplate t
                     return $ STMP (t, msgs)
-    shrink = undefined
 
 newtype Bit7String = B7S String deriving Show
 
@@ -57,7 +59,119 @@ instance Arbitrary NonOverlongString where
     shrink = (map NOS) . (shrink :: String -> [String]) . (\(NOS s) -> s)
 
 arbitraryMsgForTemplate :: Template -> Gen (NsName, Maybe Value)
-arbitraryMsgForTemplate = undefined
+arbitraryMsgForTemplate t = do 
+                                vs <- sequence $ map arbitraryValueForInstruction (tInstructions t)
+                                return (tname2fname $ tName t, Just $ Gr vs)
+
+arbitraryValueForInstruction :: Instruction -> Gen (NsName, Maybe Value)
+arbitraryValueForInstruction (Instruction f) = arbitraryValueForField f
+arbitraryValueForInstruction (TemplateReference _) = error "Can't handle template references."
+
+arbitraryValueForField :: Field -> Gen (NsName, Maybe Value)
+arbitraryValueForField (IntField f@(Int32Field (FieldInstrContent fname _ _))) = (fname,) <$> fmap toValue <$> ((arbitraryValueForIntField f) :: Gen (Maybe Int32))
+arbitraryValueForField (IntField f@(Int64Field (FieldInstrContent fname _ _))) = (fname,) <$> fmap toValue <$> ((arbitraryValueForIntField f) :: Gen (Maybe Int64))
+arbitraryValueForField (IntField f@(UInt32Field (FieldInstrContent fname _ _))) = (fname,) <$> fmap toValue <$> ((arbitraryValueForIntField f) :: Gen (Maybe Word32))
+arbitraryValueForField (IntField f@(UInt64Field (FieldInstrContent fname _ _))) = (fname,) <$> fmap toValue <$> ((arbitraryValueForIntField f) :: Gen (Maybe Word32))
+arbitraryValueForField (DecField f@(DecimalField fname _ _ )) = (fname, ) <$> fmap toValue <$> arbitraryValueForDecField f
+arbitraryValueForField (AsciiStrField f@(AsciiStringField(FieldInstrContent fname _ _ ))) = (fname, ) <$> fmap toValue <$> arbitraryValueForAsciiField f
+arbitraryValueForField (UnicodeStrField f@(UnicodeStringField (FieldInstrContent fname _ _ ) _ )) = (fname, ) <$> fmap U <$> arbitraryValueForUnicodeField f
+arbitraryValueForField (ByteVecField f@(ByteVectorField (FieldInstrContent fname _ _ ) _ )) = (fname, ) <$> fmap toValue <$> arbitraryValueForByteVectorField f
+arbitraryValueForField (Seq s) = arbitraryValueForSequence s
+arbitraryValueForField (Grp g) = arbitraryValueForGroup g
+
+arbitraryValueForIntField :: (Primitive a, Arbitrary a) => IntegerField -> Gen (Maybe a)
+arbitraryValueForIntField (Int32Field fic) = arbitraryValueForIntField' fic 
+arbitraryValueForIntField (UInt32Field fic) = arbitraryValueForIntField' fic 
+arbitraryValueForIntField (Int64Field fic) = arbitraryValueForIntField' fic 
+arbitraryValueForIntField (UInt64Field fic) = arbitraryValueForIntField' fic 
+
+arbitraryValueForIntField' :: (Primitive a, Arbitrary a) => FieldInstrContent -> Gen (Maybe a)
+arbitraryValueForIntField' (FieldInstrContent fname Nothing maybe_op) = arbitraryValueForIntField' (FieldInstrContent fname (Just Mandatory) maybe_op)
+arbitraryValueForIntField' (FieldInstrContent _ (Just Mandatory) Nothing) = fmap Just arbitrary
+arbitraryValueForIntField' (FieldInstrContent _ (Just Mandatory) (Just (Constant iv))) = return $ Just $ ivToPrimitive iv
+arbitraryValueForIntField' (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing)))
+    = throw $ S5 "No initial value given for mandatory default operator."
+arbitraryValueForIntField' (FieldInstrContent _ (Just Mandatory) (Just (Copy _))) = fmap Just arbitrary
+arbitraryValueForIntField' (FieldInstrContent _ (Just Mandatory) (Just (Increment _))) = fmap Just arbitrary
+arbitraryValueForIntField' (FieldInstrContent _ (Just Mandatory) (Just (Tail _)))
+    = throw $ S2 "Tail operator can not be applied on an integer type field." 
+arbitraryValueForIntField' (FieldInstrContent _ (Just Optional) (Just (Tail _)))
+    = throw $ S2 "Tail operator can not be applied on an integer type field." 
+arbitraryValueForIntField' (FieldInstrContent _ (Just Optional) (Just (Constant iv))) = oneof [return $ Just (ivToPrimitive iv), return Nothing]
+arbitraryValueForIntField' (FieldInstrContent _ (Just Mandatory) (Just (Delta _))) = fmap Just arbitrary
+arbitraryValueForIntField' _ = arbitrary
+
+
+arbitraryValueForDecField :: DecimalField -> Gen (Maybe (Int32, Int64))
+arbitraryValueForDecField (DecimalField fname Nothing maybe_either_op) 
+    = arbitraryValueForDecField (DecimalField fname (Just Mandatory) maybe_either_op)
+arbitraryValueForDecField (DecimalField _ (Just Mandatory) Nothing) = fmap Just arbitrary
+arbitraryValueForDecField (DecimalField _ (Just Mandatory) (Just (Left (Constant iv)))) = return $ Just $ ivToPrimitive iv
+arbitraryValueForDecField (DecimalField _ (Just Mandatory) (Just (Left (Default Nothing))))
+    = throw $ S5 "No initial value given for mandatory default operator."
+arbitraryValueForDecField (DecimalField _ (Just Mandatory) (Just (Left (Default (Just _))))) = fmap Just arbitrary
+arbitraryValueForDecField (DecimalField _ (Just Mandatory) (Just (Left (Copy _)))) = fmap Just arbitrary
+arbitraryValueForDecField (DecimalField _ (Just Mandatory) (Just (Left (Increment _)))) 
+    = throw $ S2 "Increment operator is only applicable to integer fields." 
+arbitraryValueForDecField (DecimalField _ (Just Mandatory) (Just (Left (Delta _)))) = fmap Just arbitrary
+arbitraryValueForDecField (DecimalField _ (Just Mandatory) (Just (Left (Tail _))))
+    = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields." 
+arbitraryValueForDecField (DecimalField _ (Just Optional) (Just (Left (Constant iv)))) = oneof [return $ Just $ ivToPrimitive iv, return Nothing]
+arbitraryValueForDecField (DecimalField _ (Just Optional) (Just (Left (Increment _)))) 
+    = throw $ S2 "Increment operator is applicable only to integer fields."
+arbitraryValueForDecField (DecimalField _ (Just Optional) (Just (Left (Tail _)))) 
+    = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields." 
+arbitraryValueForDecField _ = arbitrary
+
+arbitraryValueForAsciiField :: AsciiStringField -> Gen (Maybe AsciiString)
+arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent fname Nothing maybe_op))
+    = arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent fname (Just Mandatory) maybe_op))
+arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) Nothing)) = fmap Just arbitrary
+arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Constant iv)))) = return $ Just $ ivToPrimitive iv
+arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))))
+    = throw $ S5 "No initial value given for mandatory default operator."
+arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Default (Just _))))) = fmap Just arbitrary
+arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Copy _)))) = fmap Just arbitrary
+arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Increment _))))
+    = throw $ S2 "Increment operator is only applicable to integer fields." 
+arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Delta _)))) = fmap Just arbitrary
+arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Tail _)))) = fmap Just arbitrary
+arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Constant iv))))  = oneof [return $ Just $ ivToPrimitive iv, return Nothing]
+arbitraryValueForAsciiField _ = arbitrary
+
+arbitraryValueForUnicodeField :: UnicodeStringField -> Gen (Maybe UnicodeString)
+arbitraryValueForUnicodeField (UnicodeStringField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)
+    = fmap (fmap toString) (arbitraryValueForByteVectorField (ByteVectorField (FieldInstrContent fname maybe_presence maybe_op) maybe_length))
+
+arbitraryValueForByteVectorField :: ByteVectorField -> Gen (Maybe B.ByteString)
+arbitraryValueForByteVectorField (ByteVectorField (FieldInstrContent fname Nothing maybe_op) len) 
+    = arbitraryValueForByteVectorField (ByteVectorField (FieldInstrContent fname (Just Mandatory) maybe_op) len)
+arbitraryValueForByteVectorField (ByteVectorField (FieldInstrContent _ (Just Mandatory) Nothing ) _ ) = fmap Just arbitrary
+arbitraryValueForByteVectorField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Constant iv))) _ ) = return $ Just $ ivToPrimitive iv
+arbitraryValueForByteVectorField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Constant iv))) _ ) = oneof [return $ Just $ ivToPrimitive iv, return Nothing]
+arbitraryValueForByteVectorField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Default Nothing))) _ ) 
+    = throw $ S5 "No initial value given for mandatory default operator."
+arbitraryValueForByteVectorField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Default (Just _)))) _ ) = fmap Just arbitrary
+arbitraryValueForByteVectorField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Copy _ ))) _ ) = fmap Just arbitrary
+arbitraryValueForByteVectorField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Increment _ ))) _ ) 
+    = throw $ S2 "Increment operator is only applicable to integer fields." 
+arbitraryValueForByteVectorField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Increment _ ))) _ ) 
+    = throw $ S2 "Increment operator is only applicable to integer fields." 
+arbitraryValueForByteVectorField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Delta _ ))) _ ) = fmap Just arbitrary
+arbitraryValueForByteVectorField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Tail _ ))) _ ) = fmap Just arbitrary
+arbitraryValueForByteVectorField _ = arbitrary
+
+arbitraryValueForSequence :: Sequence -> Gen (NsName, Maybe Value)
+arbitraryValueForSequence (Sequence fname _ _ _ _ instrs) = do
+    l <- arbitrary :: Gen Word32
+    sq <- vectorOf (fromIntegral l) (mapM arbitraryValueForInstruction instrs)
+    oneof [return (fname, Just $ Sq l sq), return (fname, Nothing)]
+
+arbitraryValueForGroup :: Group -> Gen (NsName, Maybe Value)
+arbitraryValueForGroup (Group fname Nothing maybe_dict maybe_typeref instrs)
+    = arbitraryValueForGroup (Group fname (Just Mandatory) maybe_dict maybe_typeref instrs)
+arbitraryValueForGroup (Group fname (Just Mandatory) _ _ instrs) = (fname,) <$> Just . Gr <$> (mapM arbitraryValueForInstruction instrs)
+arbitraryValueForGroup (Group fname (Just Optional) _ _ instrs) = (fname,) <$> oneof [Just . Gr <$> (mapM arbitraryValueForInstruction instrs), return Nothing]
 
 main :: IO ()
 main = do
