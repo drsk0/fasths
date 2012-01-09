@@ -551,7 +551,45 @@ data Field = IntField IntegerField
 			deriving (Show)
 
 instance Arbitrary Field where
-    arbitrary = oneof [liftM IntField arbitrary, liftM DecField arbitrary, liftM AsciiStrField arbitrary, liftM UnicodeStrField arbitrary, liftM ByteVecField arbitrary, liftM Seq arbitrary, liftM Grp arbitrary]
+    arbitrary = oneof [liftM IntField arbitrary, liftM DecField arbitrary, liftM AsciiStrField arbitrary, liftM UnicodeStrField arbitrary, liftM ByteVecField arbitrary, liftM Seq arbitrary, liftM Grp arbitrary] `suchThat` wellFormed
+
+wellFormed :: Field -> Bool
+wellFormed (IntField (Int32Field (FieldInstrContent fname maybePr maybeOp))) = wellFormedIntField $ FieldInstrContent fname maybePr maybeOp
+wellFormed (IntField (Int64Field (FieldInstrContent fname maybePr maybeOp))) = wellFormedIntField $ FieldInstrContent fname maybePr maybeOp
+wellFormed (IntField (UInt32Field (FieldInstrContent fname maybePr maybeOp))) = wellFormedIntField $ FieldInstrContent fname maybePr maybeOp
+wellFormed (IntField (UInt64Field (FieldInstrContent fname maybePr maybeOp))) = wellFormedIntField $ FieldInstrContent fname maybePr maybeOp
+wellFormed (DecField (DecimalField fname Nothing eitherOp)) = wellFormed $ DecField $ DecimalField fname (Just Mandatory) eitherOp
+wellFormed (DecField (DecimalField _ (Just Mandatory) (Just (Left (Default Nothing))))) = False
+wellFormed (DecField (DecimalField _ (Just Mandatory) (Just (Left (Increment _))))) =  False
+wellFormed (DecField (DecimalField _ (Just Mandatory) (Just (Left (Tail _))))) = False
+wellFormed (DecField (DecimalField _ (Just Optional) (Just (Left (Increment _))))) = False
+wellFormed (DecField (DecimalField _ (Just Optional) (Just (Left (Tail _))))) = False  
+wellFormed (DecField (DecimalField fname (Just Optional) (Just (Right (DecFieldOp maybe_opE maybe_opM))))) = wellFormed (IntField (Int32Field (FieldInstrContent (uniqueFName fname "e") (Just Optional) maybe_opE))) 
+    && wellFormed (IntField (Int64Field (FieldInstrContent (uniqueFName fname "m") (Just Mandatory) maybe_opM)))
+wellFormed (DecField (DecimalField fname (Just Mandatory) (Just (Right (DecFieldOp maybe_opE maybe_opM))))) = wellFormed (IntField (Int32Field (FieldInstrContent (uniqueFName fname "e") (Just Mandatory) maybe_opE)))
+    && wellFormed (IntField (Int64Field (FieldInstrContent (uniqueFName fname "m") (Just Mandatory) maybe_opM)))
+wellFormed (AsciiStrField (AsciiStringField (FieldInstrContent fname Nothing maybeOp))) = wellFormed (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Mandatory) maybeOp)))
+wellFormed (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))))) = False
+wellFormed (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Increment _))))) = False
+wellFormed (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Increment _))))) = False
+wellFormed (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))) _)) = False
+wellFormed (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Increment _))) _)) = False
+wellFormed (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Increment _))) _)) = False
+wellFormed (UnicodeStrField (UnicodeStringField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)) = wellFormed (ByteVecField (ByteVectorField (FieldInstrContent fname maybe_presence maybe_op) maybe_length))
+wellFormed (Seq s) = and $ map h (sInstructions s)
+    where   h (TemplateReference _) = True
+            h (Instruction f) = wellFormed f
+wellFormed (Grp g) = and $ map h (gInstructions g)
+    where   h (TemplateReference _) = True
+            h (Instruction f) = wellFormed f
+wellFormed _ = True
+
+wellFormedIntField::FieldInstrContent -> Bool
+wellFormedIntField (FieldInstrContent fname Nothing maybeOp) = wellFormedIntField $ FieldInstrContent fname (Just Mandatory) maybeOp
+wellFormedIntField (FieldInstrContent _ (Just Mandatory) (Just (Tail _))) = False
+wellFormedIntField (FieldInstrContent _ (Just Optional) (Just (Tail _))) = False
+wellFormedIntField (FieldInstrContent _ (Just Mandatory)(Just (Default Nothing))) = False
+wellFormedIntField _ = True
 
 -- |Integer Fields.
 data IntegerField = Int32Field FieldInstrContent
