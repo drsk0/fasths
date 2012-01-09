@@ -99,7 +99,8 @@ field2Cop (IntField f@(UInt32Field (FieldInstrContent fname _ _))) = contramap (
 field2Cop (IntField f@(UInt64Field (FieldInstrContent fname _ _))) = contramap (fmap fromValue . assertNameIs fname) (intF2Cop f :: FCoparser (Maybe Word64))
 field2Cop (DecField f@(DecimalField fname _ _ )) = contramap (fmap fromValue . assertNameIs fname) (decF2Cop f)
 field2Cop (AsciiStrField f@(AsciiStringField(FieldInstrContent fname _ _ ))) = contramap (fmap fromValue . assertNameIs fname) (asciiStrF2Cop f)
-field2Cop (UnicodeStrField f@(UnicodeStringField (FieldInstrContent fname _ _ ) _ )) = contramap (fmap fromValue . assertNameIs fname) (unicodeF2Cop f)
+field2Cop (UnicodeStrField f@(UnicodeStringField (FieldInstrContent fname _ _ ) _ )) = contramap (fmap h . assertNameIs fname) (unicodeF2Cop f) where   h (U s) = s
+                                                                                                                                                        h _ = throw $ OtherException "Type mismatch."
 field2Cop (ByteVecField f@(ByteVectorField (FieldInstrContent fname _ _ ) _ )) = contramap (fmap fromValue . assertNameIs fname) (bytevecF2Cop f)
 field2Cop (Seq s) = contramap (assertNameIs (sFName s)) (seqF2Cop s)
 field2Cop (Grp g) = contramap (assertNameIs (gFName g)) (groupF2Cop g)
