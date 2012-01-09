@@ -1067,8 +1067,9 @@ assertNameIs n1 (n2, x) = if n1 == n2 then x else throw $ OtherException $ "Temp
 
 
 -- |Creates a list of dictionaries depending on the fields of a template.
+-- TODO: is there a reserved name for the tid field?
 initDicts::Template -> [Dictionary]
-initDicts t = createDicts $ catMaybes $ concatMap h (tInstructions t)
+initDicts t = createDicts $ catMaybes $ ((Just ("global", K (NsKey(KeyAttr (Token "tid")) Nothing), Undefined)) : (concatMap h (tInstructions t)))
     where   h (TemplateReference _) = []
             h (Instruction f) = dictOfField f
 
