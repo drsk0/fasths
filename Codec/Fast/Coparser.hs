@@ -77,6 +77,7 @@ _templateIdentifier (n, v)  =
 _presenceMap :: FCoparser ()
 _presenceMap () = do
     st <- get
+    put $ Context [] (dict st)
     return $ _anySBEEntity (pmToBs $ pm st)
 
 template2Cop :: Template -> FCoparser (NsName, Maybe Value)
