@@ -656,14 +656,17 @@ data Sequence = Sequence {
         } deriving (Show)
 
 instance Arbitrary Sequence where
-    arbitrary = do
-                n <- arbitrary
-                p <- arbitrary
-                d <- arbitrary
-                tr <- arbitrary
-                l <- arbitrary
-                is <- listOf arbitrary
-                return $ Sequence n p d tr l is
+    arbitrary = let 
+                    wellFormedLength n p (Just l) =  wellFormedIntField $ FieldInstrContent (uniqueFName n "l") p (lFieldOp l)
+                    wellFormedLength _ _ Nothing = True 
+                in do
+                    n <- arbitrary
+                    p <- arbitrary
+                    d <- arbitrary
+                    tr <- arbitrary
+                    l <- arbitrary `suchThat` (wellFormedLength n p)
+                    is <- listOf arbitrary
+                    return $ Sequence n p d tr l is
 
 -- |Group field.
 data Group = Group {
