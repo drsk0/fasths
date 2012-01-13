@@ -85,6 +85,7 @@ prop_fromValue_dot_toValue_is_ID,
 prop_delta_dot_delta__is_ID,
 prop_ftail_dot_ftail__is_ID,
 prop_rmPreamble_dot_addPreamble_is_ID,
+prop_bsToPm_dot_pmToBs_is_ID
 )
 
 where
@@ -464,12 +465,7 @@ data Templates = Templates {
     } deriving (Show)
 
 instance Arbitrary Templates where
-    arbitrary = do
-                n <- arbitrary
-                ns <- arbitrary
-                d <- arbitrary
-                ts <- arbitrary
-                return $ Templates n ns d ts 
+    arbitrary = Templates <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
 
 -- |FAST template.
 data Template = Template {
@@ -481,13 +477,7 @@ data Template = Template {
     } deriving (Show)
 
 instance Arbitrary Template where
-    arbitrary = do
-                    n <- arbitrary
-                    ns <- arbitrary
-                    d <- arbitrary
-                    tr <- arbitrary
-                    is <- arbitrary
-                    return $ Template n ns d tr is
+    arbitrary = Template <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary 
 
 -- |A typeRef element of a template.
 data TypeRef = TypeRef {
@@ -496,10 +486,7 @@ data TypeRef = TypeRef {
     } deriving (Show)
 
 instance Arbitrary TypeRef where
-    arbitrary = do
-                    n <- arbitrary 
-                    ns <- arbitrary
-                    return $ TypeRef n ns
+    arbitrary = TypeRef <$> arbitrary <*> arbitrary 
 
 -- |An Instruction in a template is either a field instruction or a template reference.
 data Instruction = Instruction Field
@@ -518,10 +505,7 @@ data TemplateReferenceContent = TemplateReferenceContent {
         } deriving (Show)
 
 instance Arbitrary TemplateReferenceContent where
-    arbitrary = do
-                    n <- arbitrary
-                    ns <- arbitrary
-                    return $ TemplateReferenceContent n ns
+    arbitrary = TemplateReferenceContent <$> arbitrary <*> arbitrary 
 
 tempRefCont2TempNsName :: TemplateReferenceContent -> TemplateNsName
 tempRefCont2TempNsName (TemplateReferenceContent n maybe_ns) = TemplateNsName n maybe_ns Nothing 
@@ -534,11 +518,7 @@ data FieldInstrContent = FieldInstrContent {
     } deriving (Show)
 
 instance Arbitrary FieldInstrContent where
-    arbitrary = do
-                    n <- arbitrary
-                    p <- arbitrary
-                    op <- arbitrary
-                    return $ FieldInstrContent n p op
+    arbitrary = FieldInstrContent <$> arbitrary <*> arbitrary <*> arbitrary 
 
 -- |FAST field instructions.
 data Field = IntField IntegerField
@@ -609,11 +589,7 @@ data DecimalField = DecimalField {
         } deriving (Show)
 
 instance Arbitrary DecimalField where
-    arbitrary = do
-                n <- arbitrary
-                p <- arbitrary
-                op <- arbitrary
-                return $ DecimalField n p op
+    arbitrary = DecimalField <$> arbitrary <*> arbitrary <*> arbitrary
 
 -- |Ascii string field.
 data AsciiStringField = AsciiStringField FieldInstrContent deriving (Show)
@@ -628,10 +604,7 @@ data UnicodeStringField = UnicodeStringField {
         } deriving (Show)
 
 instance Arbitrary UnicodeStringField where
-    arbitrary = do
-                c <- arbitrary
-                l <- arbitrary
-                return $ UnicodeStringField c l
+    arbitrary = UnicodeStringField <$> arbitrary <*> arbitrary
 
 -- |Bytevector field.
 data ByteVectorField = ByteVectorField {
@@ -640,10 +613,7 @@ data ByteVectorField = ByteVectorField {
         } deriving (Show)
 
 instance Arbitrary ByteVectorField where
-    arbitrary = do
-                c <- arbitrary
-                l <- arbitrary
-                return $ ByteVectorField c l
+    arbitrary = ByteVectorField <$> arbitrary <*> arbitrary 
 
 -- |Sequence field.
 data Sequence = Sequence {
@@ -678,13 +648,7 @@ data Group = Group {
         } deriving (Show)
 
 instance Arbitrary Group where
-    arbitrary = do
-                n <- arbitrary
-                p <- arbitrary
-                d <- arbitrary
-                tr <- arbitrary
-                is <- listOf arbitrary
-                return $ Group n p d tr is
+    arbitrary = Group <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
 
 -- |ByteVectorLenght is logically a uInt32, but it is not a field instruction 
 -- and it is not physically present in the stream. Obviously no field operator 
@@ -710,10 +674,7 @@ data Length = Length {
     } deriving (Show)
 
 instance Arbitrary Length where
-    arbitrary = do 
-                    l <- arbitrary
-                    op <- arbitrary
-                    return $ Length l op
+    arbitrary = Length <$> arbitrary <*> arbitrary
 
 
 -- |Presence of a field value is either mandatory or optional.
@@ -741,10 +702,7 @@ data DecFieldOp = DecFieldOp {
     } deriving (Show)
 
 instance Arbitrary DecFieldOp where
-    arbitrary = do
-                    ex <- arbitrary
-                    ma <- arbitrary
-                    return $ DecFieldOp ex ma
+    arbitrary = DecFieldOp <$> arbitrary <*> arbitrary 
 
 -- |Dictionary consists of a name and a list of key value pairs.
 data Dictionary = Dictionary String (M.Map DictKey DictValue)
@@ -767,11 +725,7 @@ data OpContext = OpContext {
     } deriving (Show)
 
 instance Arbitrary OpContext where
-    arbitrary = do
-                    d <- arbitrary
-                    ns <- arbitrary
-                    iv <- arbitrary
-                    return $ OpContext d ns iv
+    arbitrary = OpContext <$> arbitrary <*> arbitrary <*> arbitrary
 
 -- |Dictionary attribute. Three predefined dictionaries are "template", "type" 
 -- and "global".
@@ -784,10 +738,7 @@ data NsKey = NsKey {
     } deriving (Eq, Ord, Show)
 
 instance Arbitrary NsKey where  
-    arbitrary = do 
-                    k <- arbitrary
-                    ns <- arbitrary
-                    return $ NsKey k ns
+    arbitrary = NsKey <$> arbitrary <*> arbitrary
 
 -- |Key attribute.
 data KeyAttr = KeyAttr {
@@ -815,21 +766,13 @@ instance Arbitrary InitialValueAttr where
 data NsName = NsName NameAttr (Maybe NsAttr) (Maybe IdAttr) deriving (Eq, Ord, Show)
 
 instance Arbitrary NsName where
-    arbitrary = do 
-                    n <- arbitrary
-                    ns <- arbitrary
-                    i <- arbitrary
-                    return $ NsName n ns i
+    arbitrary = NsName <$> arbitrary <*> arbitrary <*> arbitrary
 
 -- |A full name for a template.
 data TemplateNsName = TemplateNsName NameAttr (Maybe TemplateNsAttr) (Maybe IdAttr) deriving (Show, Eq, Ord)
 
 instance Arbitrary TemplateNsName where
-    arbitrary =  do
-                    n <- arbitrary
-                    ns <- arbitrary
-                    i <- arbitrary
-                    return $ TemplateNsName n ns i
+    arbitrary =  TemplateNsName <$> arbitrary <*> arbitrary <*> arbitrary
 
 -- |Translates a TemplateNsName into a NsName. Its the same anyway.
 tname2fname :: TemplateNsName -> NsName
@@ -1098,6 +1041,9 @@ pmToBs :: [Bool] -> B.ByteString
 pmToBs xs = B.pack (map h (sublistsOfLength 7 xs))
     where   h :: [Bool] -> Word8
             h = fst . foldl (\(r,n) y -> if y then (setBit r n, n-1) else (r, n-1)) (0, 6)
+
+prop_bsToPm_dot_pmToBs_is_ID :: [Bool] -> Bool
+prop_bsToPm_dot_pmToBs_is_ID pmap = take (length pmap) ((bsToPm . pmToBs) pmap) == pmap
 
 sublistsOfLength :: Int -> [a] -> [[a]]
 sublistsOfLength _ [] = []

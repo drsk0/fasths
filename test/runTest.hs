@@ -71,7 +71,7 @@ arbitraryValueForField :: Field -> Gen (NsName, Maybe Value)
 arbitraryValueForField (IntField f@(Int32Field (FieldInstrContent fname _ _))) = (fname,) <$> fmap toValue <$> ((arbitraryValueForIntField f) :: Gen (Maybe Int32))
 arbitraryValueForField (IntField f@(Int64Field (FieldInstrContent fname _ _))) = (fname,) <$> fmap toValue <$> ((arbitraryValueForIntField f) :: Gen (Maybe Int64))
 arbitraryValueForField (IntField f@(UInt32Field (FieldInstrContent fname _ _))) = (fname,) <$> fmap toValue <$> ((arbitraryValueForIntField f) :: Gen (Maybe Word32))
-arbitraryValueForField (IntField f@(UInt64Field (FieldInstrContent fname _ _))) = (fname,) <$> fmap toValue <$> ((arbitraryValueForIntField f) :: Gen (Maybe Word32))
+arbitraryValueForField (IntField f@(UInt64Field (FieldInstrContent fname _ _))) = (fname,) <$> fmap toValue <$> ((arbitraryValueForIntField f) :: Gen (Maybe Word64))
 arbitraryValueForField (DecField f@(DecimalField fname _ _ )) = (fname, ) <$> fmap toValue <$> arbitraryValueForDecField f
 arbitraryValueForField (AsciiStrField f@(AsciiStringField(FieldInstrContent fname _ _ ))) = (fname, ) <$> fmap toValue <$> arbitraryValueForAsciiField f
 arbitraryValueForField (UnicodeStrField f@(UnicodeStringField (FieldInstrContent fname _ _ ) _ )) = (fname, ) <$> fmap U <$> arbitraryValueForUnicodeField f
@@ -175,52 +175,56 @@ arbitraryValueForGroup (Group fname (Just Optional) _ _ instrs) = (fname,) <$> o
 
 main :: IO ()
 main = do
-    putStr "\n[*] Checking 'decodeP . encodeP = id'\n"
-    quickCheck (prop_decodeP_dot_encodeP_is_ID :: Int32 -> Bool)
-    quickCheck (prop_decodeP_dot_encodeP_is_ID :: Word32 -> Bool)
-    quickCheck (prop_decodeP_dot_encodeP_is_ID :: Int64 -> Bool)
-    quickCheck (prop_decodeP_dot_encodeP_is_ID :: Word64 -> Bool)
-    quickCheck (prop_decodeP_dot_encodeP_is_ID :: (Int32, Int64) -> Bool)
-    quickCheck (forAll (fmap (addPreamble . (\(B7S s) -> s)) (arbitrary :: Gen Bit7String)) ((prop_decodeP_dot_encodeP_is_ID) :: AsciiString -> Bool))
-    quickCheck (forAll (fmap (addPreamble' . (\(B7S s) -> s)) (arbitrary :: Gen Bit7String)) ((prop_decodeP_dot_encodeP_is_ID) :: AsciiString -> Bool))
-    quickCheck (prop_decodeP_dot_encodeP_is_ID :: B.ByteString -> Bool)
+    {-putStr "\n[*] Checking 'decodeP . encodeP = id'\n"-}
+    {-quickCheck (prop_decodeP_dot_encodeP_is_ID :: Int32 -> Bool)-}
+    {-quickCheck (prop_decodeP_dot_encodeP_is_ID :: Word32 -> Bool)-}
+    {-quickCheck (prop_decodeP_dot_encodeP_is_ID :: Int64 -> Bool)-}
+    {-quickCheck (prop_decodeP_dot_encodeP_is_ID :: Word64 -> Bool)-}
+    {-quickCheck (prop_decodeP_dot_encodeP_is_ID :: (Int32, Int64) -> Bool)-}
+    {-quickCheck (forAll (fmap (addPreamble . (\(B7S s) -> s)) (arbitrary :: Gen Bit7String)) ((prop_decodeP_dot_encodeP_is_ID) :: AsciiString -> Bool))-}
+    {-quickCheck (forAll (fmap (addPreamble' . (\(B7S s) -> s)) (arbitrary :: Gen Bit7String)) ((prop_decodeP_dot_encodeP_is_ID) :: AsciiString -> Bool))-}
+    {-quickCheck (prop_decodeP_dot_encodeP_is_ID :: B.ByteString -> Bool)-}
 
-    putStr "\n[*] Checking 'decodeD . encodeD = id'\n"
-    quickCheck (prop_decodeD_dot_encodeD_is_ID :: (Delta Int32) -> Bool)
-    quickCheck (prop_decodeD_dot_encodeD_is_ID :: (Delta Int64) -> Bool)
-    quickCheck (prop_decodeD_dot_encodeD_is_ID :: (Delta Word32) -> Bool)
-    quickCheck (prop_decodeD_dot_encodeD_is_ID :: (Delta Word64) -> Bool)
-    quickCheck (prop_decodeD_dot_encodeD_is_ID :: (Delta (Int32, Int64)) -> Bool)
-    quickCheck (prop_decodeD_dot_encodeD_is_ID :: (Delta B.ByteString) -> Bool)
+    {-putStr "\n[*] Checking 'decodeD . encodeD = id'\n"-}
+    {-quickCheck (prop_decodeD_dot_encodeD_is_ID :: (Delta Int32) -> Bool)-}
+    {-quickCheck (prop_decodeD_dot_encodeD_is_ID :: (Delta Int64) -> Bool)-}
+    {-quickCheck (prop_decodeD_dot_encodeD_is_ID :: (Delta Word32) -> Bool)-}
+    {-quickCheck (prop_decodeD_dot_encodeD_is_ID :: (Delta Word64) -> Bool)-}
+    {-quickCheck (prop_decodeD_dot_encodeD_is_ID :: (Delta (Int32, Int64)) -> Bool)-}
+    {-quickCheck (prop_decodeD_dot_encodeD_is_ID :: (Delta B.ByteString) -> Bool)-}
 
-    putStr "\n[*] Checking 'decodeT . encodeT = id'\n"
-    quickCheck (forAll (fmap (addPreamble . (\(B7S s) -> s)) (arbitrary :: Gen Bit7String)) (prop_decodeT_dot_encodeT_is_ID :: AsciiString -> Bool))
-    quickCheck (prop_decodeT_dot_encodeT_is_ID :: B.ByteString -> Bool)
+    {-putStr "\n[*] Checking 'decodeT . encodeT = id'\n"-}
+    {-quickCheck (forAll (fmap (addPreamble . (\(B7S s) -> s)) (arbitrary :: Gen Bit7String)) (prop_decodeT_dot_encodeT_is_ID :: AsciiString -> Bool))-}
+    {-quickCheck (prop_decodeT_dot_encodeT_is_ID :: B.ByteString -> Bool)-}
 
-    putStr "\n[*] Checking 'fromValue . toValue = id'\n"
-    quickCheck (prop_fromValue_dot_toValue_is_ID :: Int32 -> Bool)
-    quickCheck (prop_fromValue_dot_toValue_is_ID :: Word32 -> Bool)
-    quickCheck (prop_fromValue_dot_toValue_is_ID :: Int64 -> Bool)
-    quickCheck (prop_fromValue_dot_toValue_is_ID :: Word64 -> Bool)
-    quickCheck $ expectFailure (prop_fromValue_dot_toValue_is_ID :: (Int32, Int64) -> Bool)
-    -- fails for imprecision of floating point operations.
-    quickCheck (prop_fromValue_dot_toValue_is_ID :: AsciiString -> Bool)
-    quickCheck (prop_fromValue_dot_toValue_is_ID :: B.ByteString -> Bool)
+    {-putStr "\n[*] Checking 'fromValue . toValue = id'\n"-}
+    {-quickCheck (prop_fromValue_dot_toValue_is_ID :: Int32 -> Bool)-}
+    {-quickCheck (prop_fromValue_dot_toValue_is_ID :: Word32 -> Bool)-}
+    {-quickCheck (prop_fromValue_dot_toValue_is_ID :: Int64 -> Bool)-}
+    {-quickCheck (prop_fromValue_dot_toValue_is_ID :: Word64 -> Bool)-}
+    {-quickCheck $ expectFailure (prop_fromValue_dot_toValue_is_ID :: (Int32, Int64) -> Bool)-}
+    {--- fails for imprecision of floating point operations.-}
+    {-quickCheck (prop_fromValue_dot_toValue_is_ID :: AsciiString -> Bool)-}
+    {-quickCheck (prop_fromValue_dot_toValue_is_ID :: B.ByteString -> Bool)-}
 
-    putStr "\n[*] Checking 'delta . delta_ = id'\n"
-    quickCheck (prop_delta_dot_delta__is_ID :: (Int32, Int32) -> Bool)
-    quickCheck (prop_delta_dot_delta__is_ID :: (Word32, Word32) -> Bool)
-    quickCheck (prop_delta_dot_delta__is_ID :: (Int64, Int64) -> Bool)
-    quickCheck (prop_delta_dot_delta__is_ID :: (Word64, Word64) -> Bool)
-    quickCheck (prop_delta_dot_delta__is_ID :: ((Int32, Int64), (Int32, Int64)) -> Bool)
-    quickCheck (prop_delta_dot_delta__is_ID :: (AsciiString, AsciiString) -> Bool)
-    quickCheck (prop_delta_dot_delta__is_ID :: (B.ByteString, B.ByteString) -> Bool)
+    {-putStr "\n[*] Checking 'delta . delta_ = id'\n"-}
+    {-quickCheck (prop_delta_dot_delta__is_ID :: (Int32, Int32) -> Bool)-}
+    {-quickCheck (prop_delta_dot_delta__is_ID :: (Word32, Word32) -> Bool)-}
+    {-quickCheck (prop_delta_dot_delta__is_ID :: (Int64, Int64) -> Bool)-}
+    {-quickCheck (prop_delta_dot_delta__is_ID :: (Word64, Word64) -> Bool)-}
+    {-quickCheck (prop_delta_dot_delta__is_ID :: ((Int32, Int64), (Int32, Int64)) -> Bool)-}
+    {-quickCheck (prop_delta_dot_delta__is_ID :: (AsciiString, AsciiString) -> Bool)-}
+    {-quickCheck (prop_delta_dot_delta__is_ID :: (B.ByteString, B.ByteString) -> Bool)-}
 
-    putStr "\n[*] Checking 'ftail . ftail_ = id'\n"
-    quickCheck (prop_ftail_dot_ftail__is_ID :: (AsciiString, AsciiString) -> Bool)
-    quickCheck (prop_ftail_dot_ftail__is_ID :: (B.ByteString, B.ByteString) -> Bool)
+    {-putStr "\n[*] Checking 'ftail . ftail_ = id'\n"-}
+    {-quickCheck (prop_ftail_dot_ftail__is_ID :: (AsciiString, AsciiString) -> Bool)-}
+    {-quickCheck (prop_ftail_dot_ftail__is_ID :: (B.ByteString, B.ByteString) -> Bool)-}
 
-    putStr "\n[*] Checking 'rmPreamble . addPreamble = id'\n"
-    quickCheck (prop_rmPreamble_dot_addPreamble_is_ID . (\(NOS s) -> s))
+    {-putStr "\n[*] Checking 'rmPreamble . addPreamble = id'\n"-}
+    {-quickCheck (prop_rmPreamble_dot_addPreamble_is_ID . (\(NOS s) -> s))-}
     
+    {-putStr "\n[*] Checking 'bsToPm . pmToBs = id'\n"-}
+    {-quickCheck (prop_bsToPm_dot_pmToBs_is_ID)-}
+
+    putStr "\n[*] Checking 'decoder . encoder = id'\n"
     quickCheck ((uncurry $ prop_decode_template_encode_template_is_ID) . (\(STMP p) -> p))
