@@ -581,10 +581,11 @@ asciiStrF2Cop (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (D
                                         where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
                                                 h (OpContext _ _ Nothing) = defaultBaseValue
                                     baseValue (Empty) = throw $ D6 "previous value in a delta operator can not be empty."
+                                    addPr (Dascii (l, str)) = Dascii (l, addPreamble' str)
                                 in
                                     do 
                                         p <- lift $ prevValue fname oc
-                                        (lift $ updatePrevValue fname oc (Assigned (witnessType s))) >> (lift $ return $ encodeD $ delta_ s (baseValue p))
+                                        (lift $ updatePrevValue fname oc (Assigned (witnessType s))) >> (lift $ return $ encodeD $ addPr $ delta_ s (baseValue p))
                 cp (Nothing) = nulL
 
 -- pm: Yes, Nullable: Yes
@@ -602,13 +603,13 @@ asciiStrF2Cop (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (T
                                         case p of
                                             (Assigned v) -> if assertType v == s
                                                             then (lift $ setPMap False) >> (lift $ return BU.empty)
-                                                            else (lift $ return $ encodeT $ ftail_ s (baseValue p))
+                                                            else (lift $ return $ encodeT $ addPreamble' $ ftail_ s (baseValue p))
                                             Undefined -> h oc
                                                 where   h (OpContext _ _ (Just iv)) =   if ivToPrimitive iv == s
                                                                                         then (lift $ setPMap False) >> (lift $ updatePrevValue fname oc (Assigned (witnessType s))) >> (lift $ return BU.empty)
-                                                                                        else (lift $ return $ encodeT $ ftail_ s (baseValue p))
-                                                        h (OpContext _ _ Nothing) = (lift $ return $ encodeT $ ftail_ s (baseValue p))
-                                            Empty -> (lift $ return $ encodeT $ ftail_ s (baseValue p))
+                                                                                        else (lift $ return $ encodeT $ addPreamble' $ ftail_ s (baseValue p))
+                                                        h (OpContext _ _ Nothing) = (lift $ return $ encodeT $ addPreamble' $ ftail_ s (baseValue p))
+                                            Empty -> (lift $ return $ encodeT $ addPreamble' $ ftail_ s (baseValue p))
                 cp (Nothing) = do
                                 p <- lift $ prevValue fname oc
                                 case p of
