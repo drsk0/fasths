@@ -206,12 +206,12 @@ intF2Cop' (FieldInstrContent fname (Just Optional) (Just (Copy oc)))
                                 case p of
                                     (Assigned v) -> if (assertType v == i) 
                                                     then (lift $ setPMap False) >> (lift $ return BU.empty)
-                                                    else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned $ witnessType i)) >> (lift $ return $ encodeP i)
+                                                    else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned $ witnessType i)) >> (lift $ return $ encodeP $ plusOne i)
                                     Undefined -> h' oc
                                         where   h' (OpContext _ _ (Just iv)) | ivToPrimitive iv == i = (lift $ setPMap False) >> (lift $ return BU.empty)
-                                                h' (OpContext _ _ (Just _)) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned $ witnessType i)) >> (lift $ return $ encodeP i)
-                                                h' (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned $ witnessType i)) >> (lift $ return $ encodeP i)
-                                    Empty -> (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned $ witnessType i)) >> (lift $ return $ encodeP i)
+                                                h' (OpContext _ _ (Just _)) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned $ witnessType i)) >> (lift $ return $ encodeP $ plusOne i)
+                                                h' (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned $ witnessType i)) >> (lift $ return $ encodeP $ plusOne i)
+                                    Empty -> (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned $ witnessType i)) >> (lift $ return $ encodeP $ plusOne i)
 
                 cp (Nothing) = do
                                 p <- lift $ prevValue fname oc
@@ -230,12 +230,12 @@ intF2Cop' (FieldInstrContent fname (Just Optional) (Just (Increment oc)))
                                 case p of
                                     (Assigned v) -> if assertType v == i - 1 
                                                     then (lift $ setPMap False) >> (lift $ updatePrevValue fname oc (Assigned (witnessType i))) >> (lift $ return BU.empty)
-                                                    else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType i))) >> (lift $ return $ encodeP i)
+                                                    else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType i))) >> (lift $ return $ encodeP $ plusOne i)
                                     Undefined -> h' oc
                                         where   h' (OpContext _ _ (Just iv)) | ivToPrimitive iv == i = (lift $ setPMap False) >> (lift $ updatePrevValue fname oc (Assigned (witnessType i))) >> (lift $ return BU.empty)
-                                                h' (OpContext _ _ (Just _)) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType i))) >> (lift $ return $ encodeP i) 
-                                                h' (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType i))) >> (lift $ return $ encodeP i)
-                                    Empty -> (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType i))) >> (lift $ return $ encodeP i)
+                                                h' (OpContext _ _ (Just _)) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType i))) >> (lift $ return $ encodeP $ plusOne i) 
+                                                h' (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType i))) >> (lift $ return $ encodeP $ plusOne i)
+                                    Empty -> (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType i))) >> (lift $ return $ encodeP $ plusOne i)
                 cp (Nothing) = do
                                 p <- lift $ prevValue fname oc
                                 case p of
@@ -255,7 +255,7 @@ intF2Cop' (FieldInstrContent fname (Just Mandatory) (Just (Delta oc)))
                                   in                               
                                       do 
                                         b <- lift $ baseValue <$> (prevValue fname oc)
-                                        (lift $ updatePrevValue fname oc (Assigned (witnessType i))) >> (lift $ return $ encodeD $ plusOne $ (delta_ i b))
+                                        (lift $ updatePrevValue fname oc (Assigned (witnessType i))) >> (lift $ return $ encodeD $ (delta_ i b))
                     cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
 
 -- pm: No, Nullable: Yes
