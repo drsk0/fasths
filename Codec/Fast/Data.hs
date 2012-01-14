@@ -154,7 +154,7 @@ data Context = Context {
     pm   :: [Bool],
     -- |Dictionaries.
     dict :: M.Map String Dictionary
-    }
+    } deriving (Show)
 
 -- |The initial state of the parser depending on the templates.
 initState::Templates -> Context
@@ -171,6 +171,16 @@ data TypeWitness a where
     TypeWitnessUNI   :: UnicodeString -> TypeWitness UnicodeString
     TypeWitnessBS    :: B.ByteString  -> TypeWitness B.ByteString
     TypeWitnessDec   :: Decimal       -> TypeWitness Decimal
+
+instance Show (TypeWitness a) where
+    show (TypeWitnessI32 i) = "TypeWitnessI32 " ++ show i
+    show (TypeWitnessW32 i) = "TypeWitnessW32 " ++ show i
+    show (TypeWitnessI64 i) = "TypeWitnessI64 " ++ show i
+    show (TypeWitnessW64 i) = "TypeWitnessW64 " ++ show i
+    show (TypeWitnessASCII s) = "TypeWitnessASCII " ++ show s
+    show (TypeWitnessUNI s) = "TypeWitnessUNI " ++ show s
+    show (TypeWitnessBS bs) = "TypeWitnessBS " ++ show bs
+    show (TypeWitnessDec d) = "TypeWitnessDec " ++ show d
 
 type DualType a m = a -> m
 
@@ -718,7 +728,7 @@ instance Arbitrary DecFieldOp where
     arbitrary = DecFieldOp <$> arbitrary <*> arbitrary 
 
 -- |Dictionary consists of a name and a list of key value pairs.
-data Dictionary = Dictionary String (M.Map DictKey DictValue)
+data Dictionary = Dictionary String (M.Map DictKey DictValue) deriving (Show) 
 
 data DictKey = N NsName
              | K NsKey
@@ -728,7 +738,12 @@ data DictKey = N NsName
 -- |Entry in a dictionary can be in one of three states.
 data DictValue = Undefined
                | Empty
-               | forall a. Primitive a => Assigned (TypeWitness a)
+               | forall a. Primitive a => Assigned (TypeWitness a) 
+
+instance Show DictValue where
+    show (Undefined) = "Undefined"
+    show (Empty) = "Empty"
+    show (Assigned x) = "Assigned" ++ "(" ++ show x ++ ")"
 
 -- |Operator context.
 data OpContext = OpContext {
@@ -738,7 +753,7 @@ data OpContext = OpContext {
     } deriving (Show, Data, Typeable)
 
 instance Arbitrary OpContext where
-    arbitrary = OpContext <$> arbitrary <*> arbitrary <*> arbitrary
+    arbitrary = OpContext <$> arbitrary <*> arbitrary <*> (return Nothing) -- arbitrary
 
 -- |Dictionary attribute. Three predefined dictionaries are "template", "type" 
 -- and "global".

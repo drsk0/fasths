@@ -29,6 +29,7 @@ prop_decode_template_encode_template_is_ID
 where
 
 import qualified Data.Attoparsec as A
+import qualified Data.Monoid as M
 import Control.Monad.State
 import Control.Monad.Reader
 import Data.Word (Word32)
@@ -62,8 +63,8 @@ prop_decode_template_encode_template_is_ID t msgs =
     case l == r of
     True -> True
     False -> error ("----->\n" ++ show l ++ "\n ----->\n" ++ show r)
-    where   l = A.maybeResult (A.feed (A.parse (A.many parser) bs) B.empty)
+    where   l = A.maybeResult (A.feed (A.parse (evalStateT (A.many parser) (initState templates)) bs) B.empty)
             r = Just msgs
-            parser = evalStateT (message templates (const $ tName t)) (initState templates)
-            bs = B.concat $ map (B.concat . BL.toChunks . BU.toLazyByteString) (evalState (mapM (_message templates (const 0)) msgs) (initState templates))
+            parser = message templates (const $ tName t)
+            bs = (B.concat . BL.toChunks . BU.toLazyByteString) ((M.mconcat (evalState (mapM (_message templates (const 0)) msgs) (initState templates))) `BU.append` BU.flush)
             templates = Templates Nothing Nothing Nothing [t]
