@@ -110,6 +110,9 @@ import Control.Applicative
 import Control.Monad.State
 import Control.Exception
 import Data.Typeable
+import Data.Data
+import Data.Generics.Schemes (everything)
+import Data.Generics.Aliases (mkQ)
 import Test.QuickCheck hiding ((.&.))
 
 -- | FAST exception.
@@ -462,7 +465,7 @@ data Templates = Templates {
     tsTemplateNs      :: Maybe TemplateNsAttr,
     tsDictionary      :: Maybe DictionaryAttr,
     tsTemplates       :: [Template]
-    } deriving (Show)
+    } deriving (Show, Data, Typeable)
 
 instance Arbitrary Templates where
     arbitrary = Templates <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
@@ -474,7 +477,7 @@ data Template = Template {
     tDictionary   :: Maybe DictionaryAttr,
     tTypeRef      :: Maybe TypeRef,
     tInstructions :: [Instruction]
-    } deriving (Show)
+    } deriving (Show, Data, Typeable)
 
 instance Arbitrary Template where
     arbitrary = Template <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary 
@@ -483,7 +486,7 @@ instance Arbitrary Template where
 data TypeRef = TypeRef {
     trName :: NameAttr,
     trNs   :: Maybe NsAttr
-    } deriving (Show)
+    } deriving (Show, Data, Typeable)
 
 instance Arbitrary TypeRef where
     arbitrary = TypeRef <$> arbitrary <*> arbitrary 
@@ -491,18 +494,28 @@ instance Arbitrary TypeRef where
 -- |An Instruction in a template is either a field instruction or a template reference.
 data Instruction = Instruction Field
                     |TemplateReference (Maybe TemplateReferenceContent)
-                    deriving (Show)
+                    deriving (Show, Data, Typeable)
 
 instance Arbitrary Instruction where
-    arbitrary = liftM Instruction arbitrary
+    arbitrary = (liftM Instruction arbitrary) `suchThat` (\i -> depth i < 4)
     {-arbitrary = oneof [liftM Instruction arbitrary, liftM TemplateReference arbitrary]-}
     -- TemplateReferences are really hard to test.
+
+-- |Since an Instructions is an indirect recursive data structures through Group and Sequence
+-- Instructions can get arbitrary deeply nested. depth returns the depth of Instruction looked 
+-- at as a tree.
+depth :: Instruction -> Int
+depth = everything (+) (0 `mkQ` countGroupOrSequence)
+    where   countGroupOrSequence :: Field -> Int
+            countGroupOrSequence (Grp _) = 1
+            countGroupOrSequence (Seq _) = 1
+            countGroupOrSequence _ = 0
 
 -- |This is a helper data structure, NOT defined in the reference.
 data TemplateReferenceContent = TemplateReferenceContent {
         trcName       :: NameAttr,
         trcTemplateNs :: Maybe TemplateNsAttr
-        } deriving (Show)
+        } deriving (Show, Data, Typeable)
 
 instance Arbitrary TemplateReferenceContent where
     arbitrary = TemplateReferenceContent <$> arbitrary <*> arbitrary 
@@ -515,7 +528,7 @@ data FieldInstrContent = FieldInstrContent {
     ficFName    :: NsName,
     ficPresence :: Maybe PresenceAttr,
     ficFieldOp  :: Maybe FieldOp
-    } deriving (Show)
+    } deriving (Show, Data, Typeable)
 
 instance Arbitrary FieldInstrContent where
     arbitrary = FieldInstrContent <$> arbitrary <*> arbitrary <*> arbitrary 
@@ -528,7 +541,7 @@ data Field = IntField IntegerField
            | ByteVecField ByteVectorField
            | Seq Sequence
            | Grp Group
-			deriving (Show)
+			deriving (Show, Data, Typeable)
 
 instance Arbitrary Field where
     arbitrary = oneof [liftM IntField arbitrary, liftM DecField arbitrary, liftM AsciiStrField arbitrary, liftM UnicodeStrField arbitrary, liftM ByteVecField arbitrary, liftM Seq arbitrary, liftM Grp arbitrary] `suchThat` wellFormed
@@ -576,7 +589,7 @@ data IntegerField = Int32Field FieldInstrContent
                     |UInt32Field FieldInstrContent
                     |Int64Field FieldInstrContent
                     |UInt64Field FieldInstrContent
-                    deriving (Show)
+                    deriving (Show, Data, Typeable)
 
 instance Arbitrary IntegerField where
     arbitrary = oneof [fmap Int32Field arbitrary, fmap UInt32Field arbitrary, fmap Int64Field arbitrary, fmap UInt64Field arbitrary]
@@ -586,13 +599,13 @@ data DecimalField = DecimalField {
         dfiFName    :: NsName,
         dfiPresence :: Maybe PresenceAttr,
         dfiFieldOp  :: Maybe (Either FieldOp DecFieldOp)
-        } deriving (Show)
+        } deriving (Show, Data, Typeable)
 
 instance Arbitrary DecimalField where
     arbitrary = DecimalField <$> arbitrary <*> arbitrary <*> arbitrary
 
 -- |Ascii string field.
-data AsciiStringField = AsciiStringField FieldInstrContent deriving (Show)
+data AsciiStringField = AsciiStringField FieldInstrContent deriving (Show, Data, Typeable)
 
 instance Arbitrary AsciiStringField where
     arbitrary = fmap AsciiStringField arbitrary
@@ -601,7 +614,7 @@ instance Arbitrary AsciiStringField where
 data UnicodeStringField = UnicodeStringField {
         usfContent :: FieldInstrContent,
         usfLength  :: Maybe ByteVectorLength
-        } deriving (Show)
+        } deriving (Show, Data, Typeable)
 
 instance Arbitrary UnicodeStringField where
     arbitrary = UnicodeStringField <$> arbitrary <*> arbitrary
@@ -610,7 +623,7 @@ instance Arbitrary UnicodeStringField where
 data ByteVectorField = ByteVectorField {
         bvfContent :: FieldInstrContent,
         bvfLength  :: Maybe ByteVectorLength
-        } deriving (Show)
+        } deriving (Show, Data, Typeable)
 
 instance Arbitrary ByteVectorField where
     arbitrary = ByteVectorField <$> arbitrary <*> arbitrary 
@@ -623,7 +636,7 @@ data Sequence = Sequence {
         sTypeRef      :: Maybe TypeRef,
         sLength       :: Maybe Length,
         sInstructions :: [Instruction]
-        } deriving (Show)
+        } deriving (Show,Data, Typeable)
 
 instance Arbitrary Sequence where
     arbitrary = let 
@@ -645,7 +658,7 @@ data Group = Group {
         gDictionary   :: Maybe DictionaryAttr,
         gTypeRef      :: Maybe TypeRef,
         gInstructions :: [Instruction]
-        } deriving (Show)
+        } deriving (Show, Data, Typeable)
 
 instance Arbitrary Group where
     arbitrary = Group <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
@@ -655,7 +668,7 @@ instance Arbitrary Group where
 -- is needed.
 data ByteVectorLength = ByteVectorLength {
     bvlNsName::NsName
-    } deriving (Show)
+    } deriving (Show, Data, Typeable)
 
 instance Arbitrary ByteVectorLength where
     arbitrary = fmap ByteVectorLength arbitrary
@@ -671,14 +684,14 @@ instance Arbitrary ByteVectorLength where
 data Length = Length {
     lFName   :: Maybe NsName,
     lFieldOp :: Maybe FieldOp
-    } deriving (Show)
+    } deriving (Show, Data, Typeable)
 
 instance Arbitrary Length where
     arbitrary = Length <$> arbitrary <*> arbitrary
 
 
 -- |Presence of a field value is either mandatory or optional.
-data PresenceAttr = Mandatory | Optional deriving (Show)
+data PresenceAttr = Mandatory | Optional deriving (Show, Data, Typeable)
 
 instance Arbitrary PresenceAttr where
     arbitrary = oneof [return Mandatory, return Optional ]
@@ -690,7 +703,7 @@ data FieldOp = Constant InitialValueAttr
              | Increment OpContext
              | Delta OpContext
              | Tail OpContext
-				deriving (Show)
+				deriving (Show, Data, Typeable)
 
 instance Arbitrary FieldOp where
     arbitrary = oneof [fmap Constant arbitrary, fmap Default arbitrary, fmap Copy arbitrary, fmap Increment arbitrary, fmap Delta arbitrary, fmap Tail arbitrary]
@@ -699,7 +712,7 @@ instance Arbitrary FieldOp where
 data DecFieldOp = DecFieldOp {
     dfoExponent :: Maybe FieldOp,
     dfoMantissa :: Maybe FieldOp
-    } deriving (Show)
+    } deriving (Show, Data, Typeable)
 
 instance Arbitrary DecFieldOp where
     arbitrary = DecFieldOp <$> arbitrary <*> arbitrary 
@@ -722,20 +735,20 @@ data OpContext = OpContext {
     ocDictionary   :: Maybe DictionaryAttr,
     ocNsKey        :: Maybe NsKey,
     ocInitialValue :: Maybe InitialValueAttr
-    } deriving (Show)
+    } deriving (Show, Data, Typeable)
 
 instance Arbitrary OpContext where
     arbitrary = OpContext <$> arbitrary <*> arbitrary <*> arbitrary
 
 -- |Dictionary attribute. Three predefined dictionaries are "template", "type" 
 -- and "global".
-newtype DictionaryAttr = DictionaryAttr String deriving (Show, Arbitrary)
+newtype DictionaryAttr = DictionaryAttr String deriving (Show, Arbitrary, Data, Typeable)
 
 -- |nsKey attribute.
 data NsKey = NsKey {
     nkKey :: KeyAttr,
     nkNs  :: Maybe NsAttr
-    } deriving (Eq, Ord, Show)
+    } deriving (Eq, Ord, Show, Data, Typeable)
 
 instance Arbitrary NsKey where  
     arbitrary = NsKey <$> arbitrary <*> arbitrary
@@ -743,7 +756,7 @@ instance Arbitrary NsKey where
 -- |Key attribute.
 data KeyAttr = KeyAttr {
     kaToken :: Token
-    } deriving (Eq, Ord, Show)
+    } deriving (Eq, Ord, Show, Data, Typeable)
 
 instance Arbitrary KeyAttr where
     arbitrary = fmap KeyAttr arbitrary
@@ -751,10 +764,10 @@ instance Arbitrary KeyAttr where
 -- be converted to the type of the field in question.
 data InitialValueAttr = InitialValueAttr {
     text :: UnicodeString
-    } deriving (Show)
+    } deriving (Show, Data, Typeable)
 
 instance Arbitrary InitialValueAttr where
-    arbitrary = arbitrary
+    arbitrary = InitialValueAttr <$> arbitrary
 
 -- |A full name in a template is given by a namespace URI and localname. For 
 -- application types, fields and operator keys the namespace URI is given by 
@@ -763,13 +776,13 @@ instance Arbitrary InitialValueAttr where
 -- Note that full name constructors in the data structures are named 'fname'.
 
 -- |A full name for an application type, field or operator key.
-data NsName = NsName NameAttr (Maybe NsAttr) (Maybe IdAttr) deriving (Eq, Ord, Show)
+data NsName = NsName NameAttr (Maybe NsAttr) (Maybe IdAttr) deriving (Eq, Ord, Show, Data, Typeable)
 
 instance Arbitrary NsName where
     arbitrary = NsName <$> arbitrary <*> arbitrary <*> arbitrary
 
 -- |A full name for a template.
-data TemplateNsName = TemplateNsName NameAttr (Maybe TemplateNsAttr) (Maybe IdAttr) deriving (Show, Eq, Ord)
+data TemplateNsName = TemplateNsName NameAttr (Maybe TemplateNsAttr) (Maybe IdAttr) deriving (Show, Eq, Ord, Data, Typeable)
 
 instance Arbitrary TemplateNsName where
     arbitrary =  TemplateNsName <$> arbitrary <*> arbitrary <*> arbitrary
@@ -784,11 +797,11 @@ fname2tname (NsName n (Just (NsAttr ns)) maybe_id) = TemplateNsName n (Just (Tem
 fname2tname (NsName n Nothing maybe_id) = TemplateNsName n Nothing maybe_id
 
 -- |The very basic name related attributes.
-newtype NameAttr = NameAttr String deriving (Eq, Ord, Show, Arbitrary)
-newtype NsAttr = NsAttr String deriving (Eq, Ord, Show, Arbitrary)
-newtype TemplateNsAttr = TemplateNsAttr String deriving (Eq, Ord, Show, Arbitrary)
-newtype IdAttr = IdAttr Token deriving (Eq, Ord, Show, Arbitrary)
-newtype Token = Token String deriving (Eq, Ord, Show, Arbitrary)
+newtype NameAttr = NameAttr String deriving (Eq, Ord, Show, Arbitrary, Data, Typeable)
+newtype NsAttr = NsAttr String deriving (Eq, Ord, Show, Arbitrary, Data, Typeable)
+newtype TemplateNsAttr = TemplateNsAttr String deriving (Eq, Ord, Show, Arbitrary, Data, Typeable)
+newtype IdAttr = IdAttr Token deriving (Eq, Ord, Show, Arbitrary, Data, Typeable)
+newtype Token = Token String deriving (Eq, Ord, Show, Arbitrary, Data, Typeable)
 
 
 -- |Get a Stopbit encoded entity.
