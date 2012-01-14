@@ -160,7 +160,7 @@ intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Copy oc)))
         case p of
             (Assigned v) -> return (Just (assertType v))
             Undefined -> h' oc
-                where   h' (OpContext _ _ (Just iv)) = return (Just (ivToPrimitive iv))
+                where   h' (OpContext _ _ (Just iv)) = (lift $ updatePrevValue fname oc (Assigned (witnessType i))) >> (return (Just i)) where i = ivToPrimitive iv
                         h' (OpContext _ _ Nothing) = throw $ D5 "No initial value in operator context\
                                                           \for mandatory copy operator with undefined dictionary\
                                                           \value."

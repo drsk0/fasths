@@ -152,7 +152,7 @@ intF2Cop' (FieldInstrContent fname (Just Mandatory) (Just (Copy oc)))
                                         where   h' (OpContext _ _ (Just iv)) = if (ivToPrimitive iv) == i 
                                                                                 then (lift $ setPMap False) >> (lift $ return BU.empty) 
                                                                                 else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType i))) >> (lift $ return $ encodeP i)
-                                                h' (OpContext _ _ Nothing) = lift $ setPMap True >> updatePrevValue fname oc (Assigned (witnessType i)) >> (lift $ return $ encodeP i)
+                                                h' (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType i))) >> (lift $ return $ encodeP i)
                                     Empty -> (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType i))) >> (lift $ return $ encodeP i)
 
                cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
