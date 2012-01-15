@@ -587,7 +587,7 @@ wellFormed (Grp g) = and $ map h (gInstructions g)
             h (Instruction f) = wellFormed f
 wellFormed _ = True
 
-wellFormedIntField::FieldInstrContent -> Bool
+wellFormedIntField :: FieldInstrContent -> Bool
 wellFormedIntField (FieldInstrContent fname Nothing maybeOp) = wellFormedIntField $ FieldInstrContent fname (Just Mandatory) maybeOp
 wellFormedIntField (FieldInstrContent _ (Just Mandatory) (Just (Tail _))) = False
 wellFormedIntField (FieldInstrContent _ (Just Optional) (Just (Tail _))) = False

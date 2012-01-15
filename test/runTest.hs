@@ -162,10 +162,14 @@ arbitraryValueForByteVectorField (ByteVectorField (FieldInstrContent _ (Just Man
 arbitraryValueForByteVectorField _ = arbitrary
 
 arbitraryValueForSequence :: Sequence -> Gen (NsName, Maybe Value)
-arbitraryValueForSequence (Sequence fname _ _ _ _ instrs) = do
+arbitraryValueForSequence (Sequence fname (Just Optional) _ _ _ instrs) = do
     l <- arbitrary :: Gen Word32
     sq <- vectorOf (fromIntegral l) (mapM arbitraryValueForInstruction instrs)
     oneof [return (fname, Just $ Sq l sq), return (fname, Nothing)]
+arbitraryValueForSequence (Sequence fname _ _ _ _ instrs) = do
+    l <- arbitrary :: Gen Word32
+    sq <- vectorOf (fromIntegral l) (mapM arbitraryValueForInstruction instrs)
+    return (fname, Just $ Sq l sq)
 
 arbitraryValueForGroup :: Group -> Gen (NsName, Maybe Value)
 arbitraryValueForGroup (Group fname Nothing maybe_dict maybe_typeref instrs)
