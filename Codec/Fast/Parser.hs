@@ -444,7 +444,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname Nothing maybe_op))
     = asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) maybe_op))
 -- pm: No, Nullable: No
 asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) Nothing))
-    = Just <$> l2 decodeP
+    = Just . rmPreamble <$> l2 decodeP
 -- pm: No, Nullable: Yes
 asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Optional) Nothing))
     = nULL
@@ -527,7 +527,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Ta
         do
             pva <- lift $ prevValue fname oc
             t <- l2 decodeT
-            return (Just (baseValue pva `ftail` t))
+            return (Just (baseValue pva `ftail` rmPreamble t))
     )
     (
     do 

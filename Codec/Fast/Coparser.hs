@@ -447,7 +447,7 @@ asciiStrF2Cop (AsciiStringField(FieldInstrContent fname Nothing maybe_op))
     = asciiStrF2Cop (AsciiStringField(FieldInstrContent fname (Just Mandatory) maybe_op))
 -- pm: No, Nullable: No
 asciiStrF2Cop (AsciiStringField(FieldInstrContent fname (Just Mandatory) Nothing))
-    = cp where  cp (Just s) = lift $ return $ encodeP s
+    = cp where  cp (Just s) = lift $ return $ encodeP $ addPreamble s
                 cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
 
 -- pm: No, Nullable: Yes
@@ -519,13 +519,13 @@ asciiStrF2Cop (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (
                                         case p of
                                             (Assigned v) -> if assertType v == s
                                                             then (lift $ setPMap False) >> (lift $ return BU.empty)
-                                                            else (lift $ setPMap True) >> (lift $ return $ encodeT $ ftail_ s (baseValue p))
+                                                            else (lift $ setPMap True) >> (lift $ return $ encodeT $ addPreamble $ ftail_ s (baseValue p))
                                             Undefined -> h oc
                                                 where   h (OpContext _ _ (Just iv)) =   if ivToPrimitive iv == s
                                                                                         then (lift $ setPMap False) >> (lift $ updatePrevValue fname oc (Assigned (witnessType s))) >> (lift $ return BU.empty)
-                                                                                        else (lift $ setPMap True) >> (lift $ return $ encodeT $ ftail_ s (baseValue p))
-                                                        h (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ return $ encodeT $ ftail_ s (baseValue p))
-                                            Empty -> (lift $ setPMap True) >> (lift $ return $ encodeT $ ftail_ s (baseValue p))
+                                                                                        else (lift $ setPMap True) >> (lift $ return $ encodeT $ addPreamble $ ftail_ s (baseValue p))
+                                                        h (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ return $ encodeT $ addPreamble $ ftail_ s (baseValue p))
+                                            Empty -> (lift $ setPMap True) >> (lift $ return $ encodeT $ addPreamble $ ftail_ s (baseValue p))
                 cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
 
 -- pm: Yes, Nullable: No
