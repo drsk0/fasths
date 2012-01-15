@@ -158,7 +158,8 @@ data Context = Context {
 
 -- |The initial state of the parser depending on the templates.
 initState::Templates -> Context
-initState ts = Context [] (M.fromList [(k,d) | d@(Dictionary k _) <- concatMap initDicts (tsTemplates ts)])
+initState ts = Context [] (M.fromListWith merge [(k,d) | d@(Dictionary k _) <- concatMap initDicts (tsTemplates ts)])
+    where merge (Dictionary n1 d1) (Dictionary _ d2) = Dictionary n1 (d1 `M.union` d2)
 
 -- | We need type witnesses to handle manipulation of dictionaries with entries of all possible 
 -- primitive types in generic code.
@@ -706,7 +707,7 @@ data PresenceAttr = Mandatory | Optional deriving (Show, Data, Typeable)
 instance Arbitrary PresenceAttr where
     arbitrary = oneof [return Mandatory, return Optional ]
 
--- |FAST field operators.
+-- |Field operators.
 data FieldOp = Constant InitialValueAttr
              | Default (Maybe InitialValueAttr)
              | Copy OpContext
@@ -932,7 +933,7 @@ pv :: (Monad m) => String -> DictKey -> StateT Context m DictValue
 pv d k = do
        st <- get
        case M.lookup d (dict st) >>= \(Dictionary _ xs) -> M.lookup k xs of
-        Nothing -> throw $ OtherException ("Could not find specified dictionary/key." ++ show d ++ " " ++ show k)
+        Nothing -> throw $ OtherException ("Could not find specified dictionary/key." ++ show d ++ " " ++ show k ++ "---->" ++ show (dict st))
         Just dv -> return dv
 
 -- |Update the previous value.
@@ -1095,6 +1096,7 @@ createDicts es =  map h (groupBy (\ (d, _ , _) (d', _ , _) -> d == d') es)
                 where (name, _, _) = head xs
 
 -- |Maps a field to a triple (DictionaryName, Key, Value).
+-- This function needs to changed to support type/template specifix contexts, especially for sequences.
 dictOfField::Field -> [Maybe (String, DictKey, DictValue)]
 dictOfField (IntField (Int32Field (FieldInstrContent fname maybePr maybeOp))) = [dictOfIntField $ FieldInstrContent fname maybePr maybeOp] 
 dictOfField (IntField (Int64Field (FieldInstrContent fname maybePr maybeOp))) = [dictOfIntField $ FieldInstrContent fname maybePr maybeOp]
@@ -1156,7 +1158,14 @@ dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Option
 dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail oc))) _)) = [Just $ dictOfOpContext oc fname] 
 dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Tail oc))) _)) = [Just $ dictOfOpContext oc fname]
 dictOfField (UnicodeStrField (UnicodeStringField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)) = dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname maybe_presence maybe_op) maybe_length))
-dictOfField (Seq s) = concatMap h (sInstructions s)
+dictOfField (Seq (Sequence n maybe_pr (Just (DictionaryAttr dname)) maybe_tref maybe_length is)) = (dictOfField (Seq (Sequence n maybe_pr Nothing maybe_tref maybe_length is)))
+dictOfField (Seq (Sequence n maybe_pr Nothing _ Nothing is)) = (concatMap h is) ++ dictOfField (IntField (UInt32Field (FieldInstrContent (uniqueFName n "l") maybe_pr Nothing)))
+    where   h (TemplateReference _) = [Nothing]
+            h (Instruction f) = dictOfField f
+dictOfField (Seq (Sequence _ maybe_pr Nothing _ (Just (Length (Just name) maybe_op)) is)) = (concatMap h is) ++ dictOfField (IntField (UInt32Field (FieldInstrContent name maybe_pr maybe_op)))
+    where   h (TemplateReference _) = [Nothing]
+            h (Instruction f) = dictOfField f
+dictOfField (Seq (Sequence n maybe_pr Nothing _ (Just (Length Nothing maybe_op)) is)) = (concatMap h is) ++ dictOfField (IntField (UInt32Field (FieldInstrContent (uniqueFName n "l") maybe_pr maybe_op)))
     where   h (TemplateReference _) = [Nothing]
             h (Instruction f) = dictOfField f
 dictOfField (Grp g) = concatMap h (gInstructions g)
