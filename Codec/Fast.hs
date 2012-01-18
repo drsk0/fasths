@@ -66,5 +66,5 @@ prop_decode_template_encode_template_is_ID t msgs =
     where   l = A.maybeResult (A.feed (A.parse (evalStateT (A.many parser) (initState templates)) bs) B.empty)
             r = Just msgs
             parser = message templates (const $ tName t)
-            bs = (B.concat . BL.toChunks . BU.toLazyByteString) ((M.mconcat (evalState (mapM (_message templates (const 0)) msgs) (initState templates))) `BU.append` BU.flush)
+            bs = (B.concat . BL.toChunks . BU.toLazyByteString) (M.mconcat (evalState (mapM (_message templates (const 0)) msgs) (initState templates)))
             templates = Templates Nothing Nothing Nothing [t]

@@ -111,8 +111,8 @@ import Control.Monad.State
 import Control.Exception
 import Data.Typeable
 import Data.Data
-import Data.Generics.Schemes (everything)
-import Data.Generics.Aliases (mkQ)
+import Data.Generics.Schemes (everything, gcount, everywhereBut)
+import Data.Generics.Aliases (mkQ, mkT)
 import Test.QuickCheck hiding ((.&.))
 
 -- | FAST exception.
@@ -508,19 +508,13 @@ data Instruction = Instruction Field
                     deriving (Show, Data, Typeable)
 
 instance Arbitrary Instruction where
-    arbitrary = (liftM Instruction arbitrary) `suchThat` (\i -> depth i < 4)
+    arbitrary = (liftM Instruction arbitrary) `suchThat` (\i -> gcount (False `mkQ` groupOrSequence) i < 20)
+        where   groupOrSequence :: Field -> Bool
+                groupOrSequence (Grp _) = True
+                groupOrSequence (Seq _) = True
+                groupOrSequence _ = False
     {-arbitrary = oneof [liftM Instruction arbitrary, liftM TemplateReference arbitrary]-}
     -- TemplateReferences are really hard to test.
-
--- |Since an Instructions is an indirect recursive data structures through Group and Sequence
--- Instructions can get arbitrary deeply nested. depth returns the depth of Instruction looked 
--- at as a tree.
-depth :: Instruction -> Int
-depth = everything (+) (0 `mkQ` countGroupOrSequence)
-    where   countGroupOrSequence :: Field -> Int
-            countGroupOrSequence (Grp _) = 1
-            countGroupOrSequence (Seq _) = 1
-            countGroupOrSequence _ = 0
 
 -- |This is a helper data structure, NOT defined in the reference.
 data TemplateReferenceContent = TemplateReferenceContent {
@@ -555,7 +549,25 @@ data Field = IntField IntegerField
 			deriving (Show, Data, Typeable)
 
 instance Arbitrary Field where
-    arbitrary = oneof [liftM IntField arbitrary, liftM DecField arbitrary, liftM AsciiStrField arbitrary, liftM UnicodeStrField arbitrary, liftM ByteVecField arbitrary, liftM Seq arbitrary, liftM Grp arbitrary] `suchThat` wellFormed
+    arbitrary = oneof [IntField <$> arbitrary, 
+                DecField <$> (changeInitValue <$> (arbitrary :: Gen Double) <*> arbitrary),
+                AsciiStrField <$> (changeInitValue <$> (arbitrary :: Gen String) <*> arbitrary),
+                UnicodeStrField <$> (changeInitValue <$> (arbitrary :: Gen String) <*> arbitrary),
+                ByteVecField <$> (changeInitValue <$> (arbitrary :: Gen B.ByteString) <*> arbitrary), 
+                Seq <$> arbitrary, 
+                Grp <$> arbitrary] `suchThat` wellFormed
+
+changeInitValue :: (Data a, Show b) => b -> a -> a
+changeInitValue i = everywhereBut exclude (mkT (h i))
+    where
+            h iv (InitialValueAttr _) = (InitialValueAttr . show) iv 
+            exclude :: (Data c) => c -> Bool
+            exclude x = (False `mkQ` isSeqLength) x || (False `mkQ` isByteVectorLength) x || (False `mkQ` isDecimalMantissaExp) x
+            isSeqLength (Length _ _) = True
+            isByteVectorLength ( ByteVectorLength _) = True
+            isDecimalMantissaExp (DecimalField _ _ (Just (Left _))) = False
+            isDecimalMantissaExp (DecimalField _ _ Nothing) = False
+            isDecimalMantissaExp (DecimalField _ _ (Just (Right _))) = True
 
 wellFormed :: Field -> Bool
 wellFormed (IntField (Int32Field (FieldInstrContent fname maybePr maybeOp))) = wellFormedIntField $ FieldInstrContent fname maybePr maybeOp
@@ -603,7 +615,10 @@ data IntegerField = Int32Field FieldInstrContent
                     deriving (Show, Data, Typeable)
 
 instance Arbitrary IntegerField where
-    arbitrary = oneof [fmap Int32Field arbitrary, fmap UInt32Field arbitrary, fmap Int64Field arbitrary, fmap UInt64Field arbitrary]
+    arbitrary = oneof [Int32Field <$> (changeInitValue <$> (arbitrary :: Gen Int32) <*> arbitrary), 
+                UInt32Field <$> (changeInitValue <$> (arbitrary :: Gen Word32) <*> arbitrary), 
+                Int64Field <$> (changeInitValue <$> (arbitrary :: Gen Int64) <*> arbitrary),
+                UInt64Field <$> (changeInitValue <$> (arbitrary :: Gen Word64) <*> arbitrary)]
 
 -- |Decimal Field.
 data DecimalField = DecimalField {
@@ -754,7 +769,7 @@ data OpContext = OpContext {
     } deriving (Show, Data, Typeable)
 
 instance Arbitrary OpContext where
-    arbitrary = OpContext <$> arbitrary <*> arbitrary <*> (return Nothing) -- arbitrary
+    arbitrary = OpContext <$> arbitrary <*> arbitrary <*>  arbitrary
 
 -- |Dictionary attribute. Three predefined dictionaries are "template", "type" 
 -- and "global".
@@ -783,7 +798,7 @@ data InitialValueAttr = InitialValueAttr {
     } deriving (Show, Data, Typeable)
 
 instance Arbitrary InitialValueAttr where
-    arbitrary = InitialValueAttr <$> arbitrary
+    arbitrary = InitialValueAttr <$> show <$> (arbitrary :: Gen Word32)
 
 -- |A full name in a template is given by a namespace URI and localname. For 
 -- application types, fields and operator keys the namespace URI is given by 
