@@ -558,11 +558,11 @@ instance Arbitrary Field where
                 Grp <$> arbitrary] `suchThat` wellFormed
 
 changeInitValue :: (Data a, Show b) => b -> a -> a
-changeInitValue i = everywhereBut exclude (mkT (h i))
+changeInitValue i = everywhereBut isExcluded (mkT (h i))
     where
             h iv (InitialValueAttr _) = (InitialValueAttr . show) iv 
-            exclude :: (Data c) => c -> Bool
-            exclude x = (False `mkQ` isSeqLength) x || (False `mkQ` isByteVectorLength) x || (False `mkQ` isDecimalMantissaExp) x
+            isExcluded :: (Data c) => c -> Bool
+            isExcluded x = (False `mkQ` isSeqLength) x || (False `mkQ` isByteVectorLength) x || (False `mkQ` isDecimalMantissaExp) x
             isSeqLength (Length _ _) = True
             isByteVectorLength ( ByteVectorLength _) = True
             isDecimalMantissaExp (DecimalField _ _ (Just (Left _))) = False
