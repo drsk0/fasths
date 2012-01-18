@@ -131,8 +131,38 @@ arbitraryValueForDecField (DecimalField _ (Just Optional) (Just (Left (Increment
     = throw $ S2 "Increment operator is applicable only to integer fields."
 arbitraryValueForDecField (DecimalField _ (Just Optional) (Just (Left (Tail _)))) 
     = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields." 
-arbitraryValueForDecField (DecimalField _ _ (Just (Right _ ))) = Just <$> arbitrary
--- TODO: go through all possible cases in the Right situation? Annoying ...
+arbitraryValueForDecField (DecimalField fname (Just Optional) (Just (Right (DecFieldOp maybe_exOp maybe_maOp)))) = 
+    let fname' = uniqueFName fname "e"
+        fname'' = uniqueFName fname "m"
+    in
+    do 
+        e <- arbitraryValueForIntField (Int32Field (FieldInstrContent fname' (Just Optional) maybe_exOp))
+        m <- arbitraryValueForIntField (Int64Field (FieldInstrContent fname'' (Just Mandatory) maybe_maOp))
+        case (e, m) of
+            (Nothing, Nothing) -> return Nothing
+            ((Just e'), (Just m')) -> return (Just (e', m'))
+            ((Just e'), Nothing) -> do 
+                m' <- arbitrary
+                return (Just (e', m'))
+            (Nothing, Just m') -> do
+                e' <- arbitrary
+                return (Just (e', m'))
+arbitraryValueForDecField (DecimalField fname (Just Mandatory) (Just (Right (DecFieldOp maybe_exOp maybe_maOp)))) = 
+    let fname' = uniqueFName fname "e"
+        fname'' = uniqueFName fname "m"
+    in
+    do 
+        e <- arbitraryValueForIntField (Int32Field (FieldInstrContent fname' (Just Mandatory) maybe_exOp))
+        m <- arbitraryValueForIntField (Int64Field (FieldInstrContent fname'' (Just Mandatory) maybe_maOp))
+        case (e, m) of
+            (Nothing, Nothing) -> return Nothing
+            ((Just e'), (Just m')) -> return (Just (e', m'))
+            ((Just e'), Nothing) -> do 
+                m' <- arbitrary
+                return (Just (e', m'))
+            (Nothing, Just m') -> do
+                e' <- arbitrary
+                return (Just (e', m'))
 arbitraryValueForDecField _ = arbitrary
 
 arbitraryValueForAsciiField :: AsciiStringField -> Gen (Maybe AsciiString)
