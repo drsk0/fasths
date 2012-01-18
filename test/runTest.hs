@@ -20,8 +20,16 @@ instance Arbitrary SimpleTemplate where
                     ns <- arbitrary
                     d <- arbitrary
                     t <- arbitrary
-                    i <- arbitrary
+                    i <- arbitrary `suchThat` (not . (\x -> isSequence x || isGroup x))
                     return $ ST $ Template  n ns d t [i]
+
+isSequence :: Instruction -> Bool
+isSequence (Instruction (Seq _)) = True
+isSequence _ = False
+
+isGroup :: Instruction -> Bool
+isGroup (Instruction (Grp _)) = True
+isGroup _ = False
 
 newtype SimpleTemplateMsgPair = STMP (Template, [(NsName, Maybe Value)]) deriving Show
 
@@ -32,6 +40,8 @@ instance Arbitrary SimpleTemplateMsgPair where
                     return $ STMP (t, msgs)
 
 newtype Bit7String = B7S String deriving Show
+unwrapB7S :: Bit7String -> String
+unwrapB7S (B7S s) = s
 
 instance Arbitrary Bit7String where
     arbitrary = fmap (B7S . unpack . B.map (\w -> clearBit w 7) . pack) (arbitrary :: Gen String)
@@ -121,21 +131,23 @@ arbitraryValueForDecField (DecimalField _ (Just Optional) (Just (Left (Increment
     = throw $ S2 "Increment operator is applicable only to integer fields."
 arbitraryValueForDecField (DecimalField _ (Just Optional) (Just (Left (Tail _)))) 
     = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields." 
+arbitraryValueForDecField (DecimalField _ _ (Just (Right _ ))) = Just <$> arbitrary
+-- TODO: go through all possible cases in the Right situation? Annoying ...
 arbitraryValueForDecField _ = arbitrary
 
 arbitraryValueForAsciiField :: AsciiStringField -> Gen (Maybe AsciiString)
 arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent fname Nothing maybe_op))
     = arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent fname (Just Mandatory) maybe_op))
-arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) Nothing)) = fmap Just arbitrary
+arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) Nothing)) = fmap (Just . unwrapB7S) arbitrary
 arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Constant iv)))) = return $ Just $ ivToPrimitive iv
 arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))))
     = throw $ S5 "No initial value given for mandatory default operator."
-arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Default (Just _))))) = fmap Just arbitrary
-arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Copy _)))) = fmap Just arbitrary
+arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Default (Just _))))) = fmap (Just . unwrapB7S) arbitrary
+arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Copy _)))) = fmap (Just . unwrapB7S) arbitrary
 arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Increment _))))
     = throw $ S2 "Increment operator is only applicable to integer fields." 
-arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Delta _)))) = fmap Just arbitrary
-arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Tail _)))) = fmap Just arbitrary
+arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Delta _)))) = fmap (Just . unwrapB7S) arbitrary
+arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Tail _)))) = fmap (Just . unwrapB7S) arbitrary
 arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Constant iv))))  = oneof [return $ Just $ ivToPrimitive iv, return Nothing]
 arbitraryValueForAsciiField _ = arbitrary
 
