@@ -111,7 +111,7 @@ import Control.Monad.State
 import Control.Exception
 import Data.Typeable
 import Data.Data
-import Data.Generics.Schemes (everything, gcount, everywhereBut)
+import Data.Generics.Schemes (gcount, everywhereBut)
 import Data.Generics.Aliases (mkQ, mkT)
 import Test.QuickCheck hiding ((.&.))
 
@@ -588,6 +588,7 @@ wellFormed (AsciiStrField (AsciiStringField (FieldInstrContent fname Nothing may
 wellFormed (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))))) = False
 wellFormed (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Increment _))))) = False
 wellFormed (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Increment _))))) = False
+wellFormed (ByteVecField (ByteVectorField (FieldInstrContent fname Nothing maybeOp) maybeLe)) = wellFormed (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Mandatory) maybeOp) maybeLe))
 wellFormed (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))) _)) = False
 wellFormed (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Increment _))) _)) = False
 wellFormed (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Increment _))) _)) = False
