@@ -555,7 +555,7 @@ instance Arbitrary Field where
                 UnicodeStrField <$> (changeInitValue <$> (arbitrary :: Gen String) <*> arbitrary),
                 ByteVecField <$> (changeInitValue <$> (arbitrary :: Gen B.ByteString) <*> arbitrary), 
                 Seq <$> arbitrary, 
-                Grp <$> arbitrary] `suchThat` wellFormed
+                Grp <$> arbitrary] `suchThat` isWellFormed
 
 changeInitValue :: (Data a, Show b) => b -> a -> a
 changeInitValue i = everywhereBut isExcluded (mkT (h i))
@@ -569,44 +569,44 @@ changeInitValue i = everywhereBut isExcluded (mkT (h i))
             isDecimalMantissaExp (DecimalField _ _ Nothing) = False
             isDecimalMantissaExp (DecimalField _ _ (Just (Right _))) = True
 
-wellFormed :: Field -> Bool
-wellFormed (IntField (Int32Field (FieldInstrContent fname maybePr maybeOp))) = wellFormedIntField $ FieldInstrContent fname maybePr maybeOp
-wellFormed (IntField (Int64Field (FieldInstrContent fname maybePr maybeOp))) = wellFormedIntField $ FieldInstrContent fname maybePr maybeOp
-wellFormed (IntField (UInt32Field (FieldInstrContent fname maybePr maybeOp))) = wellFormedIntField $ FieldInstrContent fname maybePr maybeOp
-wellFormed (IntField (UInt64Field (FieldInstrContent fname maybePr maybeOp))) = wellFormedIntField $ FieldInstrContent fname maybePr maybeOp
-wellFormed (DecField (DecimalField fname Nothing eitherOp)) = wellFormed $ DecField $ DecimalField fname (Just Mandatory) eitherOp
-wellFormed (DecField (DecimalField _ (Just Mandatory) (Just (Left (Default Nothing))))) = False
-wellFormed (DecField (DecimalField _ (Just Mandatory) (Just (Left (Increment _))))) =  False
-wellFormed (DecField (DecimalField _ (Just Mandatory) (Just (Left (Tail _))))) = False
-wellFormed (DecField (DecimalField _ (Just Optional) (Just (Left (Increment _))))) = False
-wellFormed (DecField (DecimalField _ (Just Optional) (Just (Left (Tail _))))) = False  
-wellFormed (DecField (DecimalField fname (Just Optional) (Just (Right (DecFieldOp maybe_opE maybe_opM))))) = wellFormed (IntField (Int32Field (FieldInstrContent (uniqueFName fname "e") (Just Optional) maybe_opE))) 
-    && wellFormed (IntField (Int64Field (FieldInstrContent (uniqueFName fname "m") (Just Mandatory) maybe_opM)))
-wellFormed (DecField (DecimalField fname (Just Mandatory) (Just (Right (DecFieldOp maybe_opE maybe_opM))))) = wellFormed (IntField (Int32Field (FieldInstrContent (uniqueFName fname "e") (Just Mandatory) maybe_opE)))
-    && wellFormed (IntField (Int64Field (FieldInstrContent (uniqueFName fname "m") (Just Mandatory) maybe_opM)))
-wellFormed (AsciiStrField (AsciiStringField (FieldInstrContent fname Nothing maybeOp))) = wellFormed (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Mandatory) maybeOp)))
-wellFormed (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))))) = False
-wellFormed (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Increment _))))) = False
-wellFormed (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Increment _))))) = False
-wellFormed (ByteVecField (ByteVectorField (FieldInstrContent fname Nothing maybeOp) maybeLe)) = wellFormed (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Mandatory) maybeOp) maybeLe))
-wellFormed (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))) _)) = False
-wellFormed (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Increment _))) _)) = False
-wellFormed (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Increment _))) _)) = False
-wellFormed (UnicodeStrField (UnicodeStringField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)) = wellFormed (ByteVecField (ByteVectorField (FieldInstrContent fname maybe_presence maybe_op) maybe_length))
-wellFormed (Seq s) = and $ map h (sInstructions s)
+isWellFormed :: Field -> Bool
+isWellFormed (IntField (Int32Field (FieldInstrContent fname maybePr maybeOp))) = isWellFormedIntField $ FieldInstrContent fname maybePr maybeOp
+isWellFormed (IntField (Int64Field (FieldInstrContent fname maybePr maybeOp))) = isWellFormedIntField $ FieldInstrContent fname maybePr maybeOp
+isWellFormed (IntField (UInt32Field (FieldInstrContent fname maybePr maybeOp))) = isWellFormedIntField $ FieldInstrContent fname maybePr maybeOp
+isWellFormed (IntField (UInt64Field (FieldInstrContent fname maybePr maybeOp))) = isWellFormedIntField $ FieldInstrContent fname maybePr maybeOp
+isWellFormed (DecField (DecimalField fname Nothing eitherOp)) = isWellFormed $ DecField $ DecimalField fname (Just Mandatory) eitherOp
+isWellFormed (DecField (DecimalField _ (Just Mandatory) (Just (Left (Default Nothing))))) = False
+isWellFormed (DecField (DecimalField _ (Just Mandatory) (Just (Left (Increment _))))) =  False
+isWellFormed (DecField (DecimalField _ (Just Mandatory) (Just (Left (Tail _))))) = False
+isWellFormed (DecField (DecimalField _ (Just Optional) (Just (Left (Increment _))))) = False
+isWellFormed (DecField (DecimalField _ (Just Optional) (Just (Left (Tail _))))) = False  
+isWellFormed (DecField (DecimalField fname (Just Optional) (Just (Right (DecFieldOp maybe_opE maybe_opM))))) = isWellFormed (IntField (Int32Field (FieldInstrContent (uniqueFName fname "e") (Just Optional) maybe_opE))) 
+    && isWellFormed (IntField (Int64Field (FieldInstrContent (uniqueFName fname "m") (Just Mandatory) maybe_opM)))
+isWellFormed (DecField (DecimalField fname (Just Mandatory) (Just (Right (DecFieldOp maybe_opE maybe_opM))))) = isWellFormed (IntField (Int32Field (FieldInstrContent (uniqueFName fname "e") (Just Mandatory) maybe_opE)))
+    && isWellFormed (IntField (Int64Field (FieldInstrContent (uniqueFName fname "m") (Just Mandatory) maybe_opM)))
+isWellFormed (AsciiStrField (AsciiStringField (FieldInstrContent fname Nothing maybeOp))) = isWellFormed (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Mandatory) maybeOp)))
+isWellFormed (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))))) = False
+isWellFormed (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Increment _))))) = False
+isWellFormed (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Increment _))))) = False
+isWellFormed (ByteVecField (ByteVectorField (FieldInstrContent fname Nothing maybeOp) maybeLe)) = isWellFormed (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Mandatory) maybeOp) maybeLe))
+isWellFormed (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))) _)) = False
+isWellFormed (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Increment _))) _)) = False
+isWellFormed (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Increment _))) _)) = False
+isWellFormed (UnicodeStrField (UnicodeStringField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)) = isWellFormed (ByteVecField (ByteVectorField (FieldInstrContent fname maybe_presence maybe_op) maybe_length))
+isWellFormed (Seq s) = and $ map h (sInstructions s)
     where   h (TemplateReference _) = True
-            h (Instruction f) = wellFormed f
-wellFormed (Grp g) = and $ map h (gInstructions g)
+            h (Instruction f) = isWellFormed f
+isWellFormed (Grp g) = and $ map h (gInstructions g)
     where   h (TemplateReference _) = True
-            h (Instruction f) = wellFormed f
-wellFormed _ = True
+            h (Instruction f) = isWellFormed f
+isWellFormed _ = True
 
-wellFormedIntField :: FieldInstrContent -> Bool
-wellFormedIntField (FieldInstrContent fname Nothing maybeOp) = wellFormedIntField $ FieldInstrContent fname (Just Mandatory) maybeOp
-wellFormedIntField (FieldInstrContent _ (Just Mandatory) (Just (Tail _))) = False
-wellFormedIntField (FieldInstrContent _ (Just Optional) (Just (Tail _))) = False
-wellFormedIntField (FieldInstrContent _ (Just Mandatory)(Just (Default Nothing))) = False
-wellFormedIntField _ = True
+isWellFormedIntField :: FieldInstrContent -> Bool
+isWellFormedIntField (FieldInstrContent fname Nothing maybeOp) = isWellFormedIntField $ FieldInstrContent fname (Just Mandatory) maybeOp
+isWellFormedIntField (FieldInstrContent _ (Just Mandatory) (Just (Tail _))) = False
+isWellFormedIntField (FieldInstrContent _ (Just Optional) (Just (Tail _))) = False
+isWellFormedIntField (FieldInstrContent _ (Just Mandatory)(Just (Default Nothing))) = False
+isWellFormedIntField _ = True
 
 -- |Integer Fields.
 data IntegerField = Int32Field FieldInstrContent
@@ -667,14 +667,14 @@ data Sequence = Sequence {
 
 instance Arbitrary Sequence where
     arbitrary = let 
-                    wellFormedLength n p (Just l) =  wellFormedIntField $ FieldInstrContent (uniqueFName n "l") p (lFieldOp l)
-                    wellFormedLength _ _ Nothing = True 
+                    isWellFormedLength n p (Just l) =  isWellFormedIntField $ FieldInstrContent (uniqueFName n "l") p (lFieldOp l)
+                    isWellFormedLength _ _ Nothing = True 
                 in do
                     n <- arbitrary
                     p <- arbitrary
                     d <- arbitrary
                     tr <- arbitrary
-                    l <- arbitrary `suchThat` (wellFormedLength n p)
+                    l <- arbitrary `suchThat` (isWellFormedLength n p)
                     is <- listOf arbitrary
                     return $ Sequence n p d tr l is
 
