@@ -85,14 +85,15 @@ prop_fromValue_dot_toValue_is_ID,
 prop_delta_dot_delta__is_ID,
 prop_ftail_dot_ftail__is_ID,
 prop_rmPreamble_dot_addPreamble_is_ID,
-prop_bsToPm_dot_pmToBs_is_ID
+prop_bsToPm_dot_pmToBs_is_ID,
+prop_ivToPrimitive_dot_primitiveToIv_is_ID
 )
 
 where
 
 import Prelude hiding (exponent, dropWhile, reverse, zip)
-import Data.ListLike (ListLike, dropWhile, genericDrop, genericTake, genericLength, reverse, zip)
-import Data.Char (digitToInt)
+import Data.ListLike (ListLike, dropWhile, genericDrop, genericTake, genericLength, genericReplicate, genericSplitAt, reverse, zip)
+import Data.Char (digitToInt, intToDigit)
 import Data.Maybe (catMaybes)
 import Data.List (groupBy)
 import Data.Bits
@@ -208,6 +209,7 @@ class Primitive a where
     fromValue        :: Value -> a
     defaultBaseValue :: a
     ivToPrimitive    :: InitialValueAttr -> a
+    primitiveToIv    :: a -> InitialValueAttr
     delta            :: a -> Delta a -> a
     delta_           :: a -> a -> Delta a
     ftail            :: a -> a -> a
@@ -244,6 +246,9 @@ prop_ftail_dot_ftail__is_ID _ = True
 prop_rmPreamble_dot_addPreamble_is_ID :: AsciiString -> Bool
 prop_rmPreamble_dot_addPreamble_is_ID s = (rmPreamble . addPreamble) s == s && (rmPreamble' . addPreamble') s == s
 
+prop_ivToPrimitive_dot_primitiveToIv_is_ID :: (Primitive a, Eq a) => a -> Bool
+prop_ivToPrimitive_dot_primitiveToIv_is_ID x = ( f . ivToPrimitive . f) x == f x where f = primitiveToIv
+
 -- |The values in a messages.
 data Value = I32 Int32
            | UI32 Word32
@@ -272,6 +277,7 @@ instance Primitive Int32 where
     fromValue _ = throw $ D4 "Type mismatch."
     defaultBaseValue = 0 
     ivToPrimitive = read . trimWhiteSpace . text
+    primitiveToIv = InitialValueAttr . show
     delta i (Di32 i') = i + i'
     delta_ i1 i2 = Di32 $ i1 - i2
     ftail = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
@@ -296,6 +302,7 @@ instance Primitive Word32 where
     fromValue _ = throw $ OtherException "Type mismatch."
     defaultBaseValue = 0
     ivToPrimitive = read . trimWhiteSpace . text
+    primitiveToIv = InitialValueAttr . show
     delta w (Dw32 i) = fromIntegral (fromIntegral w + i)
     delta_ w1 w2 = Dw32 (fromIntegral w1 - fromIntegral w2)
     ftail = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
@@ -320,6 +327,7 @@ instance Primitive Int64 where
     fromValue _ = throw $ OtherException "Type mismatch."
     defaultBaseValue = 0
     ivToPrimitive = read . trimWhiteSpace . text
+    primitiveToIv = InitialValueAttr . show
     delta i (Di64 i')= i + i'
     delta_ i1 i2 = Di64 (i1 - i2)
     ftail = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
@@ -344,6 +352,7 @@ instance Primitive Word64 where
     fromValue _ = throw $ OtherException "Type mismatch."
     defaultBaseValue = 0
     ivToPrimitive = read . trimWhiteSpace . text
+    primitiveToIv = InitialValueAttr . show
     delta w (Dw64 i) = fromIntegral (fromIntegral w + i)
     delta_ w1 w2 = Dw64 (fromIntegral w1 - fromIntegral w2)
     ftail = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields." 
@@ -368,6 +377,7 @@ instance Primitive AsciiString where
     fromValue _ = throw $ OtherException "Type mismatch."
     defaultBaseValue = ""
     ivToPrimitive = text
+    primitiveToIv = InitialValueAttr
     delta s1 (Dascii (l, s2)) | l < 0 = s2 ++ s1' where s1' = genericDrop (-(l + 1)) s1
     delta s1 (Dascii (l, s2)) | l >= 0 = s1' ++ s2 where s1' = genericTake (genericLength s1 - l) s1
     delta _ _ = throw $ D4 "Type mismatch."
@@ -403,14 +413,23 @@ instance Primitive (Int32, Int64) where
     fromValue (Dec d) = (e, -1 * m) where (e, m) = fromValue (Dec (-1 * d))
     fromValue _ = throw $ D4 "Type mismatch."
     defaultBaseValue = (0, 0)
-    ivToPrimitive (InitialValueAttr s) = let    s' = trimWhiteSpace s 
-                                                mant = read (filter (/= '.') s')
+    ivToPrimitive (InitialValueAttr s) = let    s' = (reverse . dropWhile (=='0') . reverse . trimWhiteSpace) s 
+                                                mant = (read . filter (/= '.')) s'
                                                 expo = h s'
                                                 h ('-':xs) = h xs
-                                                h ('.':xs) = -1 * toEnum (length (takeWhile (=='0') xs) + 1)
+                                                h ('.' : []) = 0
+                                                h ('.':xs) = -1 * fromIntegral (length xs)
                                                 h ('0':'.':xs) = h ('.':xs)
-                                                h xs = toEnum (length (takeWhile (/= '.') xs))
-                                         in (mant, expo)
+                                                h (x:xs) = h xs
+                                                h [] = 0
+                                         in (expo, mant)
+    primitiveToIv (_, 0) = InitialValueAttr "0.0"
+    primitiveToIv (e, m) | e >= 0 = InitialValueAttr $ show m ++ genericReplicate e '0' ++ ".0"
+    primitiveToIv (e, m) | e < 0 && m >= 0 = InitialValueAttr $ (fst p_m) ++ "." ++ (genericReplicate (-1 * e - l_m) '0') ++ (snd p_m)
+                                                where   p_m = genericSplitAt (l_m - (-1 * e)) s_m 
+                                                        s_m = (reverse . dropWhile (=='0') . reverse . show) m   
+                                                        l_m = genericLength s_m
+    primitiveToIv (e, m) | e < 0 && m < 0 = InitialValueAttr $ "-" ++ (text $ primitiveToIv (e, -1 * m))
     delta (e1, m1) (Ddec (e2, m2)) = (e1 + e2, m1 + m2)
     delta_ (e2, m2) (e1, m1) = Ddec (e2 - e1, m2 - m1)
     ftail = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
@@ -437,7 +456,13 @@ instance Primitive B.ByteString where
     fromValue (B bs) = bs
     fromValue _ = throw $ D4 "Type mismatch."
     defaultBaseValue = B.empty
-    ivToPrimitive iv = B.pack (map (toEnum . digitToInt) (filter whiteSpace (text iv)))
+    ivToPrimitive iv = B.pack $ sumPairs numbers where  numbers = (map (fromIntegral . digitToInt) (filter (not . whiteSpace) (text iv)))
+                                                        sumPairs (x : y : xs) = (16* x + y) : sumPairs xs
+                                                        sumPairs (x : []) = x : []
+                                                        sumPairs [] = []
+    primitiveToIv bs = InitialValueAttr (concat' (map ((flip showHex "")) (B.unpack bs))) where concat' ([x] : ys) = ['0', x] ++ (concat' ys)
+                                                                                                concat' (x : ys) = x ++ concat' ys
+                                                                                                concat' ([]) = []
     delta bv1 (Dbs (l, bv2)) | l < 0 = bv2 `B.append` bv'' where bv'' = genericDrop (-(l + 1)) bv1 
     delta bv1 (Dbs (l, bv2)) | l >= 0 = bv'' `B.append` bv2 where bv'' = genericTake (genericLength bv1 - l) bv1
     delta _ _ = throw $ D4 "Type mismatch."
@@ -550,17 +575,17 @@ data Field = IntField IntegerField
 
 instance Arbitrary Field where
     arbitrary = oneof [IntField <$> arbitrary, 
-                DecField <$> (changeInitValue <$> (arbitrary :: Gen Double) <*> arbitrary),
-                AsciiStrField <$> (changeInitValue <$> (arbitrary :: Gen String) <*> arbitrary),
-                UnicodeStrField <$> (changeInitValue <$> (arbitrary :: Gen String) <*> arbitrary),
+                DecField <$> (changeInitValue <$> (arbitrary :: Gen (Int32, Int64)) <*> arbitrary),
+                AsciiStrField <$> (changeInitValue <$> (arbitrary :: Gen AsciiString) <*> arbitrary),
+                UnicodeStrField <$> (changeInitValue <$> (arbitrary :: Gen UnicodeString) <*> arbitrary),
                 ByteVecField <$> (changeInitValue <$> (arbitrary :: Gen B.ByteString) <*> arbitrary), 
                 Seq <$> arbitrary, 
                 Grp <$> arbitrary] `suchThat` isWellFormed
 
-changeInitValue :: (Data a, Show b) => b -> a -> a
+changeInitValue :: (Data a, Primitive b) => b -> a -> a
 changeInitValue i = everywhereBut isExcluded (mkT (h i))
     where
-            h iv (InitialValueAttr _) = (InitialValueAttr . show) iv 
+            h iv (InitialValueAttr _) = primitiveToIv iv 
             isExcluded :: (Data c) => c -> Bool
             isExcluded x = (False `mkQ` isSeqLength) x || (False `mkQ` isByteVectorLength) x || (False `mkQ` isDecimalMantissaExp) x
             isSeqLength (Length _ _) = True
@@ -796,7 +821,7 @@ instance Arbitrary KeyAttr where
 -- be converted to the type of the field in question.
 data InitialValueAttr = InitialValueAttr {
     text :: UnicodeString
-    } deriving (Show, Data, Typeable)
+    } deriving (Show, Eq, Data, Typeable)
 
 instance Arbitrary InitialValueAttr where
     arbitrary = InitialValueAttr <$> show <$> (arbitrary :: Gen Word32)
