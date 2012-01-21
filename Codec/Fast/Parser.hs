@@ -589,7 +589,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Del
         in
             do 
                 (Dascii d) <- l2 decodeD
-                str <- flip delta (Dascii (fst d, rmPreamble' (snd d))) <$> (baseValue <$> lift (prevValue fname oc)) 
+                str <- flip delta (Dascii (minusOne $ fst d, rmPreamble' (snd d))) <$> (baseValue <$> lift (prevValue fname oc)) 
                 lift $ updatePrevValue fname oc (Assigned (witnessType str)) >> return (Just str))
 
 -- pm: Yes, Nullable: Yes

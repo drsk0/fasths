@@ -579,7 +579,7 @@ asciiStrF2Cop (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (D
                                         where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
                                                 h (OpContext _ _ Nothing) = defaultBaseValue
                                     baseValue (Empty) = throw $ D6 "previous value in a delta operator can not be empty."
-                                    addPr (Dascii (l, str)) = Dascii (l, addPreamble' str)
+                                    addPr (Dascii (l, str)) = Dascii (plusOne l, addPreamble' str)
                                 in
                                     do 
                                         p <- lift $ prevValue fname oc
