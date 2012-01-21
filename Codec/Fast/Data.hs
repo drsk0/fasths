@@ -968,7 +968,9 @@ newtype Token = Token String deriving (Eq, Ord, Show, Arbitrary, Data, Typeable)
 
 -- |Get a Stopbit encoded entity.
 anySBEEntity :: A.Parser B.ByteString
-anySBEEntity = takeTill' stopBitSet
+anySBEEntity = do 
+                    bs <- takeTill' stopBitSet
+                    return (B.init bs `B.append` B.singleton (clearBit (B.last bs) 7))
 
 _anySBEEntity :: Coparser B.ByteString
 _anySBEEntity bs | B.null bs = BU.empty
