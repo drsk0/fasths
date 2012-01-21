@@ -359,11 +359,11 @@ decF2P (DecimalField _ (Just Optional) (Just (Left (Constant iv))))
 
 -- pm: Yes, Nullable: Yes
 decF2P (DecimalField _ (Just Optional) (Just (Left (Default Nothing)))) 
-    = ifPresentElse (nULL <|> (Just <$> l2 decodeP)) (return Nothing)
+    = ifPresentElse (nULL <|> (Just <$> l2 decodeP0)) (return Nothing)
 
 -- pm: Yes, Nullable: Yes
 decF2P (DecimalField _ (Just Optional) (Just (Left (Default (Just iv))))) 
-    = ifPresentElse (nULL <|> (Just <$> l2 decodeP)) (return (Just $ ivToPrimitive iv))
+    = ifPresentElse (nULL <|> (Just <$> l2 decodeP0)) (return (Just $ ivToPrimitive iv))
 
 -- pm: Yes, Nullable: Yes
 decF2P (DecimalField fname (Just Optional) (Just (Left (Copy oc)))) 
@@ -371,7 +371,7 @@ decF2P (DecimalField fname (Just Optional) (Just (Left (Copy oc))))
     (
     nULL *> lift (updatePrevValue fname oc Empty >> return Nothing)
     <|> do
-            d <- l2 decodeP
+            d <- l2 decodeP0
             lift $ updatePrevValue fname oc (Assigned (witnessType d))
             return (Just d)
     )
@@ -401,7 +401,7 @@ decF2P (DecimalField fname (Just Optional) (Just (Left (Delta oc))))
 
         in
             do 
-                d <- l2 decodeD
+                d <- l2 decodeD0
                 d' <- flip delta d <$> (baseValue <$> lift (prevValue fname oc))
                 lift $ updatePrevValue fname oc (Assigned (witnessType d')) >> return (Just d')
 
@@ -634,7 +634,7 @@ bytevecF2P (FieldInstrContent _ (Just Mandatory) Nothing ) _
 bytevecF2P (FieldInstrContent _ (Just Optional) Nothing ) _ 
     = nULL
     <|> do
-        bv <- l2 decodeP
+        bv <- l2 decodeP0
         return $ Just bv
 
 -- pm: No, Nullable: No
@@ -662,10 +662,10 @@ bytevecF2P (FieldInstrContent _ (Just Mandatory) (Just(Default (Just iv)))) _
 
 -- pm: Yes, Nullable: Yes
 bytevecF2P (FieldInstrContent _ (Just Optional) (Just(Default Nothing))) _ 
-    = ifPresentElse (nULL <|> (Just <$> l2 decodeP)) (return Nothing)
+    = ifPresentElse (nULL <|> (Just <$> l2 decodeP0)) (return Nothing)
 -- pm: Yes, Nullable: Yes
 bytevecF2P (FieldInstrContent _ (Just Optional) (Just(Default (Just iv)))) _ 
-    = ifPresentElse (nULL <|> Just <$> l2 decodeP) (return (Just (ivToPrimitive iv)))
+    = ifPresentElse (nULL <|> Just <$> l2 decodeP0) (return (Just (ivToPrimitive iv)))
 -- pm: Yes, Nullable: No
 bytevecF2P (FieldInstrContent fname (Just Mandatory) (Just(Copy oc))) _ 
     = ifPresentElse   
@@ -693,7 +693,7 @@ bytevecF2P (FieldInstrContent fname (Just Optional) (Just(Copy oc))) _
     (
     nULL *> lift (updatePrevValue fname oc Empty >> return Nothing)
     <|> do
-            bv <- l2 decodeP
+            bv <- l2 decodeP0
             lift $ updatePrevValue fname oc (Assigned (witnessType bv))
             return (Just bv)
     )
@@ -737,7 +737,7 @@ bytevecF2P (FieldInstrContent fname (Just Optional) (Just(Delta oc))) _
                 baseValue (Empty) = throw $ D6 "previous value in a delta operator can not be empty."
         in
             do 
-                bv <- l2 decodeD
+                bv <- l2 decodeD0
                 bv' <- flip delta bv <$> (baseValue <$> lift (prevValue fname oc))
                 lift $ updatePrevValue fname oc (Assigned (witnessType bv')) >> return (Just bv'))
 
@@ -757,7 +757,7 @@ bytevecF2P (FieldInstrContent fname (Just Mandatory) (Just(Tail oc))) _
     in
         do
             pva <- lift $ prevValue fname oc
-            t <- l2 decodeT
+            t <- l2 decodeT0
             return (Just(baseValue pva `ftail` t))
     )
     (
@@ -788,7 +788,7 @@ bytevecF2P (FieldInstrContent fname (Just Optional) (Just(Tail oc))) _
         in
             do
                 bv <- lift $ prevValue fname oc >>= baseValue
-                t <- l2 decodeT
+                t <- l2 decodeT0
                 return (Just (bv `ftail` t))
     )
     (
