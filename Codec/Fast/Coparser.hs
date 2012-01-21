@@ -535,7 +535,7 @@ asciiStrF2Cop (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (C
 
 -- pm: Yes, Nullable: Yes
 asciiStrF2Cop (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Default Nothing))))
-    = cp where  cp (Just s) = (lift $ setPMap True) >> (lift $ return $ encodeP $ addPreamble s)
+    = cp where  cp (Just s) = (lift $ setPMap True) >> (lift $ return $ encodeP $ addPreamble' s)
                 cp (Nothing) = (lift $ setPMap False) >> (lift $ return BU.empty) 
 -- pm: Yes, Nullable: Yes
 asciiStrF2Cop (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Default (Just iv)))))
