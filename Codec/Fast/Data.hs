@@ -91,8 +91,8 @@ prop_ivToPrimitive_dot_primitiveToIv_is_ID
 
 where
 
-import Prelude hiding (exponent, dropWhile, reverse, zip)
-import Data.ListLike (ListLike, dropWhile, genericDrop, genericTake, genericLength, genericReplicate, genericSplitAt, reverse, zip)
+import Prelude hiding (exponent)
+import qualified Data.ListLike as LL 
 import Data.Char (digitToInt)
 import Data.Maybe (catMaybes)
 import Data.List (groupBy)
@@ -239,8 +239,8 @@ prop_fromValue_dot_toValue_is_ID x =  (f . fromValue . f) x == f x where f = toV
 prop_delta_dot_delta__is_ID :: (Primitive a, Eq a) => (a, a) -> Bool
 prop_delta_dot_delta__is_ID (x, y) = delta y (delta_ x y) == x
 
-prop_ftail_dot_ftail__is_ID :: (ListLike a c, Primitive a, Eq a) => (a, a) -> Bool
-prop_ftail_dot_ftail__is_ID (x, y) | (genericLength x :: Word32) >= genericLength y = ftail y (ftail_ x y) == x
+prop_ftail_dot_ftail__is_ID :: (LL.ListLike a c, Primitive a, Eq a) => (a, a) -> Bool
+prop_ftail_dot_ftail__is_ID (x, y) | (LL.genericLength x :: Word32) >= LL.genericLength y = ftail y (ftail_ x y) == x
 prop_ftail_dot_ftail__is_ID _ = True
 
 prop_rmPreamble_dot_addPreamble_is_ID :: AsciiString -> Bool
@@ -263,7 +263,20 @@ data Value = I32 Int32
            deriving (Show, Eq)
 
 -- |Some basic types, renamed for readability.
-newtype UnicodeString = UNI String deriving (Show, Eq, Data, Typeable)
+newtype UnicodeString = UNI String deriving (Show, Eq, Monoid, Data, Typeable)
+unwrapUNI :: UnicodeString -> String
+unwrapUNI (UNI s) = s
+
+instance LL.FoldableLL UnicodeString Char where
+    foldl s i uni = LL.foldl s i (unwrapUNI uni)
+    foldr s i uni = LL.foldr s i (unwrapUNI uni)
+
+instance LL.ListLike UnicodeString Char where
+    singleton = UNI . LL.singleton
+    head = LL.head . unwrapUNI
+    tail = UNI . LL.tail . unwrapUNI
+    genericLength = LL.genericLength . unwrapUNI
+
 type AsciiString = String
 type Decimal = (Int32, Int64)
 
@@ -378,18 +391,18 @@ instance Primitive AsciiString where
     defaultBaseValue = ""
     ivToPrimitive = text
     primitiveToIv = InitialValueAttr
-    delta s1 (Dascii (l, s2)) | l < 0 = s2 ++ s1' where s1' = genericDrop (-(l + 1)) s1
-    delta s1 (Dascii (l, s2)) | l >= 0 = s1' ++ s2 where s1' = genericTake (genericLength s1 - l) s1
+    delta s1 (Dascii (l, s2)) | l < 0 = s2 ++ s1' where s1' = LL.genericDrop (-(l + 1)) s1
+    delta s1 (Dascii (l, s2)) | l >= 0 = s1' ++ s2 where s1' = LL.genericTake (LL.genericLength s1 - l) s1
     delta _ _ = throw $ D4 "Type mismatch."
-    delta_ s1 s2 =  if (genericLength l1 :: Int32) >= genericLength l2 
-                    then Dascii (genericLength s2 - genericLength l1, genericDrop (genericLength l1 :: Int32) s1)
-                    else Dascii (genericLength l2 - genericLength s2 - 1, genericTake ((genericLength s1 - genericLength l2) :: Int32) s1)
-                    where   l1 = map fst $ takeWhile (uncurry (==) ) (zip s1 s2)
-                            l2 = map fst $ takeWhile (uncurry (==)) (zip (reverse s1) (reverse s2))
+    delta_ s1 s2 =  if (LL.genericLength l1 :: Int32) >= LL.genericLength l2 
+                    then Dascii (LL.genericLength s2 - LL.genericLength l1, LL.genericDrop (LL.genericLength l1 :: Int32) s1)
+                    else Dascii (LL.genericLength l2 - LL.genericLength s2 - 1, LL.genericTake ((LL.genericLength s1 - LL.genericLength l2) :: Int32) s1)
+                    where   l1 = map fst $ takeWhile (uncurry (==) ) (LL.zip s1 s2)
+                            l2 = map fst $ takeWhile (uncurry (==)) (LL.zip (LL.reverse s1) (LL.reverse s2))
                             
     ftail s1 s2 = take (length s1 - length s2) s1 ++ s2
-    ftail_ s1 s2 | (genericLength s1 :: Word32) > genericLength s2 = s1
-    ftail_ s1 s2 | (genericLength s1 :: Word32) == genericLength s2 = map fst (dropWhile (\(x, y) -> x == y) (zip s1 s2))
+    ftail_ s1 s2 | (LL.genericLength s1 :: Word32) > LL.genericLength s2 = s1
+    ftail_ s1 s2 | (LL.genericLength s1 :: Word32) == LL.genericLength s2 = map fst (LL.dropWhile (\(x, y) -> x == y) (LL.zip s1 s2))
     ftail_ _ _ = throw $ OtherException "Can't encode a smaller string with a tail operator."
     decodeP = asciiString
     decodeD = do 
@@ -407,13 +420,13 @@ instance Primitive (Int32, Int64) where
     assertType _ = throw $ D4 "Type mismatch."
     toValue (e, m) = Dec $ (fromIntegral m) * 10^^e
     fromValue (Dec 0.0) = (0, 0)
-    fromValue (Dec d) | d > 0.0 = (fromIntegral e  - genericLength digits, m) 
+    fromValue (Dec d) | d > 0.0 = (fromIntegral e  - LL.genericLength digits, m) 
         where   (digits, e) = floatToDigits 10 d
                 m = foldl (\r x -> 10*r + (fromIntegral x)) 0 digits
     fromValue (Dec d) = (e, -1 * m) where (e, m) = fromValue (Dec (-1 * d))
     fromValue _ = throw $ D4 "Type mismatch."
     defaultBaseValue = (0, 0)
-    ivToPrimitive (InitialValueAttr s) = let    s' = (reverse . dropWhile (=='0') . reverse . trimWhiteSpace) s 
+    ivToPrimitive (InitialValueAttr s) = let    s' = (LL.reverse . LL.dropWhile (=='0') . LL.reverse . trimWhiteSpace) s 
                                                 mant = (read . filter (/= '.')) s'
                                                 expo = h s'
                                                 h ('-':xs) = h xs
@@ -425,11 +438,11 @@ instance Primitive (Int32, Int64) where
                                          in (expo, mant)
     -- TODO: can easily overflow for huge mantissas.
     primitiveToIv (_, 0) = InitialValueAttr "0.0"
-    primitiveToIv (e, m) | e >= 0 = InitialValueAttr $ show m ++ genericReplicate e '0' ++ ".0"
-    primitiveToIv (e, m) | e < 0 && m >= 0 = InitialValueAttr $ (fst p_m) ++ "." ++ (genericReplicate (-1 * e - l_m) '0') ++ (snd p_m)
-                                                where   p_m = genericSplitAt (l_m - (-1 * e)) s_m 
-                                                        s_m = (reverse . dropWhile (=='0') . reverse . show) m   
-                                                        l_m = genericLength s_m
+    primitiveToIv (e, m) | e >= 0 = InitialValueAttr $ show m ++ LL.genericReplicate e '0' ++ ".0"
+    primitiveToIv (e, m) | e < 0 && m >= 0 = InitialValueAttr $ (fst p_m) ++ "." ++ (LL.genericReplicate (-1 * e - l_m) '0') ++ (snd p_m)
+                                                where   p_m = LL.genericSplitAt (l_m - (-1 * e)) s_m 
+                                                        s_m = (LL.reverse . LL.dropWhile (=='0') . LL.reverse . show) m   
+                                                        l_m = LL.genericLength s_m
     primitiveToIv (e, m) | e < 0 && m < 0 = InitialValueAttr $ "-" ++ (text $ primitiveToIv (e, -1 * m))
     delta (e1, m1) (Ddec (e2, m2)) = (e1 + e2, m1 + m2)
     delta_ (e2, m2) (e1, m1) = Ddec (e2 - e1, m2 - m1)
@@ -464,17 +477,17 @@ instance Primitive B.ByteString where
     primitiveToIv bs = InitialValueAttr (concat' (map ((flip showHex "")) (B.unpack bs))) where concat' ([x] : ys) = ['0', x] ++ (concat' ys)
                                                                                                 concat' (x : ys) = x ++ concat' ys
                                                                                                 concat' ([]) = []
-    delta bv1 (Dbs (l, bv2)) | l < 0 = bv2 `B.append` bv'' where bv'' = genericDrop (-(l + 1)) bv1 
-    delta bv1 (Dbs (l, bv2)) | l >= 0 = bv'' `B.append` bv2 where bv'' = genericTake (genericLength bv1 - l) bv1
+    delta bv1 (Dbs (l, bv2)) | l < 0 = bv2 `B.append` bv'' where bv'' = LL.genericDrop (-(l + 1)) bv1 
+    delta bv1 (Dbs (l, bv2)) | l >= 0 = bv'' `B.append` bv2 where bv'' = LL.genericTake (LL.genericLength bv1 - l) bv1
     delta _ _ = throw $ D4 "Type mismatch."
-    delta_ bv1 bv2 =  if (genericLength l1 :: Word32) >= genericLength l2 
-                    then Dbs (genericLength bv2 - genericLength l1, genericDrop (genericLength l1 :: Word32) bv1)
-                    else Dbs (genericLength l2 - genericLength bv2 - 1, genericTake ((genericLength bv1 - genericLength l2) :: Word32) bv1)
-                    where   l1 = takeWhile (uncurry (==)) (zip bv1 bv2)
-                            l2 = takeWhile (uncurry (==)) (zip (reverse bv1) (reverse bv2))
+    delta_ bv1 bv2 =  if (LL.genericLength l1 :: Word32) >= LL.genericLength l2 
+                    then Dbs (LL.genericLength bv2 - LL.genericLength l1, LL.genericDrop (LL.genericLength l1 :: Word32) bv1)
+                    else Dbs (LL.genericLength l2 - LL.genericLength bv2 - 1, LL.genericTake ((LL.genericLength bv1 - LL.genericLength l2) :: Word32) bv1)
+                    where   l1 = takeWhile (uncurry (==)) (LL.zip bv1 bv2)
+                            l2 = takeWhile (uncurry (==)) (LL.zip (LL.reverse bv1) (LL.reverse bv2))
     ftail b1 b2 = B.take (B.length b1 - B.length b2) b1 `B.append` b2
-    ftail_ b1 b2 | (genericLength b1 :: Word32) > genericLength b2 = b1
-    ftail_ b1 b2 | (genericLength b1 :: Word32) == genericLength b2 = B.pack (map fst (dropWhile (\(x, y) -> x == y) (B.zip b1 b2)))
+    ftail_ b1 b2 | (LL.genericLength b1 :: Word32) > LL.genericLength b2 = b1
+    ftail_ b1 b2 | (LL.genericLength b1 :: Word32) == LL.genericLength b2 = B.pack (map fst (LL.dropWhile (\(x, y) -> x == y) (B.zip b1 b2)))
     ftail_ _ _ = throw $ OtherException "Can't encode a smaller string with a tail operator."
     decodeP = byteVector
     decodeD = do 
@@ -564,12 +577,8 @@ data Instruction = Instruction Field
                     deriving (Show, Data, Typeable)
 
 instance Arbitrary Instruction where
-    arbitrary = (liftM Instruction arbitrary) `suchThat` (\i -> gcount (False `mkQ` groupOrSequence) i < 20)
-        where   groupOrSequence :: Field -> Bool
-                groupOrSequence (Grp _) = True
-                groupOrSequence (Seq _) = True
-                groupOrSequence _ = False
-    {-arbitrary = oneof [liftM Instruction arbitrary, liftM TemplateReference arbitrary]-}
+    arbitrary = Instruction <$> arbitrary 
+    {-arbitrary = oneof [Instruction <$> arbitrary, TemplateReference <$> arbitrary]-}
     -- TemplateReferences are really hard to test.
 
 -- |This is a helper data structure, NOT defined in the reference.
@@ -980,7 +989,7 @@ _asciiString :: Coparser AsciiString
 _asciiString = _anySBEEntity . pack 
 
 trimWhiteSpace :: String -> String
-trimWhiteSpace = reverse . dropWhile whiteSpace . reverse . dropWhile whiteSpace
+trimWhiteSpace = LL.reverse . LL.dropWhile whiteSpace . LL.reverse . LL.dropWhile whiteSpace
 
 whiteSpace :: Char -> Bool
 whiteSpace c =  c `elem` " \t\r\n"
@@ -1275,23 +1284,23 @@ rmPreamble :: AsciiString -> AsciiString
 rmPreamble (['\0']) = []
 rmPreamble (['\0', '\0']) = "\NUL"
 -- overlong string.
-rmPreamble s = dropWhile (=='\0') s
+rmPreamble s = LL.dropWhile (=='\0') s
 
 -- |Remove preamble of an ascii string, NULLable situation.
 rmPreamble'::AsciiString -> AsciiString
 rmPreamble' (['\0','\0']) = []
 rmPreamble' (['\0','\0','\0']) = "\NUL"
 -- overlong string.
-rmPreamble' s = dropWhile (=='\0') s
+rmPreamble' s = LL.dropWhile (=='\0') s
 
 addPreamble :: AsciiString -> AsciiString
 addPreamble [] = (['\0'])
 addPreamble "\NUL" = (['\0','\0'])
-addPreamble s = dropWhile (=='\0') s
+addPreamble s = LL.dropWhile (=='\0') s
 
 addPreamble' :: AsciiString -> AsciiString
 addPreamble' [] = (['\0','\0'])
 addPreamble' "\NUL" = (['\0','\0','\0'])
-addPreamble' s = dropWhile (=='\0') s
+addPreamble' s = LL.dropWhile (=='\0') s
 
 

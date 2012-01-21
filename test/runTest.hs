@@ -4,10 +4,10 @@ import Test.QuickCheck
 import Codec.Fast.Data
 import Codec.Fast
 import Data.ByteString.Char8 (unpack, pack) 
-import Data.ByteString.UTF8 (toString)
 import Data.Bits
 import Data.Int
 import Data.Word
+import qualified Data.ListLike as LL
 import Control.Applicative 
 import Control.Exception
 import qualified Data.ByteString as B
@@ -45,16 +45,26 @@ unwrapB7S (B7S s) = s
 
 instance Arbitrary Bit7String where
     arbitrary = fmap (B7S . unpack . B.map (\w -> clearBit w 7) . pack) (arbitrary :: Gen String)
-    shrink = (map B7S) . (shrink :: String -> [String]) . (\(B7S s) -> s)
+    shrink = (map B7S) . (shrink :: String -> [String]) . unwrapB7S
+
+newtype Bit7Char = B7C Char deriving Show
+unwrapB7C :: Bit7Char -> Char
+unwrapB7C (B7C c) = c
+
+instance Arbitrary Bit7Char where
+    arbitrary = (B7C . toEnum . (\w -> clearBit w 7) . fromEnum) <$> (arbitrary :: Gen Char)
+    shrink = (map B7C) . (shrink :: Char -> [Char]) . unwrapB7C
 
 newtype NormalizedDecimal = ND (Int32, Int64) deriving Show
+unwrapND :: NormalizedDecimal -> (Int32 , Int64)
+unwrapND (ND x) = x
 
 instance Arbitrary NormalizedDecimal where
     arbitrary = fmap (ND . normalize) (arbitrary :: Gen (Int32, Int64))
         where   normalize (_, 0) = (0, 0)
                 normalize (e, m) | m `mod` 10 == 0 = normalize (e + 1, m `div` 10)
                 normalize (e, m) = (e, m)
-    shrink = (map ND) . (shrink :: (Int32, Int64) -> [(Int32, Int64)]) . (\(ND d) -> d)
+    shrink = (map ND) . (shrink :: (Int32, Int64) -> [(Int32, Int64)]) . unwrapND
 
 newtype NonOverlongString = NOS AsciiString deriving Show
 
@@ -84,8 +94,8 @@ arbitraryValueForField (IntField f@(UInt32Field (FieldInstrContent fname _ _))) 
 arbitraryValueForField (IntField f@(UInt64Field (FieldInstrContent fname _ _))) = (fname,) <$> fmap toValue <$> ((arbitraryValueForIntField f) :: Gen (Maybe Word64))
 arbitraryValueForField (DecField f@(DecimalField fname _ _ )) = (fname, ) <$> fmap toValue <$> arbitraryValueForDecField f
 arbitraryValueForField (AsciiStrField f@(AsciiStringField(FieldInstrContent fname _ _ ))) = (fname, ) <$> fmap toValue <$> arbitraryValueForAsciiField f
-arbitraryValueForField (UnicodeStrField f@(UnicodeStringField (FieldInstrContent fname _ _ ) _ )) = (fname, ) <$> fmap U <$> arbitraryValueForUnicodeField f
-arbitraryValueForField (ByteVecField f@(ByteVectorField (FieldInstrContent fname _ _ ) _ )) = (fname, ) <$> fmap toValue <$> arbitraryValueForByteVectorField f
+arbitraryValueForField (UnicodeStrField (UnicodeStringField f@(FieldInstrContent fname _ _ ) maybe_len )) = (fname, ) <$> fmap toValue <$> (arbitraryValueForByteVectorField f maybe_len :: Gen (Maybe UnicodeString))
+arbitraryValueForField (ByteVecField (ByteVectorField f@(FieldInstrContent fname _ _ ) maybe_len )) = (fname, ) <$> fmap toValue <$> (arbitraryValueForByteVectorField f maybe_len :: Gen (Maybe B.ByteString))
 arbitraryValueForField (Seq s) = arbitraryValueForSequence s
 arbitraryValueForField (Grp g) = arbitraryValueForGroup g
 
@@ -172,36 +182,34 @@ arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandator
 arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Constant iv)))) = return $ Just $ ivToPrimitive iv
 arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))))
     = throw $ S5 "No initial value given for mandatory default operator."
-arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Default (Just _))))) = fmap (Just . unwrapB7S) arbitrary
-arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Copy _)))) = fmap (Just . unwrapB7S) arbitrary
+arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Default (Just _))))) = (Just . unwrapB7S) <$> arbitrary
+arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Copy _)))) = (Just . unwrapB7S) <$> arbitrary
 arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Increment _))))
     = throw $ S2 "Increment operator is only applicable to integer fields." 
-arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Delta _)))) = fmap (Just . unwrapB7S) arbitrary
-arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Tail _)))) = fmap (Just . unwrapB7S) arbitrary
+arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Delta _)))) = (Just . unwrapB7S) <$> arbitrary
+arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Tail _)))) = (Just . (map unwrapB7C)) <$> vectorOf 10 arbitrary
 arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Constant iv))))  = oneof [return $ Just $ ivToPrimitive iv, return Nothing]
+arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Tail _)))) = oneof [return Nothing, (Just . (map unwrapB7C)) <$> vectorOf 10 arbitrary]
 arbitraryValueForAsciiField _ = arbitrary
 
-arbitraryValueForUnicodeField :: UnicodeStringField -> Gen (Maybe UnicodeString)
-arbitraryValueForUnicodeField (UnicodeStringField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)
-    = fmap (fmap toString) (arbitraryValueForByteVectorField (ByteVectorField (FieldInstrContent fname maybe_presence maybe_op) maybe_length))
-
-arbitraryValueForByteVectorField :: ByteVectorField -> Gen (Maybe B.ByteString)
-arbitraryValueForByteVectorField (ByteVectorField (FieldInstrContent fname Nothing maybe_op) len) 
-    = arbitraryValueForByteVectorField (ByteVectorField (FieldInstrContent fname (Just Mandatory) maybe_op) len)
-arbitraryValueForByteVectorField (ByteVectorField (FieldInstrContent _ (Just Mandatory) Nothing ) _ ) = fmap Just arbitrary
-arbitraryValueForByteVectorField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Constant iv))) _ ) = return $ Just $ ivToPrimitive iv
-arbitraryValueForByteVectorField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Constant iv))) _ ) = oneof [return $ Just $ ivToPrimitive iv, return Nothing]
-arbitraryValueForByteVectorField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Default Nothing))) _ ) 
+arbitraryValueForByteVectorField :: (Primitive a, Arbitrary a, LL.ListLike a c, Arbitrary c) => FieldInstrContent -> Maybe ByteVectorLength -> Gen (Maybe a)
+arbitraryValueForByteVectorField (FieldInstrContent fname Nothing maybe_op) len 
+    = arbitraryValueForByteVectorField (FieldInstrContent fname (Just Mandatory) maybe_op) len
+arbitraryValueForByteVectorField (FieldInstrContent _ (Just Mandatory) Nothing ) _ = Just <$> arbitrary
+arbitraryValueForByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Constant iv))) _  = return $ Just $ ivToPrimitive iv
+arbitraryValueForByteVectorField (FieldInstrContent _ (Just Optional) (Just(Constant iv))) _ = oneof [return $ Just $ ivToPrimitive iv, return Nothing]
+arbitraryValueForByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Default Nothing))) _  
     = throw $ S5 "No initial value given for mandatory default operator."
-arbitraryValueForByteVectorField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Default (Just _)))) _ ) = fmap Just arbitrary
-arbitraryValueForByteVectorField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Copy _ ))) _ ) = fmap Just arbitrary
-arbitraryValueForByteVectorField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Increment _ ))) _ ) 
+arbitraryValueForByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Default (Just _)))) _ = Just <$> arbitrary
+arbitraryValueForByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Copy _ ))) _  = Just <$> arbitrary
+arbitraryValueForByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Increment _ ))) _  
     = throw $ S2 "Increment operator is only applicable to integer fields." 
-arbitraryValueForByteVectorField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Increment _ ))) _ ) 
+arbitraryValueForByteVectorField (FieldInstrContent _ (Just Optional) (Just(Increment _ ))) _ 
     = throw $ S2 "Increment operator is only applicable to integer fields." 
-arbitraryValueForByteVectorField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Delta _ ))) _ ) = fmap Just arbitrary
-arbitraryValueForByteVectorField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Tail _ ))) _ ) = fmap Just arbitrary
-arbitraryValueForByteVectorField _ = arbitrary
+arbitraryValueForByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Delta _ ))) _ = Just <$> arbitrary
+arbitraryValueForByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Tail _ ))) _ = (Just . LL.fromList) <$> vectorOf 10 arbitrary
+arbitraryValueForByteVectorField (FieldInstrContent _ (Just Optional) (Just(Tail _ ))) _ = oneof [return Nothing, (Just . LL.fromList) <$> vectorOf 10 arbitrary]
+arbitraryValueForByteVectorField _ _ = arbitrary
 
 arbitraryValueForSequence :: Sequence -> Gen (NsName, Maybe Value)
 arbitraryValueForSequence (Sequence fname (Just Optional) _ _ _ instrs) = do
@@ -271,6 +279,16 @@ main = do
     
     {-putStr "\n[*] Checking 'bsToPm . pmToBs = id'\n"-}
     {-quickCheck (prop_bsToPm_dot_pmToBs_is_ID)-}
+
+    {-putStr "\n[*] ivToPrimitive . primitiveToIv  = id'\n"-}
+    {-quickCheck (prop_ivToPrimitive_dot_primitiveToIv_is_ID :: Int32 -> Bool)-}
+    {-quickCheck (prop_ivToPrimitive_dot_primitiveToIv_is_ID :: Word32 -> Bool)-}
+    {-quickCheck (prop_ivToPrimitive_dot_primitiveToIv_is_ID :: Int64 -> Bool)-}
+    {-quickCheck (prop_ivToPrimitive_dot_primitiveToIv_is_ID :: Word64 -> Bool)-}
+    {--- fails when mantissa overflows.-}
+    {-quickCheck (prop_ivToPrimitive_dot_primitiveToIv_is_ID :: (Int32, Int64) -> Bool)-}
+    {-quickCheck (prop_ivToPrimitive_dot_primitiveToIv_is_ID :: AsciiString -> Bool)-}
+    {-quickCheck (prop_ivToPrimitive_dot_primitiveToIv_is_ID :: B.ByteString -> Bool)-}
 
     putStr "\n[*] Checking 'decoder . encoder = id'\n"
     quickCheck ((uncurry $ prop_decode_template_encode_template_is_ID) . (\(STMP p) -> p))
