@@ -628,7 +628,7 @@ bytevecF2Cop (FieldInstrContent fname (Just Mandatory) Nothing ) _
 
 -- pm: No, Nullable: Yes
 bytevecF2Cop (FieldInstrContent _ (Just Optional) Nothing ) _ 
-    = cp where  cp (Just bv) = lift $ return $ encodeP bv
+    = cp where  cp (Just bv) = lift $ return $ encodeP0 bv
                 cp (Nothing) = nulL
 -- pm: No, Nullable: No
 bytevecF2Cop (FieldInstrContent fname (Just Mandatory) (Just (Constant iv))) _ 
