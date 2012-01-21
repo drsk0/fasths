@@ -19,7 +19,6 @@ where
 
 import Codec.Fast.Data
 import qualified Data.Map as M
-import Data.ByteString.UTF8 (fromString)
 import Data.Word
 import Data.Int
 import Data.Monoid
@@ -100,9 +99,8 @@ field2Cop (IntField f@(UInt32Field (FieldInstrContent fname _ _))) = contramap (
 field2Cop (IntField f@(UInt64Field (FieldInstrContent fname _ _))) = contramap (fmap fromValue . assertNameIs fname) (intF2Cop f :: FCoparser (Maybe Word64))
 field2Cop (DecField f@(DecimalField fname _ _ )) = contramap (fmap fromValue . assertNameIs fname) (decF2Cop f)
 field2Cop (AsciiStrField f@(AsciiStringField(FieldInstrContent fname _ _ ))) = contramap (fmap fromValue . assertNameIs fname) (asciiStrF2Cop f)
-field2Cop (UnicodeStrField f@(UnicodeStringField (FieldInstrContent fname _ _ ) _ )) = contramap (fmap h . assertNameIs fname) (unicodeF2Cop f) where   h (U s) = s
-                                                                                                                                                        h _ = throw $ OtherException "Type mismatch."
-field2Cop (ByteVecField f@(ByteVectorField (FieldInstrContent fname _ _ ) _ )) = contramap (fmap fromValue . assertNameIs fname) (bytevecF2Cop f)
+field2Cop (UnicodeStrField (UnicodeStringField f@(FieldInstrContent fname _ _ ) maybe_len )) = contramap (fmap fromValue . assertNameIs fname) (bytevecF2Cop f maybe_len :: FCoparser (Maybe UnicodeString))
+field2Cop (ByteVecField (ByteVectorField f@(FieldInstrContent fname _ _ ) maybe_len )) = contramap (fmap fromValue . assertNameIs fname) (bytevecF2Cop f maybe_len :: FCoparser (Maybe B.ByteString))
 field2Cop (Seq s) = contramap (assertNameIs (sFName s)) (seqF2Cop s)
 field2Cop (Grp g) = contramap (assertNameIs (gFName g)) (groupF2Cop g)
 
@@ -619,57 +617,57 @@ asciiStrF2Cop (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (T
                                                 h (OpContext _ _ Nothing) = (lift $ setPMap False) >> (lift $ updatePrevValue fname oc Empty) >> (lift $ return BU.empty)
                                     Empty -> (lift $ setPMap False) >> (lift $ return BU.empty)
 
-bytevecF2Cop :: ByteVectorField -> FCoparser (Maybe B.ByteString)
+bytevecF2Cop :: (Primitive a, Eq a) => FieldInstrContent -> Maybe ByteVectorLength -> FCoparser (Maybe a)
 
-bytevecF2Cop (ByteVectorField (FieldInstrContent fname Nothing maybe_op) len) 
-    = bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Mandatory) maybe_op) len)
+bytevecF2Cop (FieldInstrContent fname Nothing maybe_op) len 
+    = bytevecF2Cop (FieldInstrContent fname (Just Mandatory) maybe_op) len
 
 -- pm: No, Nullable: No
-bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Mandatory) Nothing ) _ ) 
+bytevecF2Cop (FieldInstrContent fname (Just Mandatory) Nothing ) _ 
     = cp where  cp (Just bv) = lift $ return $ encodeP bv
                 cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
 
 -- pm: No, Nullable: Yes
-bytevecF2Cop (ByteVectorField (FieldInstrContent _ (Just Optional) Nothing ) _ ) 
+bytevecF2Cop (FieldInstrContent _ (Just Optional) Nothing ) _ 
     = cp where  cp (Just bv) = lift $ return $ encodeP bv
                 cp (Nothing) = nulL
 -- pm: No, Nullable: No
-bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just (Constant iv))) _ ) 
+bytevecF2Cop (FieldInstrContent fname (Just Mandatory) (Just (Constant iv))) _ 
     = cp where  cp (Just bv) =  if ivToPrimitive iv == bv 
                                 then lift $ return BU.empty
                                 else throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
                 cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
 
 -- pm: Yes, Nullable: No
-bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Constant iv))) _ ) 
+bytevecF2Cop (FieldInstrContent fname (Just Optional) (Just(Constant iv))) _ 
     = cp where  cp (Just bv) =  if ivToPrimitive iv == bv
                                 then (lift $ setPMap True) >> (lift $ return BU.empty)
                                 else throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
                 cp (Nothing) = (lift $ setPMap False) >> (lift $ return BU.empty)
 
 -- pm: Yes, Nullable: No
-bytevecF2Cop (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Default Nothing))) _ ) 
+bytevecF2Cop (FieldInstrContent _ (Just Mandatory) (Just(Default Nothing))) _ 
     = throw $ S5 "No initial value given for mandatory default operator."
 
 -- pm: Yes, Nullable: No
-bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Default (Just iv)))) _ ) 
+bytevecF2Cop (FieldInstrContent fname (Just Mandatory) (Just(Default (Just iv)))) _ 
     = cp where  cp (Just bv) =  if ivToPrimitive iv == bv
                                 then (lift $ setPMap False) >> (lift $ return BU.empty)
                                 else (lift $ setPMap True) >> (lift $ return $ encodeP bv)
                 cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
 
 -- pm: Yes, Nullable: Yes
-bytevecF2Cop (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Default Nothing))) _ ) 
+bytevecF2Cop (FieldInstrContent _ (Just Optional) (Just(Default Nothing))) _ 
     = cp where  cp (Just bv) = (lift $ setPMap True) >> (lift $ return $ encodeP bv)
                 cp (Nothing) = (lift $ setPMap False) >> (lift $ return BU.empty)
 -- pm: Yes, Nullable: Yes
-bytevecF2Cop (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Default (Just iv)))) _ ) 
+bytevecF2Cop (FieldInstrContent _ (Just Optional) (Just(Default (Just iv)))) _ 
     = cp where  cp (Just bv) =  if ivToPrimitive iv == bv
                                 then (lift $ setPMap False) >> (lift $ return BU.empty)
                                 else (lift $ setPMap True) >> (lift $ return $ encodeP bv)
                 cp (Nothing) = (lift $ setPMap True) >> nulL
 -- pm: Yes, Nullable: No
-bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Copy oc))) _ ) 
+bytevecF2Cop (FieldInstrContent fname (Just Mandatory) (Just(Copy oc))) _ 
     = cp where  cp (Just bv) = do
                                 p <- lift $ prevValue fname oc
                                 case p of
@@ -684,7 +682,7 @@ bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Co
                                     Empty -> (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return $ encodeP bv)
                 cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
 -- pm: Yes, Nullable: Yes
-bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Copy oc))) _ ) 
+bytevecF2Cop (FieldInstrContent fname (Just Optional) (Just(Copy oc))) _ 
     = cp where  cp (Just bv) = do
                                 p <- lift $ prevValue fname oc
                                 case p of
@@ -706,14 +704,14 @@ bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Cop
                                                 h' (OpContext _ _ Nothing) = (lift $ setPMap False) >> (lift $ updatePrevValue fname oc Empty) >> (lift $ return BU.empty)
                                     Empty -> (lift $ setPMap False) >> (lift $ return BU.empty)
 -- pm: Yes, Nullable: No
-bytevecF2Cop (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Increment _ ))) _ ) 
+bytevecF2Cop (FieldInstrContent _ (Just Mandatory) (Just(Increment _ ))) _ 
     = throw $ S2 "Increment operator is only applicable to integer fields." 
 -- pm: Yes, Nullable: Yes
-bytevecF2Cop (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Increment _ ))) _ ) 
+bytevecF2Cop (FieldInstrContent _ (Just Optional) (Just(Increment _ ))) _ 
     = throw $ S2 "Increment operator is only applicable to integer fields." 
 
 -- pm: No, Nullable: No
-bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Delta oc))) _ ) 
+bytevecF2Cop (FieldInstrContent fname (Just Mandatory) (Just(Delta oc))) _ 
     = cp where  cp (Just bv) = let  baseValue (Assigned p) = assertType p
                                     baseValue (Undefined) = h oc
                                         where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
@@ -726,7 +724,7 @@ bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(De
                 cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
 
 -- pm: No, Nullable: Yes
-bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Delta oc))) _ ) 
+bytevecF2Cop (FieldInstrContent fname (Just Optional) (Just(Delta oc))) _ 
     = cp where  cp (Just bv) = let  baseValue (Assigned p) = assertType p
                                     baseValue (Undefined) = h oc
                                         where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
@@ -740,7 +738,7 @@ bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Del
 
 
 -- pm: Yes, Nullable: No
-bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail oc))) _ ) 
+bytevecF2Cop (FieldInstrContent fname (Just Mandatory) (Just(Tail oc))) _ 
     = cp where  cp (Just bv) = let  baseValue (Assigned p) = assertType p
                                     baseValue (Undefined) = h oc
                                         where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
@@ -765,7 +763,7 @@ bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Ta
                 cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
 
 -- pm: Yes, Nullable: Yes
-bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Tail oc))) _) 
+bytevecF2Cop  (FieldInstrContent fname (Just Optional) (Just(Tail oc))) _ 
     = cp where  cp (Just bv) =  let baseValue (Assigned p) = assertType p
                                     baseValue (Undefined) = h oc
                                         where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
@@ -794,11 +792,6 @@ bytevecF2Cop (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Tai
                                         where   h (OpContext _ _ (Just _)) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc Empty) >> nulL
                                                 h (OpContext _ _ Nothing) = (lift $ updatePrevValue fname oc Empty) >> (lift $ return BU.empty)
                                     Empty -> (lift $ setPMap False) >> (lift $ return BU.empty)
-
--- |Maps an unicode field to its coparser.
-unicodeF2Cop :: UnicodeStringField -> FCoparser (Maybe UnicodeString)
-unicodeF2Cop (UnicodeStringField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)
-    = cp where cp maybe_us = bytevecF2Cop (ByteVectorField (FieldInstrContent fname maybe_presence maybe_op) maybe_length) (fromString <$> maybe_us)
 
 seqF2Cop :: Sequence -> FCoparser (Maybe Value)
 seqF2Cop (Sequence fname maybe_presence _ _ maybe_length instrs) 

@@ -20,7 +20,6 @@ where
 
 import Prelude hiding (dropWhile)
 import qualified Data.ByteString as B
-import Data.ByteString.UTF8 (toString)
 import qualified Data.Attoparsec as A
 import Control.Monad.State
 import Control.Monad.Reader
@@ -109,8 +108,8 @@ field2Parser (IntField f@(UInt32Field (FieldInstrContent fname _ _))) = (fname, 
 field2Parser (IntField f@(UInt64Field (FieldInstrContent fname _ _))) = (fname, ) <$> fmap toValue <$> (intF2P f :: FParser (Maybe Word64))
 field2Parser (DecField f@(DecimalField fname _ _ )) = (fname, ) <$> fmap toValue <$> decF2P f
 field2Parser (AsciiStrField f@(AsciiStringField(FieldInstrContent fname _ _ ))) = (fname, ) <$> fmap toValue <$> asciiStrF2P f
-field2Parser (UnicodeStrField f@(UnicodeStringField (FieldInstrContent fname _ _ ) _ )) = (fname, ) <$> fmap U <$> unicodeF2P f
-field2Parser (ByteVecField f@(ByteVectorField (FieldInstrContent fname _ _ ) _ )) = (fname, ) <$> fmap toValue <$> bytevecF2P f
+field2Parser (UnicodeStrField (UnicodeStringField f@(FieldInstrContent fname _ _ ) maybe_bvlength )) = (fname, ) <$> fmap toValue <$> (bytevecF2P f maybe_bvlength :: FParser (Maybe UnicodeString))
+field2Parser (ByteVecField (ByteVectorField f@(FieldInstrContent fname _ _ ) maybe_bvlength )) = (fname, ) <$> fmap toValue <$> (bytevecF2P f maybe_bvlength :: FParser (Maybe B.ByteString))
 field2Parser (Seq s) = seqF2P s
 field2Parser (Grp g) = groupF2P g
 
@@ -623,34 +622,34 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Tai
     )
 
 -- |Maps a bytevector field to its parser.
-bytevecF2P::ByteVectorField -> FParser (Maybe B.ByteString)
-bytevecF2P (ByteVectorField (FieldInstrContent fname Nothing maybe_op) len) 
-    = bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) maybe_op) len)
+bytevecF2P :: (Primitive a) => FieldInstrContent -> Maybe ByteVectorLength -> FParser (Maybe a)
+bytevecF2P (FieldInstrContent fname Nothing maybe_op) len 
+    = bytevecF2P (FieldInstrContent fname (Just Mandatory) maybe_op) len
 
 -- pm: No, Nullable: No
-bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Mandatory) Nothing ) _ ) 
+bytevecF2P (FieldInstrContent _ (Just Mandatory) Nothing ) _ 
     = Just <$> l2 decodeP
 
 -- pm: No, Nullable: Yes
-bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Optional) Nothing ) _ ) 
+bytevecF2P (FieldInstrContent _ (Just Optional) Nothing ) _ 
     = nULL
     <|> do
         bv <- l2 decodeP
         return $ Just bv
 
 -- pm: No, Nullable: No
-bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Constant iv))) _ ) 
+bytevecF2P (FieldInstrContent _ (Just Mandatory) (Just (Constant iv))) _ 
     = return $ Just (ivToPrimitive iv)
 
 -- pm: Yes, Nullable: No
-bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Constant iv))) _ ) 
+bytevecF2P (FieldInstrContent _ (Just Optional) (Just(Constant iv))) _ 
     = ifPresentElse (return (Just (ivToPrimitive iv))) (return Nothing)
 -- pm: Yes, Nullable: No
-bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Default Nothing))) _ ) 
+bytevecF2P (FieldInstrContent _ (Just Mandatory) (Just(Default Nothing))) _ 
     = throw $ S5 "No initial value given for mandatory default operator."
 
 -- pm: Yes, Nullable: No
-bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Default (Just iv)))) _ ) 
+bytevecF2P (FieldInstrContent _ (Just Mandatory) (Just(Default (Just iv)))) _ 
     = ifPresentElse
     (
     do
@@ -662,13 +661,13 @@ bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Default 
     )
 
 -- pm: Yes, Nullable: Yes
-bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Default Nothing))) _ ) 
+bytevecF2P (FieldInstrContent _ (Just Optional) (Just(Default Nothing))) _ 
     = ifPresentElse (nULL <|> (Just <$> l2 decodeP)) (return Nothing)
 -- pm: Yes, Nullable: Yes
-bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Default (Just iv)))) _ ) 
+bytevecF2P (FieldInstrContent _ (Just Optional) (Just(Default (Just iv)))) _ 
     = ifPresentElse (nULL <|> Just <$> l2 decodeP) (return (Just (ivToPrimitive iv)))
 -- pm: Yes, Nullable: No
-bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Copy oc))) _ ) 
+bytevecF2P (FieldInstrContent fname (Just Mandatory) (Just(Copy oc))) _ 
     = ifPresentElse   
     (
     do
@@ -689,7 +688,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Copy
             Empty -> throw $ D6 "Previous value is empty in madatory copy operator."
     )
 -- pm: Yes, Nullable: Yes
-bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Copy oc))) _ ) 
+bytevecF2P (FieldInstrContent fname (Just Optional) (Just(Copy oc))) _ 
     = ifPresentElse
     (
     nULL *> lift (updatePrevValue fname oc Empty >> return Nothing)
@@ -710,14 +709,14 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Copy 
     )
 
 -- pm: Yes, Nullable: No
-bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Increment _ ))) _ ) 
+bytevecF2P (FieldInstrContent _ (Just Mandatory) (Just(Increment _ ))) _ 
     = throw $ S2 "Increment operator is only applicable to integer fields." 
 -- pm: Yes, Nullable: Yes
-bytevecF2P (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Increment _ ))) _ ) 
+bytevecF2P (FieldInstrContent _ (Just Optional) (Just(Increment _ ))) _ 
     = throw $ S2 "Increment operator is only applicable to integer fields." 
 
 -- pm: No, Nullable: No
-bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Delta oc))) _ ) 
+bytevecF2P (FieldInstrContent fname (Just Mandatory) (Just(Delta oc))) _ 
     = let   baseValue (Assigned p) = assertType p
             baseValue (Undefined) = h oc
                 where   h (OpContext _ _ (Just iv)) = ivToPrimitive iv
@@ -729,7 +728,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Delt
             Just <$> (flip delta bv <$> (baseValue <$> lift (prevValue fname oc)))
 
 -- pm: No, Nullable: Yes
-bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Delta oc))) _ ) 
+bytevecF2P (FieldInstrContent fname (Just Optional) (Just(Delta oc))) _ 
     = nULL
     <|> (let    baseValue (Assigned p) = assertType p
                 baseValue (Undefined) = h oc
@@ -744,7 +743,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Delta
 
 
 -- pm: Yes, Nullable: No
-bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail oc))) _ ) 
+bytevecF2P (FieldInstrContent fname (Just Mandatory) (Just(Tail oc))) _ 
     = ifPresentElse
     (
     let baseValue (Assigned p) = assertType p
@@ -775,7 +774,7 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail
     )
 
 -- pm: Yes, Nullable: Yes
-bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Tail oc))) _ ) 
+bytevecF2P (FieldInstrContent fname (Just Optional) (Just(Tail oc))) _ 
     = ifPresentElse
     (
     nULL *> lift (updatePrevValue fname oc Empty >> return Nothing)
@@ -802,13 +801,6 @@ bytevecF2P (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Tail 
                         h (OpContext _ _ Nothing) = lift $ updatePrevValue fname oc Empty >> return Nothing
             Empty -> return Nothing
     )
-
--- |Maps an unicode field to its parser.
-unicodeF2P::UnicodeStringField -> FParser (Maybe UnicodeString)
-unicodeF2P (UnicodeStringField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)
-    = do 
-        m_bv <- bytevecF2P (ByteVectorField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)
-        return (fmap toString m_bv) -- Maybe is itself a monad.
 
 -- |Maps a sequence field to its parser.
 seqF2P::Sequence -> FParser (NsName, Maybe Value)

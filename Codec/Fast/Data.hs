@@ -93,7 +93,7 @@ where
 
 import Prelude hiding (exponent, dropWhile, reverse, zip)
 import Data.ListLike (ListLike, dropWhile, genericDrop, genericTake, genericLength, genericReplicate, genericSplitAt, reverse, zip)
-import Data.Char (digitToInt, intToDigit)
+import Data.Char (digitToInt)
 import Data.Maybe (catMaybes)
 import Data.List (groupBy)
 import Data.Bits
@@ -255,15 +255,15 @@ data Value = I32 Int32
            | I64 Int64
            | UI64 Word64
            | Dec Double
-           | A  AsciiString
-           | U  UnicodeString
+           | A  String
+           | U  String
            | B  B.ByteString
            | Sq Word32 [[(NsName, Maybe Value)]]
            | Gr [(NsName, Maybe Value)]
            deriving (Show, Eq)
 
 -- |Some basic types, renamed for readability.
-type UnicodeString = String
+newtype UnicodeString = UNI String deriving (Show, Eq, Data, Typeable)
 type AsciiString = String
 type Decimal = (Int32, Int64)
 
@@ -420,9 +420,10 @@ instance Primitive (Int32, Int64) where
                                                 h ('.' : []) = 0
                                                 h ('.':xs) = -1 * fromIntegral (length xs)
                                                 h ('0':'.':xs) = h ('.':xs)
-                                                h (x:xs) = h xs
+                                                h (_:xs) = h xs
                                                 h [] = 0
                                          in (expo, mant)
+    -- TODO: can easily overflow for huge mantissas.
     primitiveToIv (_, 0) = InitialValueAttr "0.0"
     primitiveToIv (e, m) | e >= 0 = InitialValueAttr $ show m ++ genericReplicate e '0' ++ ".0"
     primitiveToIv (e, m) | e < 0 && m >= 0 = InitialValueAttr $ (fst p_m) ++ "." ++ (genericReplicate (-1 * e - l_m) '0') ++ (snd p_m)
@@ -490,6 +491,36 @@ instance Arbitrary (Delta B.ByteString) where
 instance Arbitrary B.ByteString where
     arbitrary = fmap B.pack (listOf (arbitrary :: Gen Word8))
     shrink = shrinkNothing
+
+instance Primitive UnicodeString where
+    newtype Delta UnicodeString = Duni (Int32, B.ByteString) deriving (Eq, Show)
+    witnessType = TypeWitnessUNI
+    assertType (TypeWitnessUNI s) = s
+    assertType _ = throw $ D4 "Type mismatch."
+    toValue (UNI s) = U s
+    fromValue (U s) = UNI s
+    fromValue _ = throw $ D4 "Type mismatch."
+    defaultBaseValue = UNI ""
+    ivToPrimitive = UNI . text 
+    primitiveToIv (UNI s) = InitialValueAttr s
+    delta (UNI s) (Duni (l, bs)) = UNI (unpack (delta (pack s) (Dbs (l, bs))))
+    delta_ (UNI s1) (UNI s2) = (\(Dbs d) -> Duni d) (delta_ (pack s1) (pack s2))
+    ftail (UNI s1) (UNI s2) = UNI (unpack (ftail (pack s1) (pack s2)))
+    ftail_ (UNI s1) (UNI s2) = (UNI . unpack) (ftail (pack s1) (pack s2))
+    decodeP = (UNI . unpack) <$> byteVector 
+    decodeD = do 
+                (Dbs d) <- decodeD
+                return $ Duni d
+    encodeP (UNI s) = (encodeP . pack) s
+    encodeD (Duni d) = encodeD (Dbs d)
+
+instance Arbitrary (Delta UnicodeString) where
+    arbitrary = fmap Duni (arbitrary :: Gen (Int32, B.ByteString))
+    shrink (Duni (i, bs)) = map Duni (zip (shrink i) (replicate (length $ shrink i) bs))
+
+instance Arbitrary UnicodeString where
+    arbitrary = fmap UNI (arbitrary :: Gen String)
+    shrink (UNI s)= map UNI (shrink s)
 
 --
 -- The following definitions follow allmost one to one the FAST specification.
@@ -820,7 +851,7 @@ instance Arbitrary KeyAttr where
 -- |Initial value attribute. The value is a string of unicode characters and needs to 
 -- be converted to the type of the field in question.
 data InitialValueAttr = InitialValueAttr {
-    text :: UnicodeString
+    text :: String
     } deriving (Show, Eq, Data, Typeable)
 
 instance Arbitrary InitialValueAttr where
