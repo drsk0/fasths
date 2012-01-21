@@ -7,7 +7,7 @@
 -- Stability   :  experimental
 -- Portability :  unknown
 --
-{-#LANGUAGE FlexibleContexts, TypeSynonymInstances, GeneralizedNewtypeDeriving, FlexibleInstances, GADTs, MultiParamTypeClasses, ExistentialQuantification, TypeFamilies, DeriveDataTypeable #-}
+{-#LANGUAGE ScopedTypeVariables, FlexibleContexts, TypeSynonymInstances, GeneralizedNewtypeDeriving, FlexibleInstances, GADTs, MultiParamTypeClasses, ExistentialQuantification, TypeFamilies, DeriveDataTypeable #-}
 
 module Codec.Fast.Data 
 (
@@ -73,10 +73,6 @@ pmToBs,
 bsToPm,
 assertNameIs,
 initState,
-rmPreamble,
-rmPreamble',
-addPreamble,
-addPreamble',
 -- testing properties.
 prop_decodeP_dot_encodeP_is_ID,
 prop_decodeD_dot_encodeD_is_ID,
@@ -112,7 +108,7 @@ import Control.Monad.State
 import Control.Exception
 import Data.Typeable
 import Data.Data
-import Data.Generics.Schemes (gcount, everywhereBut)
+import Data.Generics.Schemes (everywhereBut)
 import Data.Generics.Aliases (mkQ, mkT)
 import Test.QuickCheck hiding ((.&.))
 
@@ -215,14 +211,22 @@ class Primitive a where
     ftail            :: a -> a -> a
     ftail_           :: a -> a -> a
     decodeP          :: A.Parser a
+    decodeP0         :: A.Parser a
     decodeD          :: A.Parser (Delta a)
+    decodeD0         :: A.Parser (Delta a)
     decodeT          :: A.Parser a
+    decodeT0         :: A.Parser a
     encodeP          :: Coparser a
+    encodeP0         :: Coparser a
     encodeD          :: Coparser (Delta a)
+    encodeD0         :: Coparser (Delta a)
     encodeT          :: Coparser a
+    encodeT0         :: Coparser a
 
-    decodeT = decodeP
-    encodeT = encodeP
+    decodeT  = decodeP
+    decodeT0 = decodeP0
+    encodeT  = encodeP
+    encodeT0 = encodeP0
 
 prop_decodeP_dot_encodeP_is_ID :: (Primitive a, Eq a) => a -> Bool
 prop_decodeP_dot_encodeP_is_ID x = A.maybeResult (A.feed (A.parse decodeP ((B.concat . BL.toChunks . BU.toLazyByteString . encodeP) x)) B.empty) == Just x
@@ -244,7 +248,7 @@ prop_ftail_dot_ftail__is_ID (x, y) | (LL.genericLength x :: Word32) >= LL.generi
 prop_ftail_dot_ftail__is_ID _ = True
 
 prop_rmPreamble_dot_addPreamble_is_ID :: AsciiString -> Bool
-prop_rmPreamble_dot_addPreamble_is_ID s = (rmPreamble . addPreamble) s == s && (rmPreamble' . addPreamble') s == s
+prop_rmPreamble_dot_addPreamble_is_ID s = (rmPreamble . addPreamble) s == s && (rmPreamble0 . addPreamble0) s == s
 
 prop_ivToPrimitive_dot_primitiveToIv_is_ID :: (Primitive a, Eq a) => a -> Bool
 prop_ivToPrimitive_dot_primitiveToIv_is_ID x = ( f . ivToPrimitive . f) x == f x where f = primitiveToIv
@@ -295,11 +299,16 @@ instance Primitive Int32 where
     delta_ i1 i2 = Di32 $ i1 - i2
     ftail = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     ftail_ = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
-    decodeP = int
+    decodeP  = int
+    decodeP0 = minusOne <$> int
     decodeD = Di32 <$> int
+    decodeD0 = Di32 . minusOne <$> int
     decodeT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
+    decodeT0 = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     encodeP = _int
+    encodeP0 = _int . plusOne
     encodeD  =  encodeP . (\(Di32 i) -> i)
+    encodeD0  =  encodeP . plusOne . (\(Di32 i) -> i)
 
 instance Arbitrary (Delta Int32) where
     arbitrary = fmap Di32 (arbitrary :: Gen Int32)
@@ -321,10 +330,15 @@ instance Primitive Word32 where
     ftail = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     ftail_ = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     decodeP = uint
+    decodeP0 = minusOne <$> uint
     decodeD = Dw32 <$> int
+    decodeD0 = Dw32 . minusOne  <$> int
     decodeT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
+    decodeT0 = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     encodeP = _uint
+    encodeP0 = _uint . plusOne
     encodeD =  encodeP . (\(Dw32 w) -> w)
+    encodeD0 =  encodeP . plusOne . (\(Dw32 w) -> w)
 
 instance Arbitrary (Delta Word32) where
     arbitrary = fmap Dw32 (arbitrary :: Gen Int32)
@@ -346,10 +360,15 @@ instance Primitive Int64 where
     ftail = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     ftail_ = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     decodeP = int
+    decodeP0 = minusOne <$> int
     decodeD = Di64 <$> int
+    decodeD0 = Di64 . minusOne <$> int
     decodeT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
+    decodeT0 = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     encodeP = _int
+    encodeP0 = _int . plusOne
     encodeD =  encodeP . (\(Di64 i) -> i)
+    encodeD0 =  encodeP . plusOne . (\(Di64 i) -> i)
 
 instance Arbitrary (Delta Int64) where
     arbitrary = fmap Di64 (arbitrary :: Gen Int64)
@@ -371,10 +390,15 @@ instance Primitive Word64 where
     ftail = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields." 
     ftail_ = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     decodeP = uint
+    decodeP0 = minusOne <$> uint
     decodeD = Dw64 <$> int
+    decodeD0 = Dw64 . minusOne <$> int
     decodeT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
+    decodeT0 = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     encodeP = _uint
+    encodeP0 = _uint . plusOne
     encodeD = encodeP . (\(Dw64 w) -> w)
+    encodeD0 = encodeP . plusOne . (\(Dw64 w) -> w)
 
 instance Arbitrary (Delta Word64) where
     arbitrary = fmap Dw64 (arbitrary :: Gen Int64)
@@ -404,14 +428,22 @@ instance Primitive AsciiString where
     ftail_ s1 s2 | (LL.genericLength s1 :: Word32) > LL.genericLength s2 = s1
     ftail_ s1 s2 | (LL.genericLength s1 :: Word32) == LL.genericLength s2 = map fst (LL.dropWhile (\(x, y) -> x == y) (LL.zip s1 s2))
     ftail_ _ _ = throw $ OtherException "Can't encode a smaller string with a tail operator."
-    decodeP = asciiString
+    decodeP = rmPreamble <$> asciiString
+    decodeP0 = rmPreamble0 <$> asciiString
     decodeD = do 
-                l <- int
+                l <- decodeP
                 s <- decodeP
                 return (Dascii (l, s))
+    decodeD0 = do 
+                l <- decodeP0
+                s <- decodeP0
+                return (Dascii (l, s))
     decodeT = decodeP
-    encodeP = _asciiString
+    decodeT0 = decodeP0
+    encodeP = _asciiString . addPreamble
+    encodeP0 = _asciiString . addPreamble0
     encodeD = (encodeP `append` encodeP) . (\(Dascii (i, s)) -> (i, s))
+    encodeD0 = (encodeP0 `append` encodeP0) . (\(Dascii (i, s)) -> (i, s))
 
 instance Primitive (Int32, Int64) where
     newtype Delta (Int32, Int64) = Ddec (Int32, Int64) deriving (Eq, Show)
@@ -449,13 +481,21 @@ instance Primitive (Int32, Int64) where
     ftail = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     ftail_ = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     decodeP = do 
-        e <- int :: A.Parser Int32
-        m <- int :: A.Parser Int64
+        e <- decodeP
+        m <- decodeP
+        return (e, m)
+    decodeP0 = do 
+        e <- decodeP0
+        m <- decodeP0
         return (e, m)
     decodeD = Ddec <$> decodeP
+    decodeD0 = Ddec <$> decodeP0
     decodeT = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
+    decodeT0 = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
     encodeP = encodeP `append` encodeP
+    encodeP0 = encodeP0 `append` encodeP0
     encodeD = encodeP . (\(Ddec (e, m)) -> (e, m))
+    encodeD0 = encodeP0 . (\(Ddec (e, m)) -> (e, m))
 
 instance Arbitrary (Delta (Int32, Int64)) where
     arbitrary = fmap Ddec (arbitrary :: Gen (Int32, Int64))
@@ -490,12 +530,19 @@ instance Primitive B.ByteString where
     ftail_ b1 b2 | (LL.genericLength b1 :: Word32) == LL.genericLength b2 = B.pack (map fst (LL.dropWhile (\(x, y) -> x == y) (B.zip b1 b2)))
     ftail_ _ _ = throw $ OtherException "Can't encode a smaller string with a tail operator."
     decodeP = byteVector
+    decodeP0 = byteVector0
     decodeD = do 
-                l <- int
+                l <- decodeP
                 bv <- decodeP
                 return (Dbs (l, bv))
+    decodeD0 = do 
+                l <- decodeP0
+                bv <- decodeP0
+                return (Dbs (l, bv))
     encodeP = _byteVector
+    encodeP0 = _byteVector0
     encodeD = (encodeP `append` encodeP) . (\(Dbs (i, bs)) -> (i, bs)) 
+    encodeD0 = (encodeP0 `append` encodeP0) . (\(Dbs (i, bs)) -> (i, bs)) 
 
 instance Arbitrary (Delta B.ByteString) where
     arbitrary = fmap Dbs (arbitrary :: Gen (Int32, B.ByteString))
@@ -521,11 +568,17 @@ instance Primitive UnicodeString where
     ftail (UNI s1) (UNI s2) = UNI (unpack (ftail (pack s1) (pack s2)))
     ftail_ (UNI s1) (UNI s2) = (UNI . unpack) (ftail (pack s1) (pack s2))
     decodeP = (UNI . unpack) <$> byteVector 
+    decodeP0 = (UNI . unpack) <$> byteVector0
     decodeD = do 
                 (Dbs d) <- decodeD
                 return $ Duni d
+    decodeD0 = do 
+                (Dbs d) <- decodeD0
+                return $ Duni d
     encodeP (UNI s) = (encodeP . pack) s
+    encodeP0 (UNI s) = (encodeP0 . pack) s
     encodeD (Duni d) = encodeD (Dbs d)
+    encodeD0 (Duni d) = encodeD0 (Dbs d)
 
 instance Arbitrary (Delta UnicodeString) where
     arbitrary = fmap Duni (arbitrary :: Gen (Int32, B.ByteString))
@@ -577,9 +630,21 @@ data Instruction = Instruction Field
                     deriving (Show, Data, Typeable)
 
 instance Arbitrary Instruction where
-    arbitrary = Instruction <$> arbitrary 
+    arbitrary = Instruction <$> arbitrary `suchThat` (not . deeperThen 3)
     {-arbitrary = oneof [Instruction <$> arbitrary, TemplateReference <$> arbitrary]-}
     -- TemplateReferences are really hard to test.
+
+deeperThen :: (Data a) => Int -> a -> Bool
+deeperThen b d | isGroup d = or (gmapQ (deeperThen (b-1)) d)
+deeperThen 0 _ = True
+deeperThen b d = or (gmapQ (deeperThen b) d)
+
+isGroup :: (Data a) => a -> Bool
+isGroup = mkQ False h where h :: Field -> Bool
+                            h (Grp _) = True
+                            h (Seq _) = True
+                            h _ = False
+
 
 -- |This is a helper data structure, NOT defined in the reference.
 data TemplateReferenceContent = TemplateReferenceContent {
@@ -926,6 +991,11 @@ byteVector = do
     s <- uint::A.Parser Word32
     byteVector' s
 
+byteVector0 :: A.Parser B.ByteString
+byteVector0 = do
+    s <- uint::A.Parser Word32
+    byteVector' (minusOne s)
+
 -- |Bytevector field parser. The first argument is the size of the bytevector.
 -- If the length of the bytevector is bigger than maxBound::Int an exception 
 -- will be trown.
@@ -934,6 +1004,9 @@ byteVector' c = A.take (fromEnum c)
 
 _byteVector :: Coparser B.ByteString
 _byteVector = (_uint . (\bs -> fromIntegral(B.length bs) :: Word32)) `append'` BU.fromByteString
+
+_byteVector0 :: Coparser B.ByteString
+_byteVector0 = (_uint . (\bs -> plusOne $ fromIntegral(B.length bs) :: Word32)) `append'` BU.fromByteString
 
 -- |Unsigned integer parser, doesn't check for bounds.
 -- TODO: should we check for R6 errors, i.e overlong fields?
@@ -1287,20 +1360,28 @@ rmPreamble (['\0', '\0']) = "\NUL"
 rmPreamble s = LL.dropWhile (=='\0') s
 
 -- |Remove preamble of an ascii string, NULLable situation.
-rmPreamble'::AsciiString -> AsciiString
-rmPreamble' (['\0','\0']) = []
-rmPreamble' (['\0','\0','\0']) = "\NUL"
+rmPreamble0::AsciiString -> AsciiString
+rmPreamble0 (['\0','\0']) = []
+rmPreamble0 (['\0','\0','\0']) = "\NUL"
 -- overlong string.
-rmPreamble' s = LL.dropWhile (=='\0') s
+rmPreamble0 s = LL.dropWhile (=='\0') s
 
 addPreamble :: AsciiString -> AsciiString
 addPreamble [] = (['\0'])
 addPreamble "\NUL" = (['\0','\0'])
 addPreamble s = LL.dropWhile (=='\0') s
 
-addPreamble' :: AsciiString -> AsciiString
-addPreamble' [] = (['\0','\0'])
-addPreamble' "\NUL" = (['\0','\0','\0'])
-addPreamble' s = LL.dropWhile (=='\0') s
+addPreamble0 :: AsciiString -> AsciiString
+addPreamble0 [] = (['\0','\0'])
+addPreamble0 "\NUL" = (['\0','\0','\0'])
+addPreamble0 s = LL.dropWhile (=='\0') s
 
 
+-- |Decrement the value of an integer, when it is positive.
+minusOne::(Ord a, Num a) => a -> a
+minusOne x | x > 0 = x - 1
+minusOne x = x
+
+plusOne :: (Ord a, Num a) => a -> a
+plusOne x | x >= 0 = x + 1 
+plusOne x = x
