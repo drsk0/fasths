@@ -811,7 +811,7 @@ seqF2P (Sequence fname maybe_presence _ _ maybe_length instrs)
         where   g Nothing = return (fname, Nothing)
                 g (Just i') = do
                                     env <- ask
-                                    s <- A.count (fromEnum i') (when (needsSegment instrs (templates env)) segment >> mapM instr2P instrs) 
+                                    s <- A.count (fromIntegral i') (when (needsSegment instrs (templates env)) segment >> mapM instr2P instrs) 
                                     return (fname, Just (Sq i' s))
                 -- get the correct parser for the length field.
                 fname' = uniqueFName fname "l" 
