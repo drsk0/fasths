@@ -36,8 +36,8 @@ newtype SimpleTemplateMsgPair = STMP (Template, [(NsName, Maybe Value)]) derivin
 instance Arbitrary SimpleTemplateMsgPair where
     arbitrary = do 
                     (ST t) <- arbitrary
-                    msgs <- listOf $ arbitraryMsgForTemplate t
-                    return $ STMP (t, msgs)
+                    msg <- arbitraryMsgForTemplate t
+                    return $ STMP (t, [msg])
 
 newtype Bit7String = B7S String deriving Show
 unwrapB7S :: Bit7String -> String
@@ -107,18 +107,19 @@ arbitraryValueForIntField (UInt64Field fic) = arbitraryValueForIntField' fic
 
 arbitraryValueForIntField' :: (Primitive a, Arbitrary a) => FieldInstrContent -> Gen (Maybe a)
 arbitraryValueForIntField' (FieldInstrContent fname Nothing maybe_op) = arbitraryValueForIntField' (FieldInstrContent fname (Just Mandatory) maybe_op)
-arbitraryValueForIntField' (FieldInstrContent _ (Just Mandatory) Nothing) = fmap Just arbitrary
+arbitraryValueForIntField' (FieldInstrContent _ (Just Mandatory) Nothing) = Just <$> arbitrary
 arbitraryValueForIntField' (FieldInstrContent _ (Just Mandatory) (Just (Constant iv))) = return $ Just $ ivToPrimitive iv
 arbitraryValueForIntField' (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing)))
     = throw $ S5 "No initial value given for mandatory default operator."
-arbitraryValueForIntField' (FieldInstrContent _ (Just Mandatory) (Just (Copy _))) = fmap Just arbitrary
+arbitraryValueForIntField' (FieldInstrContent _ (Just Mandatory) (Just (Default (Just _)))) = Just <$> arbitrary
+arbitraryValueForIntField' (FieldInstrContent _ (Just Mandatory) (Just (Copy _))) = Just <$> arbitrary
 arbitraryValueForIntField' (FieldInstrContent _ (Just Mandatory) (Just (Increment _))) = fmap Just arbitrary
 arbitraryValueForIntField' (FieldInstrContent _ (Just Mandatory) (Just (Tail _)))
     = throw $ S2 "Tail operator can not be applied on an integer type field." 
 arbitraryValueForIntField' (FieldInstrContent _ (Just Optional) (Just (Tail _)))
     = throw $ S2 "Tail operator can not be applied on an integer type field." 
 arbitraryValueForIntField' (FieldInstrContent _ (Just Optional) (Just (Constant iv))) = oneof [return $ Just (ivToPrimitive iv), return Nothing]
-arbitraryValueForIntField' (FieldInstrContent _ (Just Mandatory) (Just (Delta _))) = fmap Just arbitrary
+arbitraryValueForIntField' (FieldInstrContent _ (Just Mandatory) (Just (Delta _))) = Just <$> arbitrary
 arbitraryValueForIntField' _ = arbitrary
 
 
@@ -129,11 +130,11 @@ arbitraryValueForDecField (DecimalField _ (Just Mandatory) Nothing) = fmap Just 
 arbitraryValueForDecField (DecimalField _ (Just Mandatory) (Just (Left (Constant iv)))) = return $ Just $ ivToPrimitive iv
 arbitraryValueForDecField (DecimalField _ (Just Mandatory) (Just (Left (Default Nothing))))
     = throw $ S5 "No initial value given for mandatory default operator."
-arbitraryValueForDecField (DecimalField _ (Just Mandatory) (Just (Left (Default (Just _))))) = fmap Just arbitrary
-arbitraryValueForDecField (DecimalField _ (Just Mandatory) (Just (Left (Copy _)))) = fmap Just arbitrary
+arbitraryValueForDecField (DecimalField _ (Just Mandatory) (Just (Left (Default (Just _))))) = Just <$> arbitrary
+arbitraryValueForDecField (DecimalField _ (Just Mandatory) (Just (Left (Copy _)))) = Just <$> arbitrary
 arbitraryValueForDecField (DecimalField _ (Just Mandatory) (Just (Left (Increment _)))) 
     = throw $ S2 "Increment operator is only applicable to integer fields." 
-arbitraryValueForDecField (DecimalField _ (Just Mandatory) (Just (Left (Delta _)))) = fmap Just arbitrary
+arbitraryValueForDecField (DecimalField _ (Just Mandatory) (Just (Left (Delta _)))) = Just <$> arbitrary
 arbitraryValueForDecField (DecimalField _ (Just Mandatory) (Just (Left (Tail _))))
     = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields." 
 arbitraryValueForDecField (DecimalField _ (Just Optional) (Just (Left (Constant iv)))) = oneof [return $ Just $ ivToPrimitive iv, return Nothing]

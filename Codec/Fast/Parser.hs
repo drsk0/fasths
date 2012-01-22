@@ -464,7 +464,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Defaul
     = ifPresentElse
     (
     do
-        str <- l2 decodeP0
+        str <- l2 decodeP
         return $ Just str
     )
     (
@@ -476,7 +476,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Co
     = ifPresentElse
     (
     do
-            s <- l2 decodeP0
+            s <- l2 decodeP
             lift $ updatePrevValue fname oc (Assigned (witnessType s))
             return (Just s)
     )
@@ -525,7 +525,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Ta
     in
         do
             pva <- lift $ prevValue fname oc
-            t <- l2 decodeT0
+            t <- l2 decodeT
             return (Just (baseValue pva `ftail` t))
     )
     (
@@ -757,7 +757,7 @@ bytevecF2P (FieldInstrContent fname (Just Mandatory) (Just(Tail oc))) _
     in
         do
             pva <- lift $ prevValue fname oc
-            t <- l2 decodeT0
+            t <- l2 decodeT
             return (Just(baseValue pva `ftail` t))
     )
     (

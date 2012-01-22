@@ -130,9 +130,11 @@ intF2Cop' (FieldInstrContent _ (Just Mandatory) (Just (Constant _)))
     = \_ -> lift $ return $ BU.empty
 
 -- pm: Yes, Nullable: No
-intF2Cop' (FieldInstrContent _ (Just Mandatory) (Just (Default (Just _))))
-    = cp where cp (Just i) = (lift $ setPMap True) >> (lift $ return $ encodeP i)
-               cp (Nothing) = (lift $ setPMap False) >> (lift $ return $ BU.empty)
+intF2Cop' (FieldInstrContent fname (Just Mandatory) (Just (Default (Just iv))))
+    = cp where cp (Just i) =    if i == ivToPrimitive iv
+                                then (lift $ setPMap False) >> (lift $ return $ BU.empty)
+                                else (lift $ setPMap True) >> (lift $ return $ encodeP i)
+               cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
 
 -- pm: Yes, Nullable: No
 intF2Cop' (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing)))
@@ -347,7 +349,7 @@ decF2Cop (DecimalField fname (Just Optional) (Just (Left (Constant iv))))
 
 -- pm: Yes, Nullable: Yes
 decF2Cop (DecimalField _ (Just Optional) (Just (Left (Default Nothing)))) 
-    = cp where  cp (Just d) = (lift $ setPMap True) >> (lift $ return $ encodeP d)
+    = cp where  cp (Just d) = (lift $ setPMap True) >> (lift $ return $ encodeP0 d)
                 cp (Nothing) = (lift $ setPMap False) >> (return $ BU.empty)
                 -- TODO: why is this field nullable?
             
@@ -355,7 +357,7 @@ decF2Cop (DecimalField _ (Just Optional) (Just (Left (Default Nothing))))
 decF2Cop (DecimalField _ (Just Optional) (Just (Left (Default (Just iv))))) 
     = cp where  cp (Just d) =   if ivToPrimitive iv == d
                                 then (lift $ setPMap False) >> (lift $ return $ BU.empty)
-                                else (lift $ setPMap True) >> (lift $ return $ encodeP d)
+                                else (lift $ setPMap True) >> (lift $ return $ encodeP0 d)
                 cp (Nothing) = (lift $ setPMap True) >> nulL
 
 -- pm: Yes, Nullable: Yes
@@ -365,13 +367,13 @@ decF2Cop (DecimalField fname (Just Optional) (Just (Left (Copy oc))))
                                 case p of
                                     (Assigned v) -> if assertType v == d 
                                                     then (lift $ setPMap False) >> (lift $ return $ BU.empty)
-                                                    else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType d))) >> (lift $ return $ encodeP d)
+                                                    else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType d))) >> (lift $ return $ encodeP0 d)
                                     Undefined -> h' oc
                                         where   h' (OpContext _ _ (Just iv)) =  if ivToPrimitive iv == d
                                                                                 then (lift $ setPMap False) >> (lift $ return BU.empty)
-                                                                                else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType d))) >> (lift $ return $ encodeP d)
-                                                h' (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType d))) >> (lift $ return $ encodeP d)
-                                    Empty -> (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType d))) >> (lift $ return $ encodeP d)
+                                                                                else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType d))) >> (lift $ return $ encodeP0 d)
+                                                h' (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType d))) >> (lift $ return $ encodeP0 d)
+                                    Empty -> (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType d))) >> (lift $ return $ encodeP0 d)
                 cp (Nothing) = do
                                 p <- lift $ prevValue fname oc
                                 case p of
@@ -396,7 +398,7 @@ decF2Cop (DecimalField fname (Just Optional) (Just (Left (Delta oc))))
                                 in
                                     do
                                         p <- lift $ prevValue fname oc
-                                        (lift $ updatePrevValue fname oc (Assigned (witnessType d))) >> (lift $ return $ encodeD $ delta_ d (baseValue p))
+                                        (lift $ updatePrevValue fname oc (Assigned (witnessType d))) >> (lift $ return $ encodeD0 $ delta_ d (baseValue p))
                 cp (Nothing) = nulL
 
 -- pm: No, Nullable: Yes
@@ -657,13 +659,13 @@ bytevecF2Cop (FieldInstrContent fname (Just Mandatory) (Just(Default (Just iv)))
 
 -- pm: Yes, Nullable: Yes
 bytevecF2Cop (FieldInstrContent _ (Just Optional) (Just(Default Nothing))) _ 
-    = cp where  cp (Just bv) = (lift $ setPMap True) >> (lift $ return $ encodeP bv)
+    = cp where  cp (Just bv) = (lift $ setPMap True) >> (lift $ return $ encodeP0 bv)
                 cp (Nothing) = (lift $ setPMap False) >> (lift $ return BU.empty)
 -- pm: Yes, Nullable: Yes
 bytevecF2Cop (FieldInstrContent _ (Just Optional) (Just(Default (Just iv)))) _ 
     = cp where  cp (Just bv) =  if ivToPrimitive iv == bv
                                 then (lift $ setPMap False) >> (lift $ return BU.empty)
-                                else (lift $ setPMap True) >> (lift $ return $ encodeP bv)
+                                else (lift $ setPMap True) >> (lift $ return $ encodeP0 bv)
                 cp (Nothing) = (lift $ setPMap True) >> nulL
 -- pm: Yes, Nullable: No
 bytevecF2Cop (FieldInstrContent fname (Just Mandatory) (Just(Copy oc))) _ 
@@ -687,13 +689,13 @@ bytevecF2Cop (FieldInstrContent fname (Just Optional) (Just(Copy oc))) _
                                 case p of
                                     (Assigned v) -> if assertType v == bv
                                                     then (lift $ setPMap False) >> (lift $ return BU.empty)
-                                                    else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return $ encodeP bv)
+                                                    else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return $ encodeP0 bv)
                                     Undefined -> h' oc
                                         where   h' (OpContext _ _ (Just iv)) =  if ivToPrimitive iv == bv
                                                                                 then (lift $ setPMap False) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return BU.empty)
-                                                                                else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return $ encodeP bv)
-                                                h' (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return $ encodeP bv)
-                                    Empty -> (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return $ encodeP bv)
+                                                                                else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return $ encodeP0 bv)
+                                                h' (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return $ encodeP0 bv)
+                                    Empty -> (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return $ encodeP0 bv)
                 cp (Nothing) = do 
                                 p <- lift $ prevValue fname oc
                                 case p of
@@ -732,7 +734,7 @@ bytevecF2Cop (FieldInstrContent fname (Just Optional) (Just(Delta oc))) _
                                 in
                                     do 
                                         p <- lift $ prevValue fname oc
-                                        (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return $ encodeD $ delta_ bv (baseValue p))
+                                        (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return $ encodeD0 $ delta_ bv (baseValue p))
                 cp (Nothing) = nulL
 
 
@@ -776,13 +778,13 @@ bytevecF2Cop  (FieldInstrContent fname (Just Optional) (Just(Tail oc))) _
                                         case p of
                                             (Assigned v) -> if assertType v == bv
                                                             then (lift $ setPMap False) >> (lift $ return BU.empty)
-                                                            else (lift $ setPMap True) >> (lift $ return $ encodeT $ ftail_ bv (baseValue p))
+                                                            else (lift $ setPMap True) >> (lift $ return $ encodeT0 $ ftail_ bv (baseValue p))
                                             Undefined -> h oc
                                                 where   h (OpContext _ _ (Just iv)) =   if ivToPrimitive iv == bv
                                                                                         then (lift $ setPMap False) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return BU.empty)
-                                                                                        else (lift $ setPMap True) >> (lift $ return $ encodeT $ ftail_ bv (baseValue p))
-                                                        h (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ return $ encodeT $ ftail_ bv (baseValue p))
-                                            Empty -> (lift $ setPMap True) >> (lift $ return $ encodeT $ ftail_ bv (baseValue p))
+                                                                                        else (lift $ setPMap True) >> (lift $ return $ encodeT0 $ ftail_ bv (baseValue p))
+                                                        h (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ return $ encodeT0 $ ftail_ bv (baseValue p))
+                                            Empty -> (lift $ setPMap True) >> (lift $ return $ encodeT0 $ ftail_ bv (baseValue p))
                 cp (Nothing) = do
                                 p <- lift $ prevValue fname oc
                                 case p of
