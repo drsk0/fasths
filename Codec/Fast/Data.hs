@@ -264,7 +264,24 @@ data Value = I32 Int32
            | B  B.ByteString
            | Sq Word32 [[(NsName, Maybe Value)]]
            | Gr [(NsName, Maybe Value)]
-           deriving (Show, Eq, Data, Typeable)
+           deriving (Eq, Data, Typeable)
+
+instance Show Value where
+    show v = h 0 v
+        where   h :: Int -> Value -> String
+                h i (Gr vs) = "Gr \n" ++ unlines (map (h' (i + 1)) vs)
+                h i (Sq l xss) = "Sq [" ++ show l ++ "] \n" ++ unlines (map (\xs -> unlines (map (h' (i +1)) xs)) xss)
+                h i (I32 v) = "I32 " ++ show v
+                h i (UI32 v) = "UI32 " ++ show v
+                h i (I64 v) = "I64 " ++ show v
+                h i (UI64 v) = "UI64 " ++ show v
+                h i (Dec v) = "Dec " ++ show v
+                h i (A v) = "A " ++ show v
+                h i (U v) = "U " ++ show v
+                h i (B v) = "B " ++ show v
+                h' i (n, (Just v)) = shift i ++ show n ++ " -> " ++ h i v
+                h' i (n, Nothing) = shift i ++ show n ++ " -> " ++ " --- "
+                shift i = replicate i '\t' 
 
 -- |Some basic types, renamed for readability.
 newtype UnicodeString = UNI String deriving (Show, Eq, Monoid, Data, Typeable)
@@ -671,13 +688,13 @@ instance Arbitrary Field where
                 where   h 0 = oneof 
                                 [IntField <$> arbitrary, 
                                 DecField <$> (changeInitValue <$> (arbitrary :: Gen (Int32, Int64)) <*> arbitrary),
-                                AsciiStrField <$> (changeInitValue . dropWhile (=='\0') <$> (vectorOf 10 (arbitrary :: Gen Char)) <*> arbitrary),
+                                AsciiStrField <$> (changeInitValue <$> (vectorOf 10 ((arbitrary :: Gen Char) `suchThat` (/='\0'))) <*> arbitrary),
                                 UnicodeStrField <$> (changeInitValue . UNI <$> (vectorOf 10 (arbitrary :: Gen Char)) <*> arbitrary),
                                 ByteVecField <$> (changeInitValue . B.pack <$> (vectorOf 10 (arbitrary :: Gen Word8)) <*> arbitrary)] `suchThat` isWellFormed
                         h i = resize (i `div` 2)
                                 (oneof [IntField <$> arbitrary, 
                                 DecField <$> (changeInitValue <$> (arbitrary :: Gen (Int32, Int64)) <*> arbitrary),
-                                AsciiStrField <$> (changeInitValue <$> (vectorOf 10 (arbitrary :: Gen Char)) <*> arbitrary),
+                                AsciiStrField <$> (changeInitValue <$> (vectorOf 10 ((arbitrary :: Gen Char) `suchThat` (/='\0'))) <*> arbitrary),
                                 UnicodeStrField <$> (changeInitValue . UNI <$> (vectorOf 10 (arbitrary :: Gen Char)) <*> arbitrary),
                                 ByteVecField <$> (changeInitValue . B.pack <$> (vectorOf 10 (arbitrary :: Gen Word8)) <*> arbitrary),
                                 Seq <$> arbitrary, 
