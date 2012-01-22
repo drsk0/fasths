@@ -425,9 +425,9 @@ instance Primitive AsciiString where
                             l2 = map fst $ takeWhile (uncurry (==)) (LL.zip (LL.reverse s1) (LL.reverse s2))
                             
     ftail s1 s2 = take (length s1 - length s2) s1 ++ s2
-    ftail_ s1 s2 | (LL.genericLength s1 :: Word32) > LL.genericLength s2 = s1
-    ftail_ s1 s2 | (LL.genericLength s1 :: Word32) == LL.genericLength s2 = map fst (LL.dropWhile (\(x, y) -> x == y) (LL.zip s1 s2))
-    ftail_ _ _ = throw $ OtherException "Can't encode a smaller string with a tail operator."
+    ftail_ s1 s2 | length s1 > length s2 = s1
+    ftail_ s1 s2 | length s1 == length s2 = map fst (LL.dropWhile (\(x, y) -> x == y) (LL.zip s1 s2))
+    ftail_ s1 s2 | otherwise = throw $ OtherException ("Can't encode a smaller string with a tail operator." ++ " -> " ++ show s1 ++ " -> " ++ show s2)
     decodeP = rmPreamble <$> asciiString
     decodeP0 = rmPreamble0 <$> asciiString
     decodeD = do 
@@ -525,10 +525,10 @@ instance Primitive B.ByteString where
                     else Dbs (LL.genericLength l2 - LL.genericLength bv2 - 1, LL.genericTake ((LL.genericLength bv1 - LL.genericLength l2) :: Word32) bv1)
                     where   l1 = takeWhile (uncurry (==)) (LL.zip bv1 bv2)
                             l2 = takeWhile (uncurry (==)) (LL.zip (LL.reverse bv1) (LL.reverse bv2))
-    ftail b1 b2 = B.take (B.length b1 - B.length b2) b1 `B.append` b2
-    ftail_ b1 b2 | (LL.genericLength b1 :: Word32) > LL.genericLength b2 = b1
-    ftail_ b1 b2 | (LL.genericLength b1 :: Word32) == LL.genericLength b2 = B.pack (map fst (LL.dropWhile (\(x, y) -> x == y) (B.zip b1 b2)))
-    ftail_ _ _ = throw $ OtherException "Can't encode a smaller string with a tail operator."
+    ftail b1 b2 = (B.take (B.length b1 - B.length b2) b1) `B.append` b2
+    ftail_ b1 b2 | B.length b1  > B.length b2 = b1
+    ftail_ b1 b2 | B.length b1 == B.length b2 = B.pack (map fst (LL.dropWhile (\(x, y) -> x == y) (B.zip b1 b2)))
+    ftail_ b1 b2 | otherwise = throw $ OtherException ("Can't encode a smaller string with a tail operator." ++ " -> " ++ show b1 ++ " -> " ++ show b2)
     decodeP = byteVector
     decodeP0 = byteVector0
     decodeD = do 
@@ -671,15 +671,15 @@ instance Arbitrary Field where
                 where   h 0 = oneof 
                                 [IntField <$> arbitrary, 
                                 DecField <$> (changeInitValue <$> (arbitrary :: Gen (Int32, Int64)) <*> arbitrary),
-                                AsciiStrField <$> (changeInitValue <$> (arbitrary :: Gen AsciiString) <*> arbitrary),
-                                UnicodeStrField <$> (changeInitValue <$> (arbitrary :: Gen UnicodeString) <*> arbitrary),
-                                ByteVecField <$> (changeInitValue <$> (arbitrary :: Gen B.ByteString) <*> arbitrary)] `suchThat` isWellFormed
+                                AsciiStrField <$> (changeInitValue . dropWhile (=='\0') <$> (vectorOf 10 (arbitrary :: Gen Char)) <*> arbitrary),
+                                UnicodeStrField <$> (changeInitValue . UNI <$> (vectorOf 10 (arbitrary :: Gen Char)) <*> arbitrary),
+                                ByteVecField <$> (changeInitValue . B.pack <$> (vectorOf 10 (arbitrary :: Gen Word8)) <*> arbitrary)] `suchThat` isWellFormed
                         h i = resize (i `div` 2)
                                 (oneof [IntField <$> arbitrary, 
                                 DecField <$> (changeInitValue <$> (arbitrary :: Gen (Int32, Int64)) <*> arbitrary),
-                                AsciiStrField <$> (changeInitValue <$> (arbitrary :: Gen AsciiString) <*> arbitrary),
-                                UnicodeStrField <$> (changeInitValue <$> (arbitrary :: Gen UnicodeString) <*> arbitrary),
-                                ByteVecField <$> (changeInitValue <$> (arbitrary :: Gen B.ByteString) <*> arbitrary), 
+                                AsciiStrField <$> (changeInitValue <$> (vectorOf 10 (arbitrary :: Gen Char)) <*> arbitrary),
+                                UnicodeStrField <$> (changeInitValue . UNI <$> (vectorOf 10 (arbitrary :: Gen Char)) <*> arbitrary),
+                                ByteVecField <$> (changeInitValue . B.pack <$> (vectorOf 10 (arbitrary :: Gen Word8)) <*> arbitrary),
                                 Seq <$> arbitrary, 
                                 Grp <$> arbitrary] `suchThat` isWellFormed)
 

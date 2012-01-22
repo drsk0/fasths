@@ -40,6 +40,8 @@ import Codec.Fast.TemplateParser
 import qualified Data.Binary.Builder as BU
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
+import Data.Generics.Schemes (everywhere)
+import Data.Generics.Aliases (mkT)
 
 -- |Stateful parser for one message depending on templates and the tid2temp 
 -- converter function.
@@ -63,8 +65,11 @@ prop_decode_template_encode_template_is_ID t msgs =
     case l == r of
     True -> True
     False -> error ("----->\n" ++ show l ++ "\n ----->\n" ++ show r)
-    where   l = A.maybeResult (A.feed (A.parse (evalStateT (A.many parser) (initState templates)) bs) B.empty)
-            r = Just msgs
+    where   l = everywhere (mkT h) (A.maybeResult (A.feed (A.parse (evalStateT (A.many parser) (initState templates)) bs) B.empty))
+            r = everywhere (mkT h) (Just msgs)
             parser = message templates (const $ tName t)
             bs = (B.concat . BL.toChunks . BU.toLazyByteString) (M.mconcat (evalState (mapM (_message templates (const 0)) msgs) (initState templates)))
             templates = Templates Nothing Nothing Nothing [t]
+            h :: Value -> Value
+            h (Dec d) = Dec $ fromIntegral $ (round d :: Int)
+            h v = v

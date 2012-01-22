@@ -126,7 +126,7 @@ arbitraryValueForIntField' _ = arbitrary
 arbitraryValueForDecField :: DecimalField -> Gen (Maybe (Int32, Int64))
 arbitraryValueForDecField (DecimalField fname Nothing maybe_either_op) 
     = arbitraryValueForDecField (DecimalField fname (Just Mandatory) maybe_either_op)
-arbitraryValueForDecField (DecimalField _ (Just Mandatory) Nothing) = fmap Just arbitrary
+arbitraryValueForDecField (DecimalField _ (Just Mandatory) Nothing) = Just <$> arbitrary
 arbitraryValueForDecField (DecimalField _ (Just Mandatory) (Just (Left (Constant iv)))) = return $ Just $ ivToPrimitive iv
 arbitraryValueForDecField (DecimalField _ (Just Mandatory) (Just (Left (Default Nothing))))
     = throw $ S5 "No initial value given for mandatory default operator."
@@ -188,9 +188,9 @@ arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandator
 arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Increment _))))
     = throw $ S2 "Increment operator is only applicable to integer fields." 
 arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Delta _)))) = (Just . unwrapB7S) <$> arbitrary
-arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Tail _)))) = (Just . (dropWhile (=='0')) . (map unwrapB7C)) <$> vectorOf 10 arbitrary
+arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Tail _)))) = (Just . (dropWhile (=='\0')) . (map unwrapB7C)) <$> vectorOf 10 arbitrary
 arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Constant iv))))  = oneof [return $ Just $ ivToPrimitive iv, return Nothing]
-arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Tail _)))) = oneof [return Nothing, (Just . (dropWhile (=='0')) . (map unwrapB7C)) <$> vectorOf 10 arbitrary]
+arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Tail _)))) = oneof [return Nothing, (Just . (dropWhile (=='\0')) . (map unwrapB7C)) <$> vectorOf 10 arbitrary]
 arbitraryValueForAsciiField _ = (fmap unwrapB7S) <$> arbitrary
 
 arbitraryValueForByteVectorField :: (Primitive a, Arbitrary a, LL.ListLike a c, Arbitrary c) => FieldInstrContent -> Maybe ByteVectorLength -> Gen (Maybe a)
