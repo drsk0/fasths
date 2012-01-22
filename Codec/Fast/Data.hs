@@ -264,7 +264,7 @@ data Value = I32 Int32
            | B  B.ByteString
            | Sq Word32 [[(NsName, Maybe Value)]]
            | Gr [(NsName, Maybe Value)]
-           deriving (Show, Eq)
+           deriving (Show, Eq, Data, Typeable)
 
 -- |Some basic types, renamed for readability.
 newtype UnicodeString = UNI String deriving (Show, Eq, Monoid, Data, Typeable)

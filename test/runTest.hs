@@ -44,7 +44,7 @@ unwrapB7S :: Bit7String -> String
 unwrapB7S (B7S s) = s
 
 instance Arbitrary Bit7String where
-    arbitrary = fmap (B7S . unpack . B.map (\w -> clearBit w 7) . pack . dropWhile (\x -> x == '\0' || x == '\NUL')) (arbitrary :: Gen String)
+    arbitrary = fmap (B7S . unpack . B.map (\w -> clearBit w 7) . pack . dropWhile (== '\0')) (arbitrary :: Gen String)
     shrink = (map B7S) . (shrink :: String -> [String]) . unwrapB7S
 
 newtype Bit7Char = B7C Char deriving Show
@@ -188,9 +188,9 @@ arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandator
 arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Increment _))))
     = throw $ S2 "Increment operator is only applicable to integer fields." 
 arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Delta _)))) = (Just . unwrapB7S) <$> arbitrary
-arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Tail _)))) = (Just . (map unwrapB7C)) <$> vectorOf 10 arbitrary
+arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Tail _)))) = (Just . (dropWhile (=='0')) . (map unwrapB7C)) <$> vectorOf 10 arbitrary
 arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Constant iv))))  = oneof [return $ Just $ ivToPrimitive iv, return Nothing]
-arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Tail _)))) = oneof [return Nothing, (Just . (map unwrapB7C)) <$> vectorOf 10 arbitrary]
+arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Tail _)))) = oneof [return Nothing, (Just . (dropWhile (=='0')) . (map unwrapB7C)) <$> vectorOf 10 arbitrary]
 arbitraryValueForAsciiField _ = (fmap unwrapB7S) <$> arbitrary
 
 arbitraryValueForByteVectorField :: (Primitive a, Arbitrary a, LL.ListLike a c, Arbitrary c) => FieldInstrContent -> Maybe ByteVectorLength -> Gen (Maybe a)
