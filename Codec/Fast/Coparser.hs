@@ -804,7 +804,14 @@ seqF2Cop (Sequence fname maybe_presence _ _ maybe_length instrs)
 
                                             segmentb = do
                                                             env <- ask
-                                                            if needsSegment instrs (templates env) then _segment () else (lift $ return BU.empty)
+                                                            if needsSegment instrs (templates env) 
+                                                            then do
+                                                                    s <- get
+                                                                    put $ Context [] (dict s)
+                                                                    seg <- _segment () 
+                                                                    put s
+                                                                    lift $ return seg
+                                                            else (lift $ return BU.empty)
                                             segs = map (sequenceD $ map instr2Cop instrs) xs
                                             segs' = fmap mconcat $ sequence (map g segs) where g fb = do  
                                                                                                         b1 <- fb
@@ -833,8 +840,11 @@ groupF2Cop (Group fname (Just Mandatory) _ _ instrs)
                                         env <- ask
                                         if any (needsPm (templates env)) instrs 
                                         then do 
+                                                s <- get
+                                                put $ Context [] (dict s)
                                                 b1 <- (sequenceD (map instr2Cop instrs)) xs
                                                 b2 <- _segment ()
+                                                put s
                                                 lift $ return (b2 `BU.append` b1)
                                         else (sequenceD (map instr2Cop instrs)) xs
                 cp (Just _) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
@@ -845,8 +855,11 @@ groupF2Cop (Group fname (Just Optional) _ _ instrs)
                                                                 env <- ask
                                                                 if any (needsPm (templates env)) instrs 
                                                                 then do 
+                                                                        s <- get
+                                                                        put $ Context [] (dict s)
                                                                         b1 <- (sequenceD (map instr2Cop instrs)) xs
                                                                         b2 <- _segment ()
+                                                                        put s
                                                                         lift $ return (b2 `BU.append` b1)
                                                                 else (sequenceD (map instr2Cop instrs)) xs)
                 cp (Just _) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
