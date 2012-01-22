@@ -44,7 +44,7 @@ unwrapB7S :: Bit7String -> String
 unwrapB7S (B7S s) = s
 
 instance Arbitrary Bit7String where
-    arbitrary = fmap (B7S . unpack . B.map (\w -> clearBit w 7) . pack) (arbitrary :: Gen String)
+    arbitrary = fmap (B7S . unpack . B.map (\w -> clearBit w 7) . pack . dropWhile (\x -> x == '\0' || x == '\NUL')) (arbitrary :: Gen String)
     shrink = (map B7S) . (shrink :: String -> [String]) . unwrapB7S
 
 newtype Bit7Char = B7C Char deriving Show
