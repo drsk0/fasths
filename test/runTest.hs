@@ -36,8 +36,8 @@ newtype SimpleTemplateMsgPair = STMP (Template, [(NsName, Maybe Value)]) derivin
 instance Arbitrary SimpleTemplateMsgPair where
     arbitrary = do 
                     (ST t) <- arbitrary
-                    msg <- arbitraryMsgForTemplate t
-                    return $ STMP (t, [msg])
+                    msgs <- listOf $ arbitraryMsgForTemplate t
+                    return $ STMP (t, msgs)
 
 newtype Bit7String = B7S String deriving Show
 unwrapB7S :: Bit7String -> String

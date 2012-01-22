@@ -630,21 +630,9 @@ data Instruction = Instruction Field
                     deriving (Show, Data, Typeable)
 
 instance Arbitrary Instruction where
-    arbitrary = Instruction <$> arbitrary `suchThat` (not . deeperThen 3)
+    arbitrary = Instruction <$> arbitrary
     {-arbitrary = oneof [Instruction <$> arbitrary, TemplateReference <$> arbitrary]-}
     -- TemplateReferences are really hard to test.
-
-deeperThen :: (Data a) => Int -> a -> Bool
-deeperThen b d | isGroup d = or (gmapQ (deeperThen (b-1)) d)
-deeperThen 0 _ = True
-deeperThen b d = or (gmapQ (deeperThen b) d)
-
-isGroup :: (Data a) => a -> Bool
-isGroup = mkQ False h where h :: Field -> Bool
-                            h (Grp _) = True
-                            h (Seq _) = True
-                            h _ = False
-
 
 -- |This is a helper data structure, NOT defined in the reference.
 data TemplateReferenceContent = TemplateReferenceContent {
