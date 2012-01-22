@@ -49,7 +49,7 @@ NsAttr (..),
 TemplateNsAttr (..),
 IdAttr (..),
 Token (..),
-UnicodeString,
+UnicodeString (..),
 AsciiString,
 Decimal,
 anySBEEntity,
@@ -566,7 +566,7 @@ instance Primitive UnicodeString where
     delta (UNI s) (Duni (l, bs)) = UNI (unpack (delta (pack s) (Dbs (l, bs))))
     delta_ (UNI s1) (UNI s2) = (\(Dbs d) -> Duni d) (delta_ (pack s1) (pack s2))
     ftail (UNI s1) (UNI s2) = UNI (unpack (ftail (pack s1) (pack s2)))
-    ftail_ (UNI s1) (UNI s2) = (UNI . unpack) (ftail (pack s1) (pack s2))
+    ftail_ (UNI s1) (UNI s2) = (UNI . unpack) (ftail_ (pack s1) (pack s2))
     decodeP = (UNI . unpack) <$> byteVector 
     decodeP0 = (UNI . unpack) <$> byteVector0
     decodeD = do 

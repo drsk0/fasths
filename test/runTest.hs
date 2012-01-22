@@ -2,7 +2,6 @@
 
 import Test.QuickCheck
 import Codec.Fast.Data
-import Codec.Fast
 import Data.ByteString.Char8 (unpack, pack) 
 import Data.Bits
 import Data.Int
@@ -274,6 +273,7 @@ main = do
     {-putStr "\n[*] Checking 'ftail . ftail_ = id'\n"-}
     {-quickCheck (prop_ftail_dot_ftail__is_ID :: (AsciiString, AsciiString) -> Bool)-}
     {-quickCheck (prop_ftail_dot_ftail__is_ID :: (B.ByteString, B.ByteString) -> Bool)-}
+    {-quickCheck (prop_ftail_dot_ftail__is_ID :: (UnicodeString, UnicodeString) -> Bool)-}
 
     {-putStr "\n[*] Checking 'rmPreamble . addPreamble = id'\n"-}
     {-quickCheck (prop_rmPreamble_dot_addPreamble_is_ID . (\(NOS s) -> s))-}
