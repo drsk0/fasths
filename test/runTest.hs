@@ -2,6 +2,7 @@
 
 import Test.QuickCheck
 import Codec.Fast.Data
+import Codec.Fast
 import Data.ByteString.Char8 (unpack, pack) 
 import Data.Bits
 import Data.Int
