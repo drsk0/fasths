@@ -179,7 +179,7 @@ arbitraryValueForDecField _ = arbitrary
 arbitraryValueForAsciiField :: AsciiStringField -> Gen (Maybe AsciiString)
 arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent fname Nothing maybe_op))
     = arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent fname (Just Mandatory) maybe_op))
-arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) Nothing)) = fmap (Just . unwrapB7S) arbitrary
+arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) Nothing)) = (Just . unwrapB7S) <$> arbitrary
 arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Constant iv)))) = return $ Just $ ivToPrimitive iv
 arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))))
     = throw $ S5 "No initial value given for mandatory default operator."
@@ -191,7 +191,7 @@ arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandator
 arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Tail _)))) = (Just . (map unwrapB7C)) <$> vectorOf 10 arbitrary
 arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Constant iv))))  = oneof [return $ Just $ ivToPrimitive iv, return Nothing]
 arbitraryValueForAsciiField (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Tail _)))) = oneof [return Nothing, (Just . (map unwrapB7C)) <$> vectorOf 10 arbitrary]
-arbitraryValueForAsciiField _ = arbitrary
+arbitraryValueForAsciiField _ = (fmap unwrapB7S) <$> arbitrary
 
 arbitraryValueForByteVectorField :: (Primitive a, Arbitrary a, LL.ListLike a c, Arbitrary c) => FieldInstrContent -> Maybe ByteVectorLength -> Gen (Maybe a)
 arbitraryValueForByteVectorField (FieldInstrContent fname Nothing maybe_op) len 
