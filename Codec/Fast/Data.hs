@@ -667,13 +667,21 @@ data Field = IntField IntegerField
 			deriving (Show, Data, Typeable)
 
 instance Arbitrary Field where
-    arbitrary = oneof [IntField <$> arbitrary, 
-                DecField <$> (changeInitValue <$> (arbitrary :: Gen (Int32, Int64)) <*> arbitrary),
-                AsciiStrField <$> (changeInitValue <$> (arbitrary :: Gen AsciiString) <*> arbitrary),
-                UnicodeStrField <$> (changeInitValue <$> (arbitrary :: Gen UnicodeString) <*> arbitrary),
-                ByteVecField <$> (changeInitValue <$> (arbitrary :: Gen B.ByteString) <*> arbitrary), 
-                Seq <$> arbitrary, 
-                Grp <$> arbitrary] `suchThat` isWellFormed
+    arbitrary = sized h
+                where   h 0 = oneof 
+                                [IntField <$> arbitrary, 
+                                DecField <$> (changeInitValue <$> (arbitrary :: Gen (Int32, Int64)) <*> arbitrary),
+                                AsciiStrField <$> (changeInitValue <$> (arbitrary :: Gen AsciiString) <*> arbitrary),
+                                UnicodeStrField <$> (changeInitValue <$> (arbitrary :: Gen UnicodeString) <*> arbitrary),
+                                ByteVecField <$> (changeInitValue <$> (arbitrary :: Gen B.ByteString) <*> arbitrary)] `suchThat` isWellFormed
+                        h i = resize (i `div` 2)
+                                (oneof [IntField <$> arbitrary, 
+                                DecField <$> (changeInitValue <$> (arbitrary :: Gen (Int32, Int64)) <*> arbitrary),
+                                AsciiStrField <$> (changeInitValue <$> (arbitrary :: Gen AsciiString) <*> arbitrary),
+                                UnicodeStrField <$> (changeInitValue <$> (arbitrary :: Gen UnicodeString) <*> arbitrary),
+                                ByteVecField <$> (changeInitValue <$> (arbitrary :: Gen B.ByteString) <*> arbitrary), 
+                                Seq <$> arbitrary, 
+                                Grp <$> arbitrary] `suchThat` isWellFormed)
 
 changeInitValue :: (Data a, Primitive b) => b -> a -> a
 changeInitValue i = everywhereBut isExcluded (mkT (h i))
