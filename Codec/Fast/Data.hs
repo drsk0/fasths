@@ -267,21 +267,21 @@ data Value = I32 Int32
            deriving (Eq, Data, Typeable)
 
 instance Show Value where
-    show v = h 0 v
+    show val = h 0 val
         where   h :: Int -> Value -> String
                 h i (Gr vs) = "Gr \n" ++ unlines (map (h' (i + 1)) vs)
                 h i (Sq l xss) = "Sq [" ++ show l ++ "] \n" ++ unlines (map (\xs -> unlines (map (h' (i +1)) xs)) xss)
-                h i (I32 v) = "I32 " ++ show v
-                h i (UI32 v) = "UI32 " ++ show v
-                h i (I64 v) = "I64 " ++ show v
-                h i (UI64 v) = "UI64 " ++ show v
-                h i (Dec v) = "Dec " ++ show v
-                h i (A v) = "A " ++ show v
-                h i (U v) = "U " ++ show v
-                h i (B v) = "B " ++ show v
-                h' i (n, (Just v)) = shift i ++ show n ++ " -> " ++ h i v
-                h' i (n, Nothing) = shift i ++ show n ++ " -> " ++ " --- "
-                shift i = replicate i '\t' 
+                h _ (I32 v) = "I32 " ++ show v
+                h _ (UI32 v) = "UI32 " ++ show v
+                h _ (I64 v) = "I64 " ++ show v
+                h _ (UI64 v) = "UI64 " ++ show v
+                h _ (Dec v) = "Dec " ++ show v
+                h _ (A v) = "A " ++ show v
+                h _ (U v) = "U " ++ show v
+                h _ (B v) = "B " ++ show v
+                h' i (n, (Just v)) = shiftRight i ++ show n ++ " -> " ++ h i v
+                h' i (n, Nothing) = shiftRight i ++ show n ++ " -> " ++ " --- "
+                shiftRight i = replicate i '\t' 
 
 -- |Some basic types, renamed for readability.
 newtype UnicodeString = UNI String deriving (Show, Eq, Monoid, Data, Typeable)
