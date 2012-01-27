@@ -264,24 +264,7 @@ data Value = I32 Int32
            | B  B.ByteString
            | Sq Word32 [[(NsName, Maybe Value)]]
            | Gr [(NsName, Maybe Value)]
-           deriving (Eq, Data, Typeable)
-
-instance Show Value where
-    show val = h 0 val
-        where   h :: Int -> Value -> String
-                h i (Gr vs) = "Gr \n" ++ unlines (map (h' (i + 1)) vs)
-                h i (Sq l xss) = "Sq [" ++ show l ++ "] \n" ++ unlines (map (\xs -> unlines (map (h' (i +1)) xs)) xss)
-                h _ (I32 v) = "I32 " ++ show v
-                h _ (UI32 v) = "UI32 " ++ show v
-                h _ (I64 v) = "I64 " ++ show v
-                h _ (UI64 v) = "UI64 " ++ show v
-                h _ (Dec v) = "Dec " ++ show v
-                h _ (A v) = "A " ++ show v
-                h _ (U v) = "U " ++ show v
-                h _ (B v) = "B " ++ show v
-                h' i (n, (Just v)) = shiftRight i ++ show n ++ " -> " ++ h i v
-                h' i (n, Nothing) = shiftRight i ++ show n ++ " -> " ++ " --- "
-                shiftRight i = replicate i '\t' 
+           deriving (Eq, Show, Data, Typeable)
 
 -- |Some basic types, renamed for readability.
 newtype UnicodeString = UNI String deriving (Show, Eq, Monoid, Data, Typeable)
@@ -1015,7 +998,7 @@ byteVector0 = do
 -- If the length of the bytevector is bigger than maxBound::Int an exception 
 -- will be trown.
 byteVector' :: Word32 -> A.Parser B.ByteString
-byteVector' c = A.take (fromEnum c)
+byteVector' c = A.take (fromIntegral c)
 
 _byteVector :: Coparser B.ByteString
 _byteVector = (_uint . (\bs -> fromIntegral(B.length bs) :: Word32)) `append'` BU.fromByteString

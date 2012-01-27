@@ -293,4 +293,4 @@ main = do
     {-quickCheck (prop_ivToPrimitive_dot_primitiveToIv_is_ID :: B.ByteString -> Bool)-}
 
     putStr "\n[*] Checking 'decoder . encoder = id'\n"
-    quickCheck ((uncurry $ prop_decode_template_encode_template_is_ID) . (\(STMP p) -> p))
+    quickCheck (prop_decode_template_encode_template_is_ID . (\(STMP p) -> p))
