@@ -70,7 +70,7 @@ showDiffValues _ (Gr []) (Gr _) = "Gr " ++ "EMPTY" ++ notEqual ++ "NONEMPTY"
 showDiffValues _ (Gr _) (Gr []) = "Gr " ++ "NONEMPTY" ++ notEqual ++ " EMPTY" 
 showDiffValues i (Gr vs1) (Gr vs2) = "Gr \n" ++ unlines (map (showDiffPairs (i + 1)) (zip vs1 vs2))
 showDiffValues _ (Sq l1 _) (Sq l2 _) | l1 /= l2 = "Different sequence lengths: " ++ show l1 ++ notEqual ++ show l2
-showDiffValues i (Sq l1 pss1) (Sq _ pss2) | otherwise = shiftRight i ++ "Sq \n" ++ br (show l1) ++ unlines (map (\(ps1, ps2) -> unlines (map (showDiffPairs (i + 1)) (zip ps1 ps2))) (zip pss1 pss2))
+showDiffValues i (Sq l1 pss1) (Sq _ pss2) | otherwise = shiftRight i ++ "Sq " ++ "[" ++ (show l1) ++ "] \n" ++ unlines (map (\(ps1, ps2) -> unlines (map (showDiffPairs (i + 1)) (zip ps1 ps2))) (zip pss1 pss2))
 showDiffValues _ v1 v2 = show v1 ++ notEqual ++  show v2
 
 showDiffPairs :: Int -> (Pair, Pair) -> String
@@ -78,7 +78,7 @@ showDiffPairs i ((n1, m_v1), (n2, m_v2)) | n1 == n2 = shiftRight i ++ (show $ PN
 showDiffPairs i ((n1, _), (n2, _)) | otherwise = shiftRight i ++ "Names don't match: " ++ show (PN n1) ++ notEqual ++ show (PN n2)
 
 showDiffMaybeValues :: Int -> Maybe Value -> Maybe Value -> String
-showDiffMaybeValues i (Just v1) Nothing = show' i v1 ++ " / --- " 
-showDiffMaybeValues i Nothing (Just v2) = " --- / " ++ show' i v2 
+showDiffMaybeValues i (Just v1) Nothing = show' i v1 ++ notEqual ++ " --- " 
+showDiffMaybeValues i Nothing (Just v2) = " --- " ++ notEqual ++ show' i v2 
 showDiffMaybeValues _ Nothing Nothing =  " --- "
 showDiffMaybeValues i (Just v1) (Just v2) = showDiffValues i v1 v2
