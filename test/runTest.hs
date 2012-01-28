@@ -5,8 +5,8 @@ import Codec.Fast.Data
 import Codec.Fast
 import Data.ByteString.Char8 (unpack, pack) 
 import Data.Bits
-import Data.Int
-import Data.Word
+import Data.Int (Int32, Int64)
+import Data.Word (Word32, Word64)
 import qualified Data.ListLike as LL
 import Control.Applicative 
 import Control.Exception
@@ -20,7 +20,7 @@ instance Arbitrary SimpleTemplate where
                     ns <- arbitrary
                     d <- arbitrary
                     t <- arbitrary
-                    i <- arbitrary `suchThat` (not . (\x -> isSequence x || isGroup x))
+                    i <- arbitrary `suchThat` (not . (\x -> isSequence x || isGroup x || isDec x))
                     return $ ST $ Template  n ns d t [i]
 
 isSequence :: Instruction -> Bool
@@ -30,6 +30,10 @@ isSequence _ = False
 isGroup :: Instruction -> Bool
 isGroup (Instruction (Grp _)) = True
 isGroup _ = False
+
+isDec :: Instruction -> Bool
+isDec (Instruction (DecField _)) = True
+isDec _ = False
 
 newtype SimpleTemplateMsgPair = STMP (Template, [(NsName, Maybe Value)]) deriving Show
 
@@ -44,15 +48,15 @@ unwrapB7S :: Bit7String -> String
 unwrapB7S (B7S s) = s
 
 instance Arbitrary Bit7String where
-    arbitrary = fmap (B7S . unpack . B.map (\w -> clearBit w 7) . pack . dropWhile (== '\0')) (arbitrary :: Gen String)
+    arbitrary = fmap (B7S . dropWhile (== '\0') . unpack  . B.map (\w -> clearBit w 7) . pack) (arbitrary :: Gen String)
     shrink = (map B7S) . (shrink :: String -> [String]) . unwrapB7S
 
-newtype Bit7Char = B7C Char deriving Show
+newtype Bit7Char = B7C Char deriving (Show, Eq)
 unwrapB7C :: Bit7Char -> Char
 unwrapB7C (B7C c) = c
 
 instance Arbitrary Bit7Char where
-    arbitrary = (B7C . toEnum . (\w -> clearBit w 7) . fromEnum) <$> (arbitrary :: Gen Char)
+    arbitrary = ((B7C . toEnum . (\w -> clearBit w 7) . fromEnum) <$> (arbitrary :: Gen Char)) `suchThat` (/= B7C '\0')
     shrink = (map B7C) . (shrink :: Char -> [Char]) . unwrapB7C
 
 newtype NormalizedDecimal = ND (Int32, Int64) deriving Show
@@ -92,7 +96,7 @@ arbitraryValueForField (IntField f@(Int32Field (FieldInstrContent fname _ _))) =
 arbitraryValueForField (IntField f@(Int64Field (FieldInstrContent fname _ _))) = (fname,) <$> fmap toValue <$> ((arbitraryValueForIntField f) :: Gen (Maybe Int64))
 arbitraryValueForField (IntField f@(UInt32Field (FieldInstrContent fname _ _))) = (fname,) <$> fmap toValue <$> ((arbitraryValueForIntField f) :: Gen (Maybe Word32))
 arbitraryValueForField (IntField f@(UInt64Field (FieldInstrContent fname _ _))) = (fname,) <$> fmap toValue <$> ((arbitraryValueForIntField f) :: Gen (Maybe Word64))
-arbitraryValueForField (DecField f@(DecimalField fname _ _ )) = (fname, ) <$> fmap toValue <$> arbitraryValueForDecField f
+arbitraryValueForField (DecField f@(DecimalField fname _ _ )) = (fname, ) <$> fmap toValue <$> arbitraryValueForDecField f 
 arbitraryValueForField (AsciiStrField f@(AsciiStringField(FieldInstrContent fname _ _ ))) = (fname, ) <$> fmap toValue <$> arbitraryValueForAsciiField f
 arbitraryValueForField (UnicodeStrField (UnicodeStringField f@(FieldInstrContent fname _ _ ) maybe_len )) = (fname, ) <$> fmap toValue <$> (arbitraryValueForByteVectorField f maybe_len :: Gen (Maybe UnicodeString))
 arbitraryValueForField (ByteVecField (ByteVectorField f@(FieldInstrContent fname _ _ ) maybe_len )) = (fname, ) <$> fmap toValue <$> (arbitraryValueForByteVectorField f maybe_len :: Gen (Maybe B.ByteString))

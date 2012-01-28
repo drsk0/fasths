@@ -450,7 +450,7 @@ instance Primitive (Int32, Int64) where
     witnessType = TypeWitnessDec
     assertType (TypeWitnessDec (e, m)) = (e, m)
     assertType _ = throw $ D4 "Type mismatch."
-    toValue (e, m) = Dec $ (fromIntegral m) * 10^^e
+    toValue (e, m) = Dec $ (fromIntegral m) * 10.0^^(fromIntegral e)
     fromValue (Dec 0.0) = (0, 0)
     fromValue (Dec d) | d > 0.0 = (fromIntegral e  - LL.genericLength digits, m) 
         where   (digits, e) = floatToDigits 10 d
