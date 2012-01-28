@@ -192,7 +192,7 @@ append' :: (Monoid m) => DualType a m -> DualType a m -> DualType a m
 append' cp1 cp2 = contramap (\x -> (x, x)) (cp1 `append` cp2)
 
 sequenceD :: (Monoid m) => [DualType a m] -> DualType [a] m
-sequenceD ds xs = mconcat (zipWith (\x d -> d x) xs ds)
+sequenceD ds xs = mconcat (zipWith (\d x -> d x) ds xs)
 
 type Coparser a = DualType a BU.Builder
 
@@ -450,7 +450,7 @@ instance Primitive (Int32, Int64) where
     witnessType = TypeWitnessDec
     assertType (TypeWitnessDec (e, m)) = (e, m)
     assertType _ = throw $ D4 "Type mismatch."
-    toValue (e, m) = Dec $ (fromIntegral m) * 10.0^^(fromIntegral e)
+    toValue (e, m) = Dec $ (fromIntegral m) * 10.0^^e
     fromValue (Dec 0.0) = (0, 0)
     fromValue (Dec d) | d > 0.0 = (fromIntegral e  - LL.genericLength digits, m) 
         where   (digits, e) = floatToDigits 10 d
@@ -670,13 +670,13 @@ instance Arbitrary Field where
     arbitrary = sized h
                 where   h 0 = oneof 
                                 [IntField <$> arbitrary, 
-                                DecField <$> (changeInitValue <$> (arbitrary :: Gen (Int32, Int64)) <*> arbitrary),
+                                --DecField <$> (changeInitValue <$> (arbitrary :: Gen (Int32, Int64)) <*> arbitrary),
                                 AsciiStrField <$> (changeInitValue <$> (vectorOf 10 ((arbitrary :: Gen Char) `suchThat` (/='\0'))) <*> arbitrary),
                                 UnicodeStrField <$> (changeInitValue . UNI <$> (vectorOf 10 (arbitrary :: Gen Char)) <*> arbitrary),
                                 ByteVecField <$> (changeInitValue . B.pack <$> (vectorOf 10 (arbitrary :: Gen Word8)) <*> arbitrary)] `suchThat` isWellFormed
-                        h i = resize (i `div` 2)
+                        h i = resize (i `div` 10)
                                 (oneof [IntField <$> arbitrary, 
-                                DecField <$> (changeInitValue <$> (arbitrary :: Gen (Int32, Int64)) <*> arbitrary),
+                                --DecField <$> (changeInitValue <$> (arbitrary :: Gen (Int32, Int64)) <*> arbitrary),
                                 AsciiStrField <$> (changeInitValue <$> (vectorOf 10 ((arbitrary :: Gen Char) `suchThat` (/='\0'))) <*> arbitrary),
                                 UnicodeStrField <$> (changeInitValue . UNI <$> (vectorOf 10 (arbitrary :: Gen Char)) <*> arbitrary),
                                 ByteVecField <$> (changeInitValue . B.pack <$> (vectorOf 10 (arbitrary :: Gen Word8)) <*> arbitrary),
@@ -1185,15 +1185,12 @@ needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just
 needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just(Tail _))) _))) = True
 needsPm _ (Instruction (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Tail _))) _))) = True
 needsPm ts (Instruction (UnicodeStrField (UnicodeStringField (FieldInstrContent fname maybe_presence maybe_op) maybe_length))) = needsPm ts (Instruction(ByteVecField (ByteVectorField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)))
-needsPm ts (Instruction (Seq s)) = all h (sInstructions s)
-    where   h (TemplateReference Nothing) = False
-            h (TemplateReference (Just trc)) = all (needsPm ts) (tInstructions (ts M.! tempRefCont2TempNsName trc))
-            h f = needsPm ts f
-needsPm ts (Instruction (Grp g)) = all h (gInstructions g)
-    where   h (TemplateReference Nothing) = False
-            h (TemplateReference (Just trc)) = all (needsPm ts) (tInstructions (ts M.! tempRefCont2TempNsName trc))
-            h f = needsPm ts f
-
+needsPm ts (Instruction (Seq (Sequence n m_p _ _ Nothing _))) = needsPm ts (Instruction (IntField (UInt32Field (FieldInstrContent fname' m_p Nothing)))) where fname' = uniqueFName n "l"
+needsPm ts (Instruction (Seq (Sequence n m_p _ _ (Just (Length Nothing op)) _))) = needsPm ts (Instruction (IntField (UInt32Field (FieldInstrContent fname' m_p op)))) where fname' = uniqueFName n "l" 
+needsPm ts (Instruction (Seq (Sequence _ m_p _ _ (Just (Length (Just fn) op)) _))) = needsPm ts (Instruction (IntField (UInt32Field (FieldInstrContent fn m_p op))))
+needsPm ts (Instruction (Grp (Group n Nothing m_d m_tr m_is))) =  needsPm ts (Instruction (Grp (Group n (Just Mandatory) m_d m_tr m_is)))
+needsPm _ (Instruction (Grp (Group _ (Just Mandatory) _ _ _))) = False
+needsPm _ (Instruction (Grp (Group _ (Just Optional) _ _ _))) = True
 -- |Maps a integer field to a triple (DictionaryName, Key, Value).
 intFieldNeedsPm::FieldInstrContent -> Bool
 intFieldNeedsPm (FieldInstrContent fname Nothing maybeOp) = intFieldNeedsPm $ FieldInstrContent fname (Just Mandatory) maybeOp

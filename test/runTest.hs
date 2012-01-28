@@ -20,7 +20,7 @@ instance Arbitrary SimpleTemplate where
                     ns <- arbitrary
                     d <- arbitrary
                     t <- arbitrary
-                    i <- arbitrary `suchThat` (not . (\x -> isSequence x || isGroup x || isDec x))
+                    i <- arbitrary 
                     return $ ST $ Template  n ns d t [i]
 
 isSequence :: Instruction -> Bool
@@ -40,7 +40,7 @@ newtype SimpleTemplateMsgPair = STMP (Template, [(NsName, Maybe Value)]) derivin
 instance Arbitrary SimpleTemplateMsgPair where
     arbitrary = do 
                     (ST t) <- arbitrary
-                    msgs <- listOf $ arbitraryMsgForTemplate t
+                    msgs <- resize 10 (listOf $ arbitraryMsgForTemplate t)
                     return $ STMP (t, msgs)
 
 newtype Bit7String = B7S String deriving Show
@@ -217,14 +217,18 @@ arbitraryValueForByteVectorField (FieldInstrContent _ (Just Optional) (Just(Tail
 arbitraryValueForByteVectorField _ _ = arbitrary
 
 arbitraryValueForSequence :: Sequence -> Gen (NsName, Maybe Value)
-arbitraryValueForSequence (Sequence fname (Just Optional) _ _ _ instrs) = do
-    l <- arbitrary :: Gen Word32
-    sq <- vectorOf (fromIntegral l) (mapM arbitraryValueForInstruction instrs)
-    oneof [return (fname, Just $ Sq l sq), return (fname, Nothing)]
-arbitraryValueForSequence (Sequence fname _ _ _ _ instrs) = do
-    l <- arbitrary :: Gen Word32
-    sq <- vectorOf (fromIntegral l) (mapM arbitraryValueForInstruction instrs)
-    return (fname, Just $ Sq l sq)
+arbitraryValueForSequence (Sequence fname pr _ _ m_length instrs) = do
+    l <- h pr m_length
+    g l
+    where  
+        g Nothing = return (fname, Nothing)
+        g (Just i') = do 
+                         sq <- (vectorOf (fromIntegral i') (mapM arbitraryValueForInstruction instrs))
+                         return (fname, Just (Sq (fromIntegral i') sq))
+        fname' = uniqueFName fname "l" 
+        h p Nothing = arbitraryValueForIntField (UInt32Field (FieldInstrContent fname' p Nothing)) :: Gen (Maybe Word32)
+        h p (Just (Length Nothing op)) = arbitraryValueForIntField (UInt32Field (FieldInstrContent fname' p op)) :: Gen (Maybe Word32)
+        h p (Just (Length (Just fn) op)) = arbitraryValueForIntField (UInt32Field (FieldInstrContent fn p op)) :: Gen (Maybe Word32)
 
 arbitraryValueForGroup :: Group -> Gen (NsName, Maybe Value)
 arbitraryValueForGroup (Group fname Nothing maybe_dict maybe_typeref instrs)

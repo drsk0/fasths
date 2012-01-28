@@ -811,13 +811,16 @@ seqF2P (Sequence fname maybe_presence _ _ maybe_length instrs)
         where   g Nothing = return (fname, Nothing)
                 g (Just i') = do
                                     env <- ask
-                                    s <- A.count (fromIntegral i') (when (needsSegment instrs (templates env)) segment >> mapM instr2P instrs) 
-                                    return (fname, Just (Sq i' s))
+                                    s <- get
+                                    sq <- A.count (fromIntegral i') (when (needsSegment instrs (templates env)) segment >> mapM instr2P instrs) 
+                                    s' <- get
+                                    put $ Context (pm s) (dict s')
+                                    return (fname, Just (Sq i' sq))
                 -- get the correct parser for the length field.
                 fname' = uniqueFName fname "l" 
-                h p Nothing = intF2P (UInt32Field (FieldInstrContent fname' p Nothing))
-                h p (Just (Length Nothing op)) = intF2P (UInt32Field (FieldInstrContent fname' p op))
-                h p (Just (Length (Just fn) op)) = intF2P (UInt32Field (FieldInstrContent fn p op))
+                h m_p Nothing = intF2P (UInt32Field (FieldInstrContent fname' m_p Nothing))
+                h m_p (Just (Length Nothing op)) = intF2P (UInt32Field (FieldInstrContent fname' m_p op))
+                h m_p (Just (Length (Just fn) op)) = intF2P (UInt32Field (FieldInstrContent fn m_p op))
                 
 -- |Maps a group field to its parser.
 groupF2P::Group -> FParser (NsName, Maybe Value)
@@ -825,11 +828,25 @@ groupF2P (Group fname Nothing maybe_dict maybe_typeref instrs)
     = groupF2P (Group fname (Just Mandatory) maybe_dict maybe_typeref instrs)
 
 groupF2P (Group fname (Just Mandatory) _ _ instrs) 
-    = ask >>= \env -> (fname,) . Just . Gr <$> (when (any (needsPm (templates env)) instrs) segment >> mapM instr2P instrs)
+    = do 
+        env <- ask 
+        s <- get
+        if (needsSegment instrs (templates env)) then segment else return ()
+        vs <- mapM instr2P instrs
+        s' <- get
+        put $ Context (pm s) (dict s')
+        return (fname, Just $ Gr $ vs)
 
 groupF2P (Group fname (Just Optional) _ _ instrs) 
     = ifPresentElse 
-    (ask >>= \env -> (fname,) . Just . Gr <$> (when (any (needsPm (templates env)) instrs) segment >> mapM instr2P instrs)) 
+    (do 
+        env <- ask 
+        s <- get
+        if (needsSegment instrs (templates env)) then segment else return ()
+        vs <- mapM instr2P instrs
+        s' <- get
+        put $ Context (pm s) (dict s')
+        return (fname, Just $ Gr $ vs))
     (return (fname, Nothing))
 
 -- |nULL parser.
