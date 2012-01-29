@@ -150,7 +150,7 @@ intF2Cop' (FieldInstrContent fname (Just Mandatory) (Just (Copy oc)))
                                                     else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType i))) >> (lift $ return $ encodeP i)
                                     Undefined -> h' oc
                                         where   h' (OpContext _ _ (Just iv)) = if (ivToPrimitive iv) == i 
-                                                                                then (lift $ setPMap False) >> (lift $ return BU.empty) 
+                                                                                then (lift $ setPMap False) >> (lift $ updatePrevValue fname oc (Assigned (witnessType i))) >> (lift $ return BU.empty) 
                                                                                 else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType i))) >> (lift $ return $ encodeP i)
                                                 h' (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType i))) >> (lift $ return $ encodeP i)
                                     Empty -> (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType i))) >> (lift $ return $ encodeP i)
