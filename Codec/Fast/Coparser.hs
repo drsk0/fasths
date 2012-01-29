@@ -519,13 +519,13 @@ asciiStrF2Cop (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (
                                         case p of
                                             (Assigned v) -> if assertType v == s
                                                             then (lift $ setPMap False) >> (lift $ return BU.empty)
-                                                            else (lift $ setPMap True) >> (lift $ return $ encodeT $ ftail_ s (baseValue p))
+                                                            else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType s))) >> (lift $ return $ encodeT $ ftail_ s (baseValue p))
                                             Undefined -> h oc
                                                 where   h (OpContext _ _ (Just iv)) =   if ivToPrimitive iv == s
                                                                                         then (lift $ setPMap False) >> (lift $ updatePrevValue fname oc (Assigned (witnessType s))) >> (lift $ return BU.empty)
-                                                                                        else (lift $ setPMap True) >> (lift $ return $ encodeT $ ftail_ s (baseValue p))
-                                                        h (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ return $ encodeT $ ftail_ s (baseValue p))
-                                            Empty -> (lift $ setPMap True) >> (lift $ return $ encodeT $ ftail_ s (baseValue p))
+                                                                                        else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType s))) >> (lift $ return $ encodeT $ ftail_ s (baseValue p))
+                                                        h (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType s))) >> (lift $ return $ encodeT $ ftail_ s (baseValue p))
+                                            Empty -> (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType s))) >> (lift $ return $ encodeT $ ftail_ s (baseValue p))
                 cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
 
 -- pm: Yes, Nullable: No
@@ -602,13 +602,13 @@ asciiStrF2Cop (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (T
                                         case p of
                                             (Assigned v) -> if assertType v == s
                                                             then (lift $ setPMap False) >> (lift $ return BU.empty)
-                                                            else (lift $ setPMap True) >> (lift $ return $ encodeT0 $ ftail_ s (baseValue p))
+                                                            else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType s))) >> (lift $ return $ encodeT0 $ ftail_ s (baseValue p))
                                             Undefined -> h oc
                                                 where   h (OpContext _ _ (Just iv)) =   if ivToPrimitive iv == s
                                                                                         then (lift $ setPMap False) >> (lift $ updatePrevValue fname oc (Assigned (witnessType s))) >> (lift $ return BU.empty)
-                                                                                        else (lift $ setPMap True) >> (lift $ return $ encodeT0 $ ftail_ s (baseValue p))
-                                                        h (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ return $ encodeT0 $ ftail_ s (baseValue p))
-                                            Empty -> (lift $ setPMap True) >> (lift $ return $ encodeT0 $ ftail_ s (baseValue p))
+                                                                                        else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType s))) >> (lift $ return $ encodeT0 $ ftail_ s (baseValue p))
+                                                        h (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType s))) >> (lift $ return $ encodeT0 $ ftail_ s (baseValue p))
+                                            Empty -> (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType s))) >> (lift $ return $ encodeT0 $ ftail_ s (baseValue p))
                 cp (Nothing) = do
                                 p <- lift $ prevValue fname oc
                                 case p of
@@ -754,13 +754,13 @@ bytevecF2Cop (FieldInstrContent fname (Just Mandatory) (Just(Tail oc))) _
                                         case p of
                                             (Assigned v) -> if assertType v == bv
                                                             then (lift $ setPMap False) >> (lift $ return BU.empty)
-                                                            else (lift $ setPMap True) >> (lift $ return $ encodeT $ ftail_ bv (baseValue p))
+                                                            else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return $ encodeT $ ftail_ bv (baseValue p))
                                             Undefined -> h oc
                                                 where   h (OpContext _ _ (Just iv)) =   if ivToPrimitive iv == bv
                                                                                         then (lift $ setPMap False) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return BU.empty)
-                                                                                        else (lift $ setPMap True) >> (lift $ return $ encodeT $ ftail_ bv (baseValue p))
-                                                        h (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ return $ encodeT $ ftail_ bv (baseValue p))
-                                            Empty -> (lift $ setPMap True) >> (lift $ return $ encodeT $ ftail_ bv (baseValue p))
+                                                                                        else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return $ encodeT $ ftail_ bv (baseValue p))
+                                                        h (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return $ encodeT $ ftail_ bv (baseValue p))
+                                            Empty -> (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return $ encodeT $ ftail_ bv (baseValue p))
                 cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
 
 -- pm: Yes, Nullable: Yes
@@ -778,20 +778,20 @@ bytevecF2Cop  (FieldInstrContent fname (Just Optional) (Just(Tail oc))) _
                                         case p of
                                             (Assigned v) -> if assertType v == bv
                                                             then (lift $ setPMap False) >> (lift $ return BU.empty)
-                                                            else (lift $ setPMap True) >> (lift $ return $ encodeT0 $ ftail_ bv (baseValue p))
+                                                            else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return $ encodeT0 $ ftail_ bv (baseValue p))
                                             Undefined -> h oc
                                                 where   h (OpContext _ _ (Just iv)) =   if ivToPrimitive iv == bv
                                                                                         then (lift $ setPMap False) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return BU.empty)
-                                                                                        else (lift $ setPMap True) >> (lift $ return $ encodeT0 $ ftail_ bv (baseValue p))
-                                                        h (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ return $ encodeT0 $ ftail_ bv (baseValue p))
-                                            Empty -> (lift $ setPMap True) >> (lift $ return $ encodeT0 $ ftail_ bv (baseValue p))
+                                                                                        else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return $ encodeT0 $ ftail_ bv (baseValue p))
+                                                        h (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return $ encodeT0 $ ftail_ bv (baseValue p))
+                                            Empty -> (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType bv))) >> (lift $ return $ encodeT0 $ ftail_ bv (baseValue p))
                 cp (Nothing) = do
                                 p <- lift $ prevValue fname oc
                                 case p of
                                     (Assigned _) -> (lift $ setPMap True) >> (lift $ updatePrevValue fname oc Empty) >> nulL 
                                     Undefined -> h oc
                                         where   h (OpContext _ _ (Just _)) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc Empty) >> nulL
-                                                h (OpContext _ _ Nothing) = (lift $ updatePrevValue fname oc Empty) >> (lift $ return BU.empty)
+                                                h (OpContext _ _ Nothing) = (lift $ setPMap False) >> (lift $ updatePrevValue fname oc Empty) >> (lift $ return BU.empty)
                                     Empty -> (lift $ setPMap False) >> (lift $ return BU.empty)
 
 seqF2Cop :: Sequence -> FCoparser (Maybe Value)

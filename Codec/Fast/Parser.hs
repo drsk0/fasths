@@ -526,6 +526,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) (Just (Ta
         do
             pva <- lift $ prevValue fname oc
             t <- l2 decodeT
+            lift $ updatePrevValue fname oc (Assigned (witnessType (baseValue pva `ftail` t)))
             return (Just (baseValue pva `ftail` t))
     )
     (
@@ -608,6 +609,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Tai
             do
                 bv <- lift $ prevValue fname oc >>= baseValue
                 t <- l2 decodeT0
+                lift $ updatePrevValue fname oc (Assigned (witnessType (bv `ftail` t)))
                 return (Just (bv `ftail` t))
     )
     (
@@ -758,6 +760,7 @@ bytevecF2P (FieldInstrContent fname (Just Mandatory) (Just(Tail oc))) _
         do
             pva <- lift $ prevValue fname oc
             t <- l2 decodeT
+            lift $ updatePrevValue fname oc (Assigned (witnessType (baseValue pva `ftail` t)))
             return (Just(baseValue pva `ftail` t))
     )
     (
@@ -789,6 +792,7 @@ bytevecF2P (FieldInstrContent fname (Just Optional) (Just(Tail oc))) _
             do
                 bv <- lift $ prevValue fname oc >>= baseValue
                 t <- l2 decodeT0
+                lift $ updatePrevValue fname oc (Assigned (witnessType (bv `ftail` t)))
                 return (Just (bv `ftail` t))
     )
     (
