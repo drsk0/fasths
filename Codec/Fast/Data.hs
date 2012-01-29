@@ -801,7 +801,7 @@ instance Arbitrary Sequence where
                     d <- arbitrary
                     tr <- arbitrary
                     l <- arbitrary `suchThat` (isWellFormedLength n p)
-                    is <- listOf arbitrary
+                    is <- arbitrary
                     return $ Sequence n p d tr l is
 
 -- |Group field.
