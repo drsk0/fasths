@@ -218,7 +218,7 @@ intF2Cop' (FieldInstrContent fname (Just Optional) (Just (Copy oc)))
                                 case p of
                                     (Assigned _) -> (lift $ setPMap True) >> (lift $ updatePrevValue fname oc Empty) >> nulL
                                     Undefined -> h' oc
-                                        where   h' (OpContext _ _ (Just _)) = (lift $ setPMap True) >> nulL
+                                        where   h' (OpContext _ _ (Just _)) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc Empty) >> nulL
                                                 h' (OpContext _ _ Nothing) = (lift $ setPMap False) >> (lift $ updatePrevValue fname oc Empty) >> (lift $ return $ BU.empty)
                                     Empty -> (lift $ setPMap False) >> (lift $ return $ BU.empty)
 
