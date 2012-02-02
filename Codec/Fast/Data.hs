@@ -75,8 +75,11 @@ assertNameIs,
 initState,
 -- testing properties.
 prop_decodeP_dot_encodeP_is_ID,
+prop_decodeP0_dot_encodeP0_is_ID,
 prop_decodeD_dot_encodeD_is_ID,
+prop_decodeD0_dot_encodeD0_is_ID,
 prop_decodeT_dot_encodeT_is_ID,
+prop_decodeT0_dot_encodeT0_is_ID,
 prop_fromValue_dot_toValue_is_ID,
 prop_delta_dot_delta__is_ID,
 prop_ftail_dot_ftail__is_ID,
@@ -108,9 +111,7 @@ import Control.Monad.State
 import Control.Exception
 import Data.Typeable
 import Data.Data
-import Data.Generics.Schemes (everywhereBut)
-import Data.Generics.Aliases (mkQ, mkT)
-import Test.QuickCheck hiding ((.&.))
+import Test.QuickCheck (Arbitrary, arbitrary, Gen, shrink, listOf, shrinkNothing)
 
 -- | FAST exception.
 data FASTException = S1 String
@@ -231,11 +232,20 @@ class Primitive a where
 prop_decodeP_dot_encodeP_is_ID :: (Primitive a, Eq a) => a -> Bool
 prop_decodeP_dot_encodeP_is_ID x = A.maybeResult (A.feed (A.parse decodeP ((B.concat . BL.toChunks . BU.toLazyByteString . encodeP) x)) B.empty) == Just x
 
+prop_decodeP0_dot_encodeP0_is_ID :: (Primitive a, Eq a) => a -> Bool
+prop_decodeP0_dot_encodeP0_is_ID x = A.maybeResult (A.feed (A.parse decodeP0 ((B.concat . BL.toChunks . BU.toLazyByteString . encodeP0) x)) B.empty) == Just x
+
 prop_decodeD_dot_encodeD_is_ID :: (Primitive a, Eq (Delta a)) => Delta a -> Bool
 prop_decodeD_dot_encodeD_is_ID x = A.maybeResult (A.feed (A.parse decodeD ((B.concat . BL.toChunks . BU.toLazyByteString . encodeD) x)) B.empty) == Just x
 
+prop_decodeD0_dot_encodeD0_is_ID :: (Primitive a, Eq (Delta a)) => Delta a -> Bool
+prop_decodeD0_dot_encodeD0_is_ID x = A.maybeResult (A.feed (A.parse decodeD0 ((B.concat . BL.toChunks . BU.toLazyByteString . encodeD0) x)) B.empty) == Just x
+
 prop_decodeT_dot_encodeT_is_ID :: (Primitive a, Eq a) => a -> Bool
 prop_decodeT_dot_encodeT_is_ID x = A.maybeResult (A.feed (A.parse decodeT ((B.concat . BL.toChunks . BU.toLazyByteString . encodeT) x)) B.empty) == Just x
+
+prop_decodeT0_dot_encodeT0_is_ID :: (Primitive a, Eq a) => a -> Bool
+prop_decodeT0_dot_encodeT0_is_ID x = A.maybeResult (A.feed (A.parse decodeT0 ((B.concat . BL.toChunks . BU.toLazyByteString . encodeT0) x)) B.empty) == Just x
 
 prop_fromValue_dot_toValue_is_ID :: (Primitive a, Eq a) => a -> Bool
 prop_fromValue_dot_toValue_is_ID x =  (f . fromValue . f) x == f x where f = toValue
@@ -600,9 +610,6 @@ data Templates = Templates {
     tsTemplates       :: [Template]
     } deriving (Show, Data, Typeable)
 
-instance Arbitrary Templates where
-    arbitrary = Templates <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
-
 -- |FAST template.
 data Template = Template {
     tName         :: TemplateNsName,
@@ -612,36 +619,22 @@ data Template = Template {
     tInstructions :: [Instruction]
     } deriving (Show, Data, Typeable)
 
-instance Arbitrary Template where
-    arbitrary = Template <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary 
-
 -- |A typeRef element of a template.
 data TypeRef = TypeRef {
     trName :: NameAttr,
     trNs   :: Maybe NsAttr
     } deriving (Show, Data, Typeable)
 
-instance Arbitrary TypeRef where
-    arbitrary = TypeRef <$> arbitrary <*> arbitrary 
-
 -- |An Instruction in a template is either a field instruction or a template reference.
 data Instruction = Instruction Field
                     |TemplateReference (Maybe TemplateReferenceContent)
                     deriving (Show, Data, Typeable)
-
-instance Arbitrary Instruction where
-    arbitrary = Instruction <$> arbitrary
-    {-arbitrary = oneof [Instruction <$> arbitrary, TemplateReference <$> arbitrary]-}
-    -- TemplateReferences are really hard to test.
 
 -- |This is a helper data structure, NOT defined in the reference.
 data TemplateReferenceContent = TemplateReferenceContent {
         trcName       :: NameAttr,
         trcTemplateNs :: Maybe TemplateNsAttr
         } deriving (Show, Data, Typeable)
-
-instance Arbitrary TemplateReferenceContent where
-    arbitrary = TemplateReferenceContent <$> arbitrary <*> arbitrary 
 
 tempRefCont2TempNsName :: TemplateReferenceContent -> TemplateNsName
 tempRefCont2TempNsName (TemplateReferenceContent n maybe_ns) = TemplateNsName n maybe_ns Nothing 
@@ -653,9 +646,6 @@ data FieldInstrContent = FieldInstrContent {
     ficFieldOp  :: Maybe FieldOp
     } deriving (Show, Data, Typeable)
 
-instance Arbitrary FieldInstrContent where
-    arbitrary = FieldInstrContent <$> arbitrary <*> arbitrary <*> arbitrary 
-
 -- |FAST field instructions.
 data Field = IntField IntegerField
            | DecField DecimalField
@@ -666,86 +656,12 @@ data Field = IntField IntegerField
            | Grp Group
 			deriving (Show, Data, Typeable)
 
-instance Arbitrary Field where
-    arbitrary = sized h
-                where   h 0 = oneof 
-                                [IntField <$> arbitrary, 
-                                --DecField <$> (changeInitValue <$> (arbitrary :: Gen (Int32, Int64)) <*> arbitrary),
-                                AsciiStrField <$> (changeInitValue <$> (vectorOf 10 ((arbitrary :: Gen Char) `suchThat` (/='\0'))) <*> arbitrary),
-                                UnicodeStrField <$> (changeInitValue . UNI <$> (vectorOf 10 (arbitrary :: Gen Char)) <*> arbitrary),
-                                ByteVecField <$> (changeInitValue . B.pack <$> (vectorOf 10 (arbitrary :: Gen Word8)) <*> arbitrary)] `suchThat` isWellFormed
-                        h i = resize (i `div` 10)
-                                (oneof [IntField <$> arbitrary, 
-                                --DecField <$> (changeInitValue <$> (arbitrary :: Gen (Int32, Int64)) <*> arbitrary),
-                                AsciiStrField <$> (changeInitValue <$> (vectorOf 10 ((arbitrary :: Gen Char) `suchThat` (/='\0'))) <*> arbitrary),
-                                UnicodeStrField <$> (changeInitValue . UNI <$> (vectorOf 10 (arbitrary :: Gen Char)) <*> arbitrary),
-                                ByteVecField <$> (changeInitValue . B.pack <$> (vectorOf 10 (arbitrary :: Gen Word8)) <*> arbitrary),
-                                Seq <$> arbitrary, 
-                                Grp <$> arbitrary] `suchThat` isWellFormed)
-
-changeInitValue :: (Data a, Primitive b) => b -> a -> a
-changeInitValue i = everywhereBut isExcluded (mkT (h i))
-    where
-            h iv (InitialValueAttr _) = primitiveToIv iv 
-            isExcluded :: (Data c) => c -> Bool
-            isExcluded x = (False `mkQ` isSeqLength) x || (False `mkQ` isByteVectorLength) x || (False `mkQ` isDecimalMantissaExp) x
-            isSeqLength (Length _ _) = True
-            isByteVectorLength ( ByteVectorLength _) = True
-            isDecimalMantissaExp (DecimalField _ _ (Just (Left _))) = False
-            isDecimalMantissaExp (DecimalField _ _ Nothing) = False
-            isDecimalMantissaExp (DecimalField _ _ (Just (Right _))) = True
-
-isWellFormed :: Field -> Bool
-isWellFormed (IntField (Int32Field (FieldInstrContent fname maybePr maybeOp))) = isWellFormedIntField $ FieldInstrContent fname maybePr maybeOp
-isWellFormed (IntField (Int64Field (FieldInstrContent fname maybePr maybeOp))) = isWellFormedIntField $ FieldInstrContent fname maybePr maybeOp
-isWellFormed (IntField (UInt32Field (FieldInstrContent fname maybePr maybeOp))) = isWellFormedIntField $ FieldInstrContent fname maybePr maybeOp
-isWellFormed (IntField (UInt64Field (FieldInstrContent fname maybePr maybeOp))) = isWellFormedIntField $ FieldInstrContent fname maybePr maybeOp
-isWellFormed (DecField (DecimalField fname Nothing eitherOp)) = isWellFormed $ DecField $ DecimalField fname (Just Mandatory) eitherOp
-isWellFormed (DecField (DecimalField _ (Just Mandatory) (Just (Left (Default Nothing))))) = False
-isWellFormed (DecField (DecimalField _ (Just Mandatory) (Just (Left (Increment _))))) =  False
-isWellFormed (DecField (DecimalField _ (Just Mandatory) (Just (Left (Tail _))))) = False
-isWellFormed (DecField (DecimalField _ (Just Optional) (Just (Left (Increment _))))) = False
-isWellFormed (DecField (DecimalField _ (Just Optional) (Just (Left (Tail _))))) = False  
-isWellFormed (DecField (DecimalField fname (Just Optional) (Just (Right (DecFieldOp maybe_opE maybe_opM))))) = isWellFormed (IntField (Int32Field (FieldInstrContent (uniqueFName fname "e") (Just Optional) maybe_opE))) 
-    && isWellFormed (IntField (Int64Field (FieldInstrContent (uniqueFName fname "m") (Just Mandatory) maybe_opM)))
-isWellFormed (DecField (DecimalField fname (Just Mandatory) (Just (Right (DecFieldOp maybe_opE maybe_opM))))) = isWellFormed (IntField (Int32Field (FieldInstrContent (uniqueFName fname "e") (Just Mandatory) maybe_opE)))
-    && isWellFormed (IntField (Int64Field (FieldInstrContent (uniqueFName fname "m") (Just Mandatory) maybe_opM)))
-isWellFormed (AsciiStrField (AsciiStringField (FieldInstrContent fname Nothing maybeOp))) = isWellFormed (AsciiStrField (AsciiStringField (FieldInstrContent fname (Just Mandatory) maybeOp)))
-isWellFormed (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))))) = False
-isWellFormed (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Mandatory) (Just (Increment _))))) = False
-isWellFormed (AsciiStrField (AsciiStringField (FieldInstrContent _ (Just Optional) (Just (Increment _))))) = False
-isWellFormed (ByteVecField (ByteVectorField (FieldInstrContent fname Nothing maybeOp) maybeLe)) = isWellFormed (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Mandatory) maybeOp) maybeLe))
-isWellFormed (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Default Nothing))) _)) = False
-isWellFormed (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Mandatory) (Just (Increment _))) _)) = False
-isWellFormed (ByteVecField (ByteVectorField (FieldInstrContent _ (Just Optional) (Just(Increment _))) _)) = False
-isWellFormed (UnicodeStrField (UnicodeStringField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)) = isWellFormed (ByteVecField (ByteVectorField (FieldInstrContent fname maybe_presence maybe_op) maybe_length))
-isWellFormed (Seq s) = and $ map h (sInstructions s)
-    where   h (TemplateReference _) = True
-            h (Instruction f) = isWellFormed f
-isWellFormed (Grp g) = and $ map h (gInstructions g)
-    where   h (TemplateReference _) = True
-            h (Instruction f) = isWellFormed f
-isWellFormed _ = True
-
-isWellFormedIntField :: FieldInstrContent -> Bool
-isWellFormedIntField (FieldInstrContent fname Nothing maybeOp) = isWellFormedIntField $ FieldInstrContent fname (Just Mandatory) maybeOp
-isWellFormedIntField (FieldInstrContent _ (Just Mandatory) (Just (Tail _))) = False
-isWellFormedIntField (FieldInstrContent _ (Just Optional) (Just (Tail _))) = False
-isWellFormedIntField (FieldInstrContent _ (Just Mandatory)(Just (Default Nothing))) = False
-isWellFormedIntField _ = True
-
 -- |Integer Fields.
 data IntegerField = Int32Field FieldInstrContent
                     |UInt32Field FieldInstrContent
                     |Int64Field FieldInstrContent
                     |UInt64Field FieldInstrContent
                     deriving (Show, Data, Typeable)
-
-instance Arbitrary IntegerField where
-    arbitrary = oneof [Int32Field <$> (changeInitValue <$> (arbitrary :: Gen Int32) <*> arbitrary), 
-                UInt32Field <$> (changeInitValue <$> (arbitrary :: Gen Word32) <*> arbitrary), 
-                Int64Field <$> (changeInitValue <$> (arbitrary :: Gen Int64) <*> arbitrary),
-                UInt64Field <$> (changeInitValue <$> (arbitrary :: Gen Word64) <*> arbitrary)]
 
 -- |Decimal Field.
 data DecimalField = DecimalField {
@@ -754,14 +670,8 @@ data DecimalField = DecimalField {
         dfiFieldOp  :: Maybe (Either FieldOp DecFieldOp)
         } deriving (Show, Data, Typeable)
 
-instance Arbitrary DecimalField where
-    arbitrary = DecimalField <$> arbitrary <*> arbitrary <*> arbitrary
-
 -- |Ascii string field.
 data AsciiStringField = AsciiStringField FieldInstrContent deriving (Show, Data, Typeable)
-
-instance Arbitrary AsciiStringField where
-    arbitrary = fmap AsciiStringField arbitrary
 
 -- |Unicode string field.
 data UnicodeStringField = UnicodeStringField {
@@ -769,17 +679,11 @@ data UnicodeStringField = UnicodeStringField {
         usfLength  :: Maybe ByteVectorLength
         } deriving (Show, Data, Typeable)
 
-instance Arbitrary UnicodeStringField where
-    arbitrary = UnicodeStringField <$> arbitrary <*> arbitrary
-
 -- |Bytevector field.
 data ByteVectorField = ByteVectorField {
         bvfContent :: FieldInstrContent,
         bvfLength  :: Maybe ByteVectorLength
         } deriving (Show, Data, Typeable)
-
-instance Arbitrary ByteVectorField where
-    arbitrary = ByteVectorField <$> arbitrary <*> arbitrary 
 
 -- |Sequence field.
 data Sequence = Sequence {
@@ -791,19 +695,6 @@ data Sequence = Sequence {
         sInstructions :: [Instruction]
         } deriving (Show,Data, Typeable)
 
-instance Arbitrary Sequence where
-    arbitrary = let 
-                    isWellFormedLength n p (Just l) =  isWellFormedIntField $ FieldInstrContent (uniqueFName n "l") p (lFieldOp l)
-                    isWellFormedLength _ _ Nothing = True 
-                in do
-                    n <- arbitrary
-                    p <- arbitrary
-                    d <- arbitrary
-                    tr <- arbitrary
-                    l <- arbitrary `suchThat` (isWellFormedLength n p)
-                    is <- arbitrary
-                    return $ Sequence n p d tr l is
-
 -- |Group field.
 data Group = Group {
         gFName        :: NsName,
@@ -813,18 +704,12 @@ data Group = Group {
         gInstructions :: [Instruction]
         } deriving (Show, Data, Typeable)
 
-instance Arbitrary Group where
-    arbitrary = Group <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
-
 -- |ByteVectorLenght is logically a uInt32, but it is not a field instruction 
 -- and it is not physically present in the stream. Obviously no field operator 
 -- is needed.
 data ByteVectorLength = ByteVectorLength {
     bvlNsName::NsName
     } deriving (Show, Data, Typeable)
-
-instance Arbitrary ByteVectorLength where
-    arbitrary = fmap ByteVectorLength arbitrary
 
 -- |SeqLength is logically a uInt32. The name maybe 'implicit' or 'explicit' 
 -- in the template.
@@ -839,15 +724,8 @@ data Length = Length {
     lFieldOp :: Maybe FieldOp
     } deriving (Show, Data, Typeable)
 
-instance Arbitrary Length where
-    arbitrary = Length <$> arbitrary <*> arbitrary
-
-
 -- |Presence of a field value is either mandatory or optional.
 data PresenceAttr = Mandatory | Optional deriving (Show, Data, Typeable)
-
-instance Arbitrary PresenceAttr where
-    arbitrary = oneof [return Mandatory, return Optional ]
 
 -- |Field operators.
 data FieldOp = Constant InitialValueAttr
@@ -858,17 +736,11 @@ data FieldOp = Constant InitialValueAttr
              | Tail OpContext
 				deriving (Show, Data, Typeable)
 
-instance Arbitrary FieldOp where
-    arbitrary = oneof [fmap Constant arbitrary, fmap Default arbitrary, fmap Copy arbitrary, fmap Increment arbitrary, fmap Delta arbitrary, fmap Tail arbitrary]
- 
 -- |The decimal field operator consists of two standart operators.
 data DecFieldOp = DecFieldOp {
     dfoExponent :: Maybe FieldOp,
     dfoMantissa :: Maybe FieldOp
     } deriving (Show, Data, Typeable)
-
-instance Arbitrary DecFieldOp where
-    arbitrary = DecFieldOp <$> arbitrary <*> arbitrary 
 
 -- |Dictionary consists of a name and a list of key value pairs.
 data Dictionary = Dictionary String (M.Map DictKey DictValue) deriving (Show) 
@@ -895,12 +767,9 @@ data OpContext = OpContext {
     ocInitialValue :: Maybe InitialValueAttr
     } deriving (Show, Data, Typeable)
 
-instance Arbitrary OpContext where
-    arbitrary = OpContext <$> arbitrary <*> arbitrary <*>  arbitrary
-
 -- |Dictionary attribute. Three predefined dictionaries are "template", "type" 
 -- and "global".
-newtype DictionaryAttr = DictionaryAttr String deriving (Show, Arbitrary, Data, Typeable)
+newtype DictionaryAttr = DictionaryAttr String deriving (Show, Data, Typeable)
 
 -- |nsKey attribute.
 data NsKey = NsKey {
@@ -908,24 +777,16 @@ data NsKey = NsKey {
     nkNs  :: Maybe NsAttr
     } deriving (Eq, Ord, Show, Data, Typeable)
 
-instance Arbitrary NsKey where  
-    arbitrary = NsKey <$> arbitrary <*> arbitrary
-
 -- |Key attribute.
 data KeyAttr = KeyAttr {
     kaToken :: Token
     } deriving (Eq, Ord, Show, Data, Typeable)
 
-instance Arbitrary KeyAttr where
-    arbitrary = fmap KeyAttr arbitrary
 -- |Initial value attribute. The value is a string of unicode characters and needs to 
 -- be converted to the type of the field in question.
 data InitialValueAttr = InitialValueAttr {
     text :: String
     } deriving (Show, Eq, Data, Typeable)
-
-instance Arbitrary InitialValueAttr where
-    arbitrary = InitialValueAttr <$> show <$> (arbitrary :: Gen Word32)
 
 -- |A full name in a template is given by a namespace URI and localname. For 
 -- application types, fields and operator keys the namespace URI is given by 
@@ -936,14 +797,8 @@ instance Arbitrary InitialValueAttr where
 -- |A full name for an application type, field or operator key.
 data NsName = NsName NameAttr (Maybe NsAttr) (Maybe IdAttr) deriving (Eq, Ord, Show, Data, Typeable)
 
-instance Arbitrary NsName where
-    arbitrary = NsName <$> arbitrary <*> arbitrary <*> arbitrary
-
 -- |A full name for a template.
 data TemplateNsName = TemplateNsName NameAttr (Maybe TemplateNsAttr) (Maybe IdAttr) deriving (Show, Eq, Ord, Data, Typeable)
-
-instance Arbitrary TemplateNsName where
-    arbitrary =  TemplateNsName <$> arbitrary <*> arbitrary <*> arbitrary
 
 -- |Translates a TemplateNsName into a NsName. Its the same anyway.
 tname2fname :: TemplateNsName -> NsName
@@ -955,11 +810,11 @@ fname2tname (NsName n (Just (NsAttr ns)) maybe_id) = TemplateNsName n (Just (Tem
 fname2tname (NsName n Nothing maybe_id) = TemplateNsName n Nothing maybe_id
 
 -- |The very basic name related attributes.
-newtype NameAttr = NameAttr String deriving (Eq, Ord, Show, Arbitrary, Data, Typeable)
-newtype NsAttr = NsAttr String deriving (Eq, Ord, Show, Arbitrary, Data, Typeable)
-newtype TemplateNsAttr = TemplateNsAttr String deriving (Eq, Ord, Show, Arbitrary, Data, Typeable)
-newtype IdAttr = IdAttr Token deriving (Eq, Ord, Show, Arbitrary, Data, Typeable)
-newtype Token = Token String deriving (Eq, Ord, Show, Arbitrary, Data, Typeable)
+newtype NameAttr = NameAttr String deriving (Eq, Ord, Show, Data, Typeable)
+newtype NsAttr = NsAttr String deriving (Eq, Ord, Show, Data, Typeable)
+newtype TemplateNsAttr = TemplateNsAttr String deriving (Eq, Ord, Show, Data, Typeable)
+newtype IdAttr = IdAttr Token deriving (Eq, Ord, Show, Data, Typeable)
+newtype Token = Token String deriving (Eq, Ord, Show, Data, Typeable)
 
 
 -- |Get a Stopbit encoded entity.
