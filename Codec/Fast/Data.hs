@@ -14,7 +14,6 @@ module Codec.Fast.Data
 TypeWitness (..),
 Value (..),
 Primitive (..),
-Delta (..),
 Templates (..),
 Template (..),
 TypeRef (..),

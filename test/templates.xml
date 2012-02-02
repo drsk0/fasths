@@ -1462,7 +1462,7 @@
 		<string name="text" id="58" presence="optional"/>
 	</template>
 
-  <template name="unittest" id="3">
+  <template name="big_values" id="3">
     <typeRef name="unittestdata"/>"
     <int32 name="int32_nop" id="1">
     </int32>
@@ -1493,11 +1493,11 @@
     -->
     <!--<decimal name="decimal_const" id="13"><constant value="9223372036854775807000000000000000000000000000000000000000000000000000000000000000"/>-->
     <!--</decimal>-->
-    <string name="asciistring_const" charset="ascii" id="14"><constant value=""/>
+    <string name="asciistring_const" charset="ascii" id="14"><constant value="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"/>
     </string>
-    <string name="utf8string_const" charset="unicode" id="15"><constant value=""/>
+    <string name="utf8string_const" charset="unicode" id="15"><constant value="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"/>
     </string>
-    <byteVector name="bytevector_const" id="16"><constant value=""/>
+    <byteVector name="bytevector_const" id="16"><constant value="ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"/>
     </byteVector>
     <int32 name="int32_default" id="17"><default value="2147483647"/>
     </int32>
@@ -1566,7 +1566,7 @@
     </byteVector>
     </template>
 
-  <template name="unittest" id="3">
+  <template name="small_values" id="3">
     <typeRef name="unittestdata"/>"
     <int32 name="int32_nop" id="1">
     </int32>
@@ -1594,11 +1594,11 @@
     </uInt64>
     <!--<decimal name="decimal_const" id="13"><constant value="-9223372036854775808000000000000000000000000000000000000000000000000000000000000000"/>-->
     <!--</decimal>-->
-    <string name="asciistring_const" charset="ascii" id="14"><constant value=""/>
+    <string name="asciistring_const" charset="ascii" id="14"><constant value="ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ"/>
     </string>
-    <string name="utf8string_const" charset="unicode" id="15"><constant value=""/>
+    <string name="utf8string_const" charset="unicode" id="15"><constant value="test_string"/>
     </string>
-    <byteVector name="bytevector_const" id="16"><constant value=""/>
+    <byteVector name="bytevector_const" id="16"><constant value="ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"/>
     </byteVector>
     <int32 name="int32_default" id="17"><default value="-2147483648"/>
     </int32>
@@ -1610,11 +1610,11 @@
     </uInt64>
     <!--<decimal name="decimal_default" id="21"><default value="-9223372036854775808000000000000000000000000000000000000000000000000000000000000000"/>-->
     <!--</decimal>-->
-    <string name="asciistring_default" charset="ascii" id="22"><default value=""/>
+    <string name="asciistring_default" charset="ascii" id="22"><default value="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"/>
     </string>
-    <string name="utf8string_default" charset="unicode" id="23"><default value=""/>
+    <string name="utf8string_default" charset="unicode" id="23"><default value="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"/>
     </string>
-    <byteVector name="bytevector_default" id="24"><default value=""/>
+    <byteVector name="bytevector_default" id="24"><default value="ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"/>
     </byteVector>
     <int32 name="int32_copy" id="25"><copy/>
     </int32>
@@ -1664,7 +1664,7 @@
     </byteVector>
     </template>
 
-  <template name="unittest" id="3">
+  <template name="mandatory_fields" id="3">
     <typeRef name="unittestdata"/>"
     <int32 name="int32_nop" id="1">
     </int32>
@@ -1762,7 +1762,7 @@
     </byteVector>
     </template>
 
-  <template name="unittest" id="3">
+  <template name="optional_fields" id="3">
     <typeRef name="unittestdata"/>"
     <int32 name="int32_nop" presence="optional" id="1">
     </int32>
