@@ -559,7 +559,7 @@ asciiStrF2Cop (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (C
                                                                                 then (lift $ setPMap False) >> (lift $ updatePrevValue fname oc (Assigned (witnessType s))) >> (lift $ return BU.empty)
                                                                                 else (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType s))) >> (lift $ return $ encodeP0 s)
                                                 h' (OpContext _ _ Nothing) = (lift $ setPMap True) >> (lift $ updatePrevValue fname oc (Assigned (witnessType s))) >> (lift $ return $ encodeP0 s)
-                                    Empty -> (lift $ setPMap True) >>(lift $ setPMap True) >>  (lift $ updatePrevValue fname oc (Assigned (witnessType s))) >> (lift $ return $ encodeP0 s)
+                                    Empty -> (lift $ setPMap True) >>  (lift $ updatePrevValue fname oc (Assigned (witnessType s))) >> (lift $ return $ encodeP0 s)
                 cp (Nothing) = do
                                 p <- lift $ prevValue fname oc
                                 case p of
