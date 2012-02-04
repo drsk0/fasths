@@ -70,14 +70,18 @@ _templateIdentifier (n, v)  =
    do
        env <- ask
        tid <- _p (tidname, (Just . UI32 . temp2tid env . fname2tname) n)
+       s <- get
+       put $ Context (pm s) (dict s) (Just $ fname2tname n) (tTypeRef (templates env M.! (fname2tname n)))
        msg <- template2Cop (templates env M.! (fname2tname n)) (n, v)
+       s' <- get
+       put $ Context (pm s') (dict s') (template s) (appType s)
        return (tid `BU.append` msg)
 
 _presenceMap :: FCoparser ()
 _presenceMap () = do
-    st <- get
-    put $ Context [] (dict st)
-    return $ _anySBEEntity (pmToBs $ pm st)
+    s <- get
+    put $ Context [] (dict s) (template s) (appType s)
+    return $ _anySBEEntity (pmToBs $ pm s)
 
 template2Cop :: Template -> FCoparser (NsName, Maybe Value)
 template2Cop t = f
@@ -795,7 +799,7 @@ bytevecF2Cop  (FieldInstrContent fname (Just Optional) (Just(Tail oc))) _
                                     Empty -> (lift $ setPMap False) >> (lift $ return BU.empty)
 
 seqF2Cop :: Sequence -> FCoparser (Maybe Value)
-seqF2Cop (Sequence fname maybe_presence _ _ maybe_length instrs) 
+seqF2Cop (Sequence fname maybe_presence _ maybe_typeref maybe_length instrs) 
     = cp where cp (Just (Sq w xs)) = let    lengthb = h maybe_presence maybe_length
                                             fname' = uniqueFName fname "l" 
                                             h p Nothing = (intF2Cop (UInt32Field (FieldInstrContent fname' p Nothing)) :: FCoparser (Maybe Word32)) (Just w)
@@ -808,17 +812,21 @@ seqF2Cop (Sequence fname maybe_presence _ _ maybe_length instrs)
                                                                                                         if needsSegment instrs (templates env)
                                                                                                         then do
                                                                                                             s <- get
-                                                                                                            put $ Context []  (dict s)
+                                                                                                            put $ Context []  (dict s) (template s) (appType s)
                                                                                                             b1 <- segb
                                                                                                             b2 <- _segment ()
                                                                                                             s' <- get
-                                                                                                            put $ Context (pm s) (dict s')
+                                                                                                            put $ Context (pm s) (dict s') (template s') (appType s')
                                                                                                             lift $ return (b2 `BU.append` b1)
                                                                                                         else segb
                                     in
                                         do
+                                            s0 <- get
+                                            put (Context (pm s0) (dict s0) (template s0) maybe_typeref)
                                             bu1 <- lengthb
                                             bu2 <- segs'
+                                            s1 <- get
+                                            put (Context (pm s1) (dict s1) (template s1) (appType s0))
                                             lift $ return $ (bu1 `BU.append` bu2)
 
                cp (Just _) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
@@ -833,35 +841,46 @@ groupF2Cop :: Group -> FCoparser (Maybe Value)
 groupF2Cop (Group fname Nothing maybe_dict maybe_typeref instrs)
     = groupF2Cop (Group fname (Just Mandatory) maybe_dict maybe_typeref instrs)
 
-groupF2Cop (Group fname (Just Mandatory) _ _ instrs) 
+groupF2Cop (Group fname (Just Mandatory) _ maybe_typeref instrs) 
     = cp where  cp  (Just (Gr xs)) = do
                                         env <- ask
-                                        if any (needsPm (templates env)) instrs 
-                                        then do 
-                                                s <- get
-                                                put $ Context [] (dict s)
-                                                b1 <- (sequenceD (map instr2Cop instrs)) xs
-                                                b2 <- _segment ()
-                                                s' <- get
-                                                put $ Context (pm s) (dict s')
-                                                lift $ return (b2 `BU.append` b1)
-                                        else (sequenceD (map instr2Cop instrs)) xs
+                                        s0 <- get
+                                        put $ Context (pm s0) (dict s0) (template s0) maybe_typeref
+                                        b <-    if any (needsPm (templates env)) instrs 
+                                                then do 
+                                                        s <- get
+                                                        put $ Context [] (dict s) (template s) (appType s)
+                                                        b1 <- (sequenceD (map instr2Cop instrs)) xs
+                                                        b2 <- _segment ()
+                                                        s' <- get
+                                                        put $ Context (pm s) (dict s') (template s') (appType s')
+                                                        lift $ return (b2 `BU.append` b1)
+                                                else (sequenceD (map instr2Cop instrs)) xs
+                                        s1 <- get
+                                        put $ Context (pm s1) (dict s1) (template s1) (appType s0)
+                                        return b
                 cp (Just _) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
                 cp (Nothing) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
 
-groupF2Cop (Group fname (Just Optional) _ _ instrs) 
-    = cp where  cp  (Just (Gr xs)) = (lift $ setPMap True) >> (do
-                                                                env <- ask
-                                                                if any (needsPm (templates env)) instrs 
-                                                                then do 
-                                                                        s <- get
-                                                                        put $ Context [] (dict s)
-                                                                        b1 <- (sequenceD (map instr2Cop instrs)) xs
-                                                                        b2 <- _segment ()
-                                                                        s' <- get
-                                                                        put $ Context (pm s) (dict s')
-                                                                        lift $ return (b2 `BU.append` b1)
-                                                                else (sequenceD (map instr2Cop instrs)) xs)
+groupF2Cop (Group fname (Just Optional) _ maybe_typeref instrs) 
+    = cp where  cp  (Just (Gr xs)) = do
+                                        lift $ setPMap True
+                                        env <- ask
+                                        s0 <- get
+                                        put $ Context (pm s0) (dict s0) (template s0) maybe_typeref
+                                        b <-    if any (needsPm (templates env)) instrs 
+                                                then do 
+                                                        s <- get
+                                                        put $ Context [] (dict s) (template s) (appType s)
+                                                        b1 <- (sequenceD (map instr2Cop instrs)) xs
+                                                        b2 <- _segment ()
+                                                        s' <- get
+                                                        put $ Context (pm s) (dict s') (template s') (appType s')
+                                                        lift $ return (b2 `BU.append` b1)
+                                                else (sequenceD (map instr2Cop instrs)) xs
+                                        s1 <- get
+                                        put $ Context (pm s1) (dict s1) (template s1) (appType s0)
+                                        return b
                 cp (Just _) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
                 cp (Nothing) = (lift $ setPMap False) >> (lift $ return $ BU.empty)
 

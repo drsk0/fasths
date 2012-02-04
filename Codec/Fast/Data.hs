@@ -150,12 +150,16 @@ data Context = Context {
     -- |Presence map
     pm   :: [Bool],
     -- |Dictionaries.
-    dict :: M.Map String Dictionary
+    dict :: M.Map String Dictionary,
+    -- | Current template.
+    template :: Maybe TemplateNsName,
+    -- | Current application type.
+    appType :: Maybe TypeRef
     } deriving (Show)
 
 -- |The initial state of the parser depending on the templates.
 initState::Templates -> Context
-initState ts = Context [] (M.fromListWith merge [(k,d) | d@(Dictionary k _) <- concatMap initDicts (tsTemplates ts)])
+initState ts = Context [] (M.fromListWith merge [(k,d) | d@(Dictionary k _) <- concatMap initDicts (tsTemplates ts)]) Nothing Nothing
     where merge (Dictionary n1 d1) (Dictionary _ d2) = Dictionary n1 (d1 `M.union` d2)
 
 -- | We need type witnesses to handle manipulation of dictionaries with entries of all possible 
@@ -622,7 +626,7 @@ data Template = Template {
 data TypeRef = TypeRef {
     trName :: NameAttr,
     trNs   :: Maybe NsAttr
-    } deriving (Show, Data, Typeable)
+    } deriving (Show, Ord, Eq, Data, Typeable)
 
 -- |An Instruction in a template is either a field instruction or a template reference.
 data Instruction = Instruction Field
@@ -742,7 +746,7 @@ data DecFieldOp = DecFieldOp {
     } deriving (Show, Data, Typeable)
 
 -- |Dictionary consists of a name and a list of key value pairs.
-data Dictionary = Dictionary String (M.Map DictKey DictValue) deriving (Show) 
+data Dictionary = Dictionary String (M.Map (DictKey, Maybe TemplateNsName, Maybe TypeRef)  DictValue) deriving (Show) 
 
 data DictKey = N NsName
              | K NsKey
@@ -936,9 +940,15 @@ prevValue _ (OpContext Nothing (Just dkey) _ )
     = pv "global" (K dkey)
 
 pv :: (Monad m) => String -> DictKey -> StateT Context m DictValue
-pv d k = do
+pv d k = 
+    let     
+            k' s "template" = (k, template s, Nothing)
+            k' s "type" = (k, Nothing, appType s)
+            k' _ _ = (k, Nothing, Nothing)
+    in
+    do
        st <- get
-       case M.lookup d (dict st) >>= \(Dictionary _ xs) -> M.lookup k xs of
+       case M.lookup d (dict st) >>= \(Dictionary _ xs) -> M.lookup (k' st d) xs of
         Nothing -> throw $ OtherException ("Could not find specified dictionary/key." ++ show d ++ " " ++ show k ++ "---->" ++ show (dict st))
         Just dv -> return dv
 
@@ -957,14 +967,20 @@ updatePrevValue _ (OpContext Nothing (Just dkey) _ ) dvalue
     = uppv "global" (K dkey) dvalue
 
 uppv :: (Monad m) => String -> DictKey -> DictValue -> StateT Context m ()
-uppv d k v = do
-    st <- get
-    put (Context (pm st) (M.adjust (\(Dictionary n xs) -> Dictionary n (M.adjust (\_ -> v) k xs)) d (dict st)))
+uppv d k v = 
+    let     
+            k' s "template" = (k, template s, Nothing)
+            k' s "type" = (k, Nothing, appType s)
+            k' _ _ = (k, Nothing, Nothing)
+    in
+    do
+        st <- get
+        put $ Context (pm st) (M.adjust (\(Dictionary n xs) -> Dictionary n (M.adjust (\_ -> v) (k' st d) xs)) d (dict st)) (template st) (appType st)
 
 setPMap :: (Monad m) => Bool -> StateT Context m ()
 setPMap b = do 
                  st <- get
-                 put (Context (pm st ++ [b]) (dict st))
+                 put $ Context (pm st ++ [b]) (dict st) (template st) (appType st)
 
 -- |Create a unique fname out of a given one and a string.
 uniqueFName::NsName -> String -> NsName
@@ -1095,7 +1111,7 @@ initDicts t = createDicts $ catMaybes $ ((Just ("global", K (NsKey(KeyAttr (Toke
 -- |Maps triples of the form (DictionaryName, Key, Value) to a list of dictionaries.
 createDicts::[(String, DictKey, DictValue)] -> [Dictionary]
 createDicts es =  map h (groupBy (\ (d, _ , _) (d', _ , _) -> d == d') es)
-    where   h xs = Dictionary name (M.fromList (map (\(_,y,z) -> (y,z)) xs))
+    where   h xs = Dictionary name (M.fromList (map (\(_,y,z) -> ((y, Nothing, Nothing) ,z)) xs))
                 where (name, _, _) = head xs
 
 -- |Maps a field to a triple (DictionaryName, Key, Value).

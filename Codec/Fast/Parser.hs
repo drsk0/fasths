@@ -62,9 +62,14 @@ templateIdentifier::FParser (NsName, Maybe Value)
 templateIdentifier = do
     (_ , maybe_i) <- p
     case maybe_i of
-        (Just (UI32 i')) -> do 
+        (Just (UI32 i)) -> do 
             env <- ask
-            template2P (templates env M.! tid2temp env i')
+            s0 <- get
+            put $ Context (pm s0) (dict s0) (Just $ tName $ (templates env M.! tid2temp env i)) (tTypeRef $ (templates env M.! tid2temp env i))
+            msg <- template2P (templates env M.! tid2temp env i)
+            s1 <- get
+            put $ Context (pm s1) (dict s1) (template s1) (appType s0)
+            return msg
         (Just _) ->  throw $ OtherException "Coding error: templateId field must be of type I."
         Nothing -> throw $ OtherException "Failed to parse template identifier."
 
@@ -79,8 +84,8 @@ presenceMap::FParser ()
 presenceMap = do
     bs <- l2 anySBEEntity
     -- update state
-    st <- get
-    put (Context (bsToPm bs) (dict st))
+    s <- get
+    put (Context (bsToPm bs) (dict s) (template s) (appType s))
 
 -- |Maps a template to its corresponding parser.
 -- We treat a template as a group with NsName equal the TemplateNsName.
@@ -807,8 +812,8 @@ bytevecF2P (FieldInstrContent fname (Just Optional) (Just(Tail oc))) _
     )
 
 -- |Maps a sequence field to its parser.
-seqF2P::Sequence -> FParser (NsName, Maybe Value)
-seqF2P (Sequence fname maybe_presence _ _ maybe_length instrs) 
+seqF2P :: Sequence -> FParser (NsName, Maybe Value)
+seqF2P (Sequence fname maybe_presence _ maybe_typeref maybe_length instrs) 
     = do 
         i <- h maybe_presence maybe_length
         g i
@@ -816,9 +821,10 @@ seqF2P (Sequence fname maybe_presence _ _ maybe_length instrs)
                 g (Just i') = do
                                     env <- ask
                                     s <- get
+                                    put $ Context (pm s) (dict s) (template s) maybe_typeref
                                     sq <- A.count (fromIntegral i') (when (needsSegment instrs (templates env)) segment >> mapM instr2P instrs) 
                                     s' <- get
-                                    put $ Context (pm s) (dict s')
+                                    put $ Context (pm s) (dict s') (template s) (appType s)
                                     return (fname, Just (Sq i' sq))
                 -- get the correct parser for the length field.
                 fname' = uniqueFName fname "l" 
@@ -827,29 +833,31 @@ seqF2P (Sequence fname maybe_presence _ _ maybe_length instrs)
                 h m_p (Just (Length (Just fn) op)) = intF2P (UInt32Field (FieldInstrContent fn m_p op))
                 
 -- |Maps a group field to its parser.
-groupF2P::Group -> FParser (NsName, Maybe Value)
+groupF2P :: Group -> FParser (NsName, Maybe Value)
 groupF2P (Group fname Nothing maybe_dict maybe_typeref instrs)
     = groupF2P (Group fname (Just Mandatory) maybe_dict maybe_typeref instrs)
 
-groupF2P (Group fname (Just Mandatory) _ _ instrs) 
+groupF2P (Group fname (Just Mandatory) _ maybe_typeref instrs) 
     = do 
         env <- ask 
         s <- get
+        put (Context (pm s) (dict s) (template s) maybe_typeref)
         if (needsSegment instrs (templates env)) then segment else return ()
         vs <- mapM instr2P instrs
         s' <- get
-        put $ Context (pm s) (dict s')
+        put $ Context (pm s) (dict s') (template s) (appType s)
         return (fname, Just $ Gr $ vs)
 
-groupF2P (Group fname (Just Optional) _ _ instrs) 
+groupF2P (Group fname (Just Optional) _ maybe_typeref instrs) 
     = ifPresentElse 
     (do 
         env <- ask 
         s <- get
+        put (Context (pm s) (dict s) (template s) maybe_typeref)
         if (needsSegment instrs (templates env)) then segment else return ()
         vs <- mapM instr2P instrs
         s' <- get
-        put $ Context (pm s) (dict s')
+        put $ Context (pm s) (dict s') (template s) (appType s)
         return (fname, Just $ Gr $ vs))
     (return (fname, Nothing))
 
@@ -865,7 +873,7 @@ nULL = l2 nULL'
 ifPresentElse::FParser a -> FParser a -> FParser a
 ifPresentElse p1 p2 = do 
                         s <- get
-                        put (Context (tail (pm s)) (dict s))
+                        put (Context (tail (pm s)) (dict s) (template s) (appType s))
                         let pmap = pm s in
                             if head pmap 
                             then p1
