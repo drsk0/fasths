@@ -83,14 +83,13 @@ getName'::IOStateArrow TPState XmlTree NameAttr
 getName' = getAttrValue' "name" >>> arr NameAttr
 
 getInstruction::IOStateArrow TPState XmlTree Instruction
-getInstruction = (hasName "templateRef" >>> getTemplateRef) <+> (getField >>> arr Instruction)
+getInstruction = (hasName "templateRef" >>> (getTemplateRef `orElse` (constA $ TemplateReference Nothing))) <+> (getField >>> arr Instruction)
 
 getTemplateRef::IOStateArrow TPState XmlTree Instruction
 getTemplateRef = (proc l -> do
     name    <- getName'     -< l
     tns     <- getTempNs    -< l
     returnA -< (TemplateReference $ Just $ TemplateReferenceContent name tns))
-    <+> constA (TemplateReference Nothing)
 
 getField::IOStateArrow TPState XmlTree Field
 getField = (getIntegerField >>> arr IntField) <+> (getDecimalField >>> arr DecField) <+> (getAsciiStringField >>> arr AsciiStrField) 
