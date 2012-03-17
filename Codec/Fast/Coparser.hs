@@ -7,7 +7,7 @@
 -- Stability   :  experimental
 -- Portability :  unknown
 --
-{-#LANGUAGE TypeSynonymInstances, FlexibleContexts #-}
+{-#LANGUAGE TypeSynonymInstances, FlexibleContexts, FlexibleInstances #-}
 
 module Codec.Fast.Coparser 
 (
@@ -51,8 +51,12 @@ instance Monoid FBuilder where
 
 _segment' :: FCoparser (NsName, Maybe Value)
 _segment' (n, v) = do 
+    s <- get
+    put $ Context [] (dict s) (template s) (appType s)
     tid <- _templateIdentifier (n, v)
     pmap <- _presenceMap ()
+    s' <- get
+    put $ Context (pm s) (dict s') (template s') (appType s')
     return $ pmap `BU.append` tid
 
 _segment :: FCoparser ()
@@ -93,7 +97,7 @@ instr2Cop :: Instruction -> FCoparser (NsName, Maybe Value)
 instr2Cop (Instruction f) = field2Cop f 
 instr2Cop (TemplateReference (Just trc)) = \(n, v) -> do
     env <- ask
-    template2Cop (templates env M.! (tempRefCont2TempNsName trc)) (n, v) 
+    template2Cop ((M.mapKeys (\(TemplateNsName name m_ns _) -> TemplateNsName name m_ns Nothing) $ templates env) M.! (tempRefCont2TempNsName trc)) (n, v) 
 instr2Cop (TemplateReference Nothing) = _segment'
 
 field2Cop :: Field -> FCoparser (NsName, Maybe Value)

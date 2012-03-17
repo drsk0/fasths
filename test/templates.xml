@@ -1,518 +1,518 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <templates>
-	<template name="MDIncRefresh_30" id="30" dictionary="30" xmlns="http://www.fixprotocol.org/ns/fast/td/1.1">
-		<string name="ApplVerID" id="1128">
-			<constant value="8"/>
-		</string>
-		<string name="MessageType" id="35">
-			<constant value="X"/>
-		</string>
-		<string name="SenderCompID" id="49">
-			<constant value="CME"/>
-		</string>
-		<uInt32 name="MsgSeqNum" id="34"/>
-		<uInt64 name="SendingTime" id="52"/>
-		<string name="PosDupFlag" id="43" presence="optional">
-			<default/>
-		</string>
-		<uInt32 name="TradeDate" id="75"/>
-		<sequence name="MDEntries">
-			<length name="NoMDEntries" id="268"/>
-			<uInt32 name="MDUpdateAction" id="279">
-				<copy value="1"/>
-			</uInt32>
-			<uInt32 name="MDPriceLevel" id="1023" presence="optional">
-				<default value="1"/>
-			</uInt32>
-			<string name="MDEntryType" id="269">
-				<copy value="0"/>
-			</string>
-			<uInt32 name="OpenCloseSettleFlag" id="286" presence="optional">
-			</uInt32>
-			<uInt32 name="SecurityIDSource" id="22">
-				<constant value="8"/>
-			</uInt32>
-			<uInt32 name="SecurityID" id="48">
-				<copy/>
-			</uInt32>
-			<uInt32 name="RptSeq" id="83">
-				<increment/>
-			</uInt32>
-			<!--<decimal name="MDEntryPx" id="270">-->
-				<!--<exponent>-->
-					<!--<default value="0"/>-->
-				<!--</exponent>-->
-				<!--<mantissa>-->
-					<!--<delta/>-->
-				<!--</mantissa>-->
-			<!--</decimal>-->
-			<uInt32 name="MDEntryTime" id="273">
-				<copy/>
-			</uInt32>
-			<int32 name="MDEntrySize" id="271" presence="optional">
-				<delta/>
-			</int32>
-			<uInt32 name="NumberOfOrders" id="346" presence="optional">
-				<delta/>
-			</uInt32>
-			<string name="TradingSessionID" id="336" presence="optional">
-				<default value="2"/>
-			</string>
-			<!--<decimal name="NetChgPrevDay" id="451" presence="optional">-->
-				<!--<exponent>-->
-					<!--<default/>-->
-				<!--</exponent>-->
-				<!--<mantissa>-->
-					<!--<delta/>-->
-				<!--</mantissa>-->
-			<!--</decimal>-->
-			<uInt32 name="TradeVolume" id="1020" presence="optional">
-				<default/>
-			</uInt32>
-			<string name="TradeCondition" id="277" presence="optional">
-				<default/>
-			</string>
-			<string name="TickDirection" id="274" presence="optional">
-				<default/>
-			</string>
-			<string name="QuoteCondition" id="276" presence="optional">
-				<default/>
-			</string>
-		</sequence>
-	</template>
+    <template name="MDIncRefresh" id="1" dictionary="30" xmlns="http://www.fixprotocol.org/ns/fast/td/1.1">
+	<string name="ApplVerID" id="1128">
+	    <constant value="8"/>
+	</string>
+	<string name="MessageType" id="35">
+	    <constant value="X"/>
+	</string>
+	<string name="SenderCompID" id="49">
+	    <constant value="CME"/>
+	</string>
+	<uInt32 name="MsgSeqNum" id="34"/>
+	<uInt64 name="SendingTime" id="52"/>
+	<string name="PosDupFlag" id="43" presence="optional">
+	    <default/>
+	</string>
+	<uInt32 name="TradeDate" id="75"/>
+	<sequence name="MDEntries">
+	    <length name="NoMDEntries" id="268"/>
+	    <uInt32 name="MDUpdateAction" id="279">
+		<copy value="1"/>
+	    </uInt32>
+	    <uInt32 name="MDPriceLevel" id="1023" presence="optional">
+		<default value="1"/>
+	    </uInt32>
+	    <string name="MDEntryType" id="269">
+		<copy value="0"/>
+	    </string>
+	    <uInt32 name="OpenCloseSettleFlag" id="286" presence="optional">
+	    </uInt32>
+	    <uInt32 name="SecurityIDSource" id="22">
+		<constant value="8"/>
+	    </uInt32>
+	    <uInt32 name="SecurityID" id="48">
+		<copy/>
+	    </uInt32>
+	    <uInt32 name="RptSeq" id="83">
+		<increment/>
+	    </uInt32>
+	    <!--<decimal name="MDEntryPx" id="270">-->
+		<!--<exponent>-->
+		    <!--<default value="0"/>-->
+		<!--</exponent>-->
+		<!--<mantissa>-->
+		    <!--<delta/>-->
+		<!--</mantissa>-->
+	    <!--</decimal>-->
+	    <uInt32 name="MDEntryTime" id="273">
+		<copy/>
+	    </uInt32>
+	    <int32 name="MDEntrySize" id="271" presence="optional">
+		<delta/>
+	    </int32>
+	    <uInt32 name="NumberOfOrders" id="346" presence="optional">
+		<delta/>
+	    </uInt32>
+	    <string name="TradingSessionID" id="336" presence="optional">
+		<default value="2"/>
+	    </string>
+	    <!--<decimal name="NetChgPrevDay" id="451" presence="optional">-->
+		<!--<exponent>-->
+		    <!--<default/>-->
+		<!--</exponent>-->
+		<!--<mantissa>-->
+		    <!--<delta/>-->
+		<!--</mantissa>-->
+	    <!--</decimal>-->
+	    <uInt32 name="TradeVolume" id="1020" presence="optional">
+		<default/>
+	    </uInt32>
+	    <string name="TradeCondition" id="277" presence="optional">
+		<default/>
+	    </string>
+	    <string name="TickDirection" id="274" presence="optional">
+		<default/>
+	    </string>
+	    <string name="QuoteCondition" id="276" presence="optional">
+		<default/>
+	    </string>
+	</sequence>
+    </template>
 
-	<template name="MDSecurityDefinition" id="46" dictionary="46" xmlns="http://www.fixprotocol.org/ns/fast/td/1.1">
-		<string name="ApplVerID" id="1128">
-			<constant value="8"/>
-		</string>
+    <template name="MDSecurityDefinition" id="2" dictionary="46" xmlns="http://www.fixprotocol.org/ns/fast/td/1.1">
+	<string name="ApplVerID" id="1128">
+	    <constant value="8"/>
+	</string>
 
-		<string name="MessageType" id="35">
-			<constant value="d"/>
-		</string>
-		<string name="SenderCompID" id="49">
-			<constant value="CME"/>
-		</string>
-		<uInt32 name="MsgSeqNum" id="34"/>
-		<uInt64 name="SendingTime" id="52"/>
-		<string name="PosDupFlag" id="43" presence="optional">
-			<default/>
-		</string>
-		<uInt32 name="MDTotalNum" id="911" presence="optional"/>
-		<sequence name="Events" presence="optional">
-			<length name="NoEvents" id="864"/>
-			<uInt32 name="EventType" id="865" presence="optional">
-				<delta/>
-			</uInt32>
-			<uInt64 name="EventDate" id="866" presence="optional">
-				<delta/>
-			</uInt64>
-			<uInt64 name="EventTime" id="1145" presence="optional">
-				<delta/>
-			</uInt64>
-		</sequence>
+	<string name="MessageType" id="35">
+	    <constant value="d"/>
+	</string>
+	<string name="SenderCompID" id="49">
+	    <constant value="CME"/>
+	</string>
+	<uInt32 name="MsgSeqNum" id="34"/>
+	<uInt64 name="SendingTime" id="52"/>
+	<string name="PosDupFlag" id="43" presence="optional">
+	    <default/>
+	</string>
+	<uInt32 name="MDTotalNum" id="911" presence="optional"/>
+	<sequence name="Events" presence="optional">
+	    <length name="NoEvents" id="864"/>
+	    <uInt32 name="EventType" id="865" presence="optional">
+		<delta/>
+	    </uInt32>
+	    <uInt64 name="EventDate" id="866" presence="optional">
+		<delta/>
+	    </uInt64>
+	    <uInt64 name="EventTime" id="1145" presence="optional">
+		<delta/>
+	    </uInt64>
+	</sequence>
 
-		<!--<decimal name="TradingReferencePrice" id="1150" presence="optional">-->
-			<!--<exponent>-->
-				<!--<default value="-2"/>-->
-			<!--</exponent>-->
-			<!--<mantissa/>-->
-		<!--</decimal>-->
-		<!--<decimal name="HighLimitPx" id="1149" presence="optional">-->
-			<!--<exponent>-->
-				<!--<default value="-2"/>-->
-			<!--</exponent>-->
-			<!--<mantissa/>-->
-		<!--</decimal>-->
-		<!--<decimal name="LowLimitPx" id="1148" presence="optional">-->
-			<!--<exponent>-->
-				<!--<default value="-2"/>-->
-			<!--</exponent>-->
-			<!--<mantissa/>-->
-		<!--</decimal>-->
-		<string name="SecurityGroup" id="1151" presence="optional"/>
-		<string name="Symbol" id="55" presence="optional"/>
-		<string name="SecurityDesc" id="107" presence="optional"/>
-		<uInt32 name="SecurityID" id="48" presence="optional"/>
-		<uInt32 name="SecurityIDSource" id="22" presence="optional">
-			<constant value="8"/>
-		</uInt32>
-		<string name="CFICode" id="461" presence="optional"/>
-		<string name="UnderlyingProduct" id="462" presence="optional"/>
-		<string name="SecurityExchange" id="207" presence="optional"/>
-		<string name="PricingModel" id="9853" presence="optional"/>
-		<!--<decimal name="MinCabPrice" id="9850" presence="optional">-->
-			<!--<exponent>-->
-				<!--<default value="-2"/>-->
-			<!--</exponent>-->
-			<!--<mantissa/>-->
-		<!--</decimal>		-->
-		<uInt32 name="ExpirationCycle" id="827" presence="optional"/>
-		<string name="UnitOfMeasureQty" id="1147" presence="optional"/>
-		<!--<decimal name="StrikePrice" id="202" presence="optional">-->
-			<!--<exponent>-->
-				<!--<default value="-2"/>-->
-			<!--</exponent>-->
-			<!--<mantissa/>-->
-		<!--</decimal>-->
-		<string name="StrikeCurrency" id="947" presence="optional"/>
-		<uInt64 name="MinTradeVol" id="562" presence="optional"/>
-		<uInt64 name="MaxTradeVol" id="1140" presence="optional"/>
-		<string name="Currency" id="15" presence="optional"/>
-		<string name="SettlCurrency" id="120" presence="optional"/>
-		<sequence name="MDFeedTypes" presence="optional">
-			<length name="NoMDFeedTypes" id="1141"/>
-			<string name="MDFeedType" id="1022">
-				<constant value="GBX"/>
-			</string>
-			<uInt32 name="MarketDepth" id="264"/>
-		</sequence>
-		<string name="MatchAlgo" id="1142" presence="optional"/>
-		<string name="SecuritySubType" id="762" presence="optional"/>
+	<!--<decimal name="TradingReferencePrice" id="1150" presence="optional">-->
+	    <!--<exponent>-->
+		<!--<default value="-2"/>-->
+	    <!--</exponent>-->
+	    <!--<mantissa/>-->
+	<!--</decimal>-->
+	<!--<decimal name="HighLimitPx" id="1149" presence="optional">-->
+	    <!--<exponent>-->
+		<!--<default value="-2"/>-->
+	    <!--</exponent>-->
+	    <!--<mantissa/>-->
+	<!--</decimal>-->
+	<!--<decimal name="LowLimitPx" id="1148" presence="optional">-->
+	    <!--<exponent>-->
+		<!--<default value="-2"/>-->
+	    <!--</exponent>-->
+	    <!--<mantissa/>-->
+	<!--</decimal>-->
+	<string name="SecurityGroup" id="1151" presence="optional"/>
+	<string name="Symbol" id="55" presence="optional"/>
+	<string name="SecurityDesc" id="107" presence="optional"/>
+	<uInt32 name="SecurityID" id="48" presence="optional"/>
+	<uInt32 name="SecurityIDSource" id="22" presence="optional">
+	    <constant value="8"/>
+	</uInt32>
+	<string name="CFICode" id="461" presence="optional"/>
+	<string name="UnderlyingProduct" id="462" presence="optional"/>
+	<string name="SecurityExchange" id="207" presence="optional"/>
+	<string name="PricingModel" id="9853" presence="optional"/>
+	<!--<decimal name="MinCabPrice" id="9850" presence="optional">-->
+	    <!--<exponent>-->
+		<!--<default value="-2"/>-->
+	    <!--</exponent>-->
+	    <!--<mantissa/>-->
+	<!--</decimal>		-->
+	<uInt32 name="ExpirationCycle" id="827" presence="optional"/>
+	<string name="UnitOfMeasureQty" id="1147" presence="optional"/>
+	<!--<decimal name="StrikePrice" id="202" presence="optional">-->
+	    <!--<exponent>-->
+		<!--<default value="-2"/>-->
+	    <!--</exponent>-->
+	    <!--<mantissa/>-->
+	<!--</decimal>-->
+	<string name="StrikeCurrency" id="947" presence="optional"/>
+	<uInt64 name="MinTradeVol" id="562" presence="optional"/>
+	<uInt64 name="MaxTradeVol" id="1140" presence="optional"/>
+	<string name="Currency" id="15" presence="optional"/>
+	<string name="SettlCurrency" id="120" presence="optional"/>
+	<sequence name="MDFeedTypes" presence="optional">
+	    <length name="NoMDFeedTypes" id="1141"/>
+	    <string name="MDFeedType" id="1022">
+		<constant value="GBX"/>
+	    </string>
+	    <uInt32 name="MarketDepth" id="264"/>
+	</sequence>
+	<string name="MatchAlgo" id="1142" presence="optional"/>
+	<string name="SecuritySubType" id="762" presence="optional"/>
 
-		<sequence name="Underlyings" presence="optional">
-			<length name="NoUnderlyings" id="711"/>
-			<string name="UnderlyingSymbol" id="311">
-				<constant value="[N/A]"/>
-			</string>
-			<uInt32 name="UnderlyingSecurityID" id="309">
-				<delta/>
-			</uInt32>
-			<uInt32 name="UnderlyingSecurityIDSource" id="305">
-				<constant value="8"/>
-			</uInt32>
-		</sequence>
-		<string name="MaxPriceVariation" id="1143" presence="optional"/>
-		<string name="ImpliedMarketIndicator" id="1144" presence="optional"/>
+	<sequence name="Underlyings" presence="optional">
+	    <length name="NoUnderlyings" id="711"/>
+	    <string name="UnderlyingSymbol" id="311">
+		<constant value="[N/A]"/>
+	    </string>
+	    <uInt32 name="UnderlyingSecurityID" id="309">
+		<delta/>
+	    </uInt32>
+	    <uInt32 name="UnderlyingSecurityIDSource" id="305">
+		<constant value="8"/>
+	    </uInt32>
+	</sequence>
+	<string name="MaxPriceVariation" id="1143" presence="optional"/>
+	<string name="ImpliedMarketIndicator" id="1144" presence="optional"/>
 
-		<sequence name="InstrAttrib" presence="optional">
-			<length name="NoInstrAttrib" id="870"/>
-			<uInt64 name="InstrAttribType" id="871">
-				<delta/>
-			</uInt64>
-			<string name="InstrAttribValue" id="872" presence="optional">
-				<copy/>
-			</string>
-		</sequence>
-		<uInt64 name="MaturityDate" id="200" presence="optional"/>
-		<!--<decimal name="MinPriceIncrement" id="969" presence="optional">-->
-			<!--<exponent>-->
-				<!--<copy value="-2"/>-->
-			<!--</exponent>-->
-			<!--<mantissa>-->
-				<!--<delta/>-->
-			<!--</mantissa>-->
-		<!--</decimal>-->
-		<!--<decimal name="MinPriceIncrementAmount" id="1146" presence="optional">-->
-			<!--<exponent>-->
-				<!--<default value="-2"/>-->
-			<!--</exponent>-->
-			<!--<mantissa/>-->
-		<!--</decimal>-->
-		<!--<decimal name="DisplayFactor" id="9787" presence="optional">-->
-			<!--<exponent>-->
-				<!--<default value="-2"/>-->
-			<!--</exponent>-->
-			<!--<mantissa/>-->
-		<!--</decimal>-->
+	<sequence name="InstrAttrib" presence="optional">
+	    <length name="NoInstrAttrib" id="870"/>
+	    <uInt64 name="InstrAttribType" id="871">
+		<delta/>
+	    </uInt64>
+	    <string name="InstrAttribValue" id="872" presence="optional">
+		<copy/>
+	    </string>
+	</sequence>
+	<uInt64 name="MaturityDate" id="200" presence="optional"/>
+	<!--<decimal name="MinPriceIncrement" id="969" presence="optional">-->
+	    <!--<exponent>-->
+		<!--<copy value="-2"/>-->
+	    <!--</exponent>-->
+	    <!--<mantissa>-->
+		<!--<delta/>-->
+	    <!--</mantissa>-->
+	<!--</decimal>-->
+	<!--<decimal name="MinPriceIncrementAmount" id="1146" presence="optional">-->
+	    <!--<exponent>-->
+		<!--<default value="-2"/>-->
+	    <!--</exponent>-->
+	    <!--<mantissa/>-->
+	<!--</decimal>-->
+	<!--<decimal name="DisplayFactor" id="9787" presence="optional">-->
+	    <!--<exponent>-->
+		<!--<default value="-2"/>-->
+	    <!--</exponent>-->
+	    <!--<mantissa/>-->
+	<!--</decimal>-->
 
-		<sequence name="Legs" presence="optional">
-			<length name="NoLegs" id="555"/>
-			<string name="LegSymbol" id="600">
-				<default value="[N/A]"/>
-			</string>
-			<uInt32 name="LegRatioQty" id="623">
-				<copy/>
-			</uInt32>
-			<uInt64 name="LegSecurityID" id="602">
-				<delta/>
-			</uInt64>
-			<uInt32 name="LegSecurityIDSource" id="603">
-				<constant value="8"/>
-			</uInt32>
-			<string name="LegSide" id="624" presence="optional">
-				<default value="1"/>
-			</string>
-			<string name="LegCFICode" id="608" presence="optional">
-				<copy/>
-			</string>
-			<string name="LegSecuritySubType" id="764" presence="optional">
-				<copy/>
-			</string>
-			<string name="LegCurrency" id="556" presence="optional">
-				<copy/>
-			</string>
-			<uInt64 name="LegMaturityMonthYear" id="610" presence="optional">
-				<delta/>
-			</uInt64>
-			<!--<decimal name="LegStrikePrice" id="612" presence="optional">-->
-				<!--<exponent>-->
-					<!--<copy value="-2"/>-->
-				<!--</exponent>-->
-				<!--<mantissa>-->
-					<!--<delta/>-->
-				<!--</mantissa>-->
-			<!--</decimal>-->
-			<string name="LegStrikeCurrency" id="942" presence="optional">
-				<copy/>
-			</string>
-			<!--<decimal name="LegPrice" id="566" presence="optional">-->
-				<!--<exponent>-->
-					<!--<copy value="-2"/>-->
-				<!--</exponent>-->
-				<!--<mantissa>-->
-					<!--<delta/>-->
-				<!--</mantissa>-->
-			<!--</decimal>-->
-			<!--<decimal name="LegOptionDelta" id="1017" presence="optional">-->
-				<!--<exponent>-->
-					<!--<copy value="-2"/>-->
-				<!--</exponent>-->
-				<!--<mantissa>-->
-					<!--<delta/>-->
-				<!--</mantissa>-->
-			<!--</decimal>-->
-		</sequence>
-	</template>
+	<sequence name="Legs" presence="optional">
+	    <length name="NoLegs" id="555"/>
+	    <string name="LegSymbol" id="600">
+		<default value="[N/A]"/>
+	    </string>
+	    <uInt32 name="LegRatioQty" id="623">
+		<copy/>
+	    </uInt32>
+	    <uInt64 name="LegSecurityID" id="602">
+		<delta/>
+	    </uInt64>
+	    <uInt32 name="LegSecurityIDSource" id="603">
+		<constant value="8"/>
+	    </uInt32>
+	    <string name="LegSide" id="624" presence="optional">
+		<default value="1"/>
+	    </string>
+	    <string name="LegCFICode" id="608" presence="optional">
+		<copy/>
+	    </string>
+	    <string name="LegSecuritySubType" id="764" presence="optional">
+		<copy/>
+	    </string>
+	    <string name="LegCurrency" id="556" presence="optional">
+		<copy/>
+	    </string>
+	    <uInt64 name="LegMaturityMonthYear" id="610" presence="optional">
+		<delta/>
+	    </uInt64>
+	    <!--<decimal name="LegStrikePrice" id="612" presence="optional">-->
+		<!--<exponent>-->
+		    <!--<copy value="-2"/>-->
+		<!--</exponent>-->
+		<!--<mantissa>-->
+		    <!--<delta/>-->
+		<!--</mantissa>-->
+	    <!--</decimal>-->
+	    <string name="LegStrikeCurrency" id="942" presence="optional">
+		<copy/>
+	    </string>
+	    <!--<decimal name="LegPrice" id="566" presence="optional">-->
+		<!--<exponent>-->
+		    <!--<copy value="-2"/>-->
+		<!--</exponent>-->
+		<!--<mantissa>-->
+		    <!--<delta/>-->
+		<!--</mantissa>-->
+	    <!--</decimal>-->
+	    <!--<decimal name="LegOptionDelta" id="1017" presence="optional">-->
+		<!--<exponent>-->
+		    <!--<copy value="-2"/>-->
+		<!--</exponent>-->
+		<!--<mantissa>-->
+		    <!--<delta/>-->
+		<!--</mantissa>-->
+	    <!--</decimal>-->
+	</sequence>
+    </template>
 
-	<template name="MDQuoteRequest" id="47" dictionary="47" xmlns="http://www.fixprotocol.org/ns/fast/td/1.1">
-		<string name="ApplVerID" id="1128">
-			<constant value="8"/>
-		</string>
-		<string name="MessageType" id="35">
-			<constant value="R"/>
-		</string>
-		<string name="SenderCompID" id="49">
-			<constant value="CME"/>
-		</string>
-		<uInt32 name="MsgSeqNum" id="34"/>
-		<uInt64 name="SendingTime" id="52"/>
-		<string name="PosDupFlag" id="43" presence="optional">
-			<default/>
-		</string>
-		<sequence name="RelatedSym">
-			<length name="NoRelatedSym" id="146"/>
-			<string name="Symbol" id="55">
-				<constant value="[N/A]"/>
-			</string>
-			<uInt64 name="OrderQty" id="38" presence="optional"/>
+    <template name="MDQuoteRequest" id="3" dictionary="47" xmlns="http://www.fixprotocol.org/ns/fast/td/1.1">
+	<string name="ApplVerID" id="1128">
+	    <constant value="8"/>
+	</string>
+	<string name="MessageType" id="35">
+	    <constant value="R"/>
+	</string>
+	<string name="SenderCompID" id="49">
+	    <constant value="CME"/>
+	</string>
+	<uInt32 name="MsgSeqNum" id="34"/>
+	<uInt64 name="SendingTime" id="52"/>
+	<string name="PosDupFlag" id="43" presence="optional">
+	    <default/>
+	</string>
+	<sequence name="RelatedSym">
+	    <length name="NoRelatedSym" id="146"/>
+	    <string name="Symbol" id="55">
+		<constant value="[N/A]"/>
+	    </string>
+	    <uInt64 name="OrderQty" id="38" presence="optional"/>
 
-			<uInt32 name="Side" id="54" presence="optional">
-				<default value="1"/>
-			</uInt32>
+	    <uInt32 name="Side" id="54" presence="optional">
+		<default value="1"/>
+	    </uInt32>
 
-			<uInt64 name="TransactTime" id="60"/>
+	    <uInt64 name="TransactTime" id="60"/>
 
-			<uInt32 name="QuoteType" id="537">
-				<default value="1"/>
-			</uInt32>
+	    <uInt32 name="QuoteType" id="537">
+		<default value="1"/>
+	    </uInt32>
 
-			<string name="QuoteReqID" id="131" presence="optional"/>
+	    <string name="QuoteReqID" id="131" presence="optional"/>
 
-			<uInt32 name="SecurityID" id="48"/>
+	    <uInt32 name="SecurityID" id="48"/>
 
-			<uInt32 name="SecurityIDSource" id="22">
-				<constant value="8"/>
-			</uInt32>
-		</sequence>
-	</template>
+	    <uInt32 name="SecurityIDSource" id="22">
+		<constant value="8"/>
+	    </uInt32>
+	</sequence>
+    </template>
 
-	<template name="MDSecurityStatus" id="48" dictionary="48" xmlns="http://www.fixprotocol.org/ns/fast/td/1.1">
-		<string name="ApplVerID" id="1128">
-			<constant value="8"/>
-		</string>
-		<string name="MessageType" id="35">
-			<constant value="f"/>
-		</string>
-		<string name="SenderCompID" id="49">
-			<constant value="CME"/>
-		</string>
-		<uInt32 name="MsgSeqNum" id="34"/>
-		<uInt64 name="SendingTime" id="52"/>
-		<string name="PosDupFlag" id="43" presence="optional">
-			<default/>
-		</string>
-		<uInt32 name="SecurityID" id="48" presence="optional"/>
-		<uInt32 name="SecurityIDSource" id="22" presence="optional">
-			<constant value="8"/>
-		</uInt32>
-		<!--<decimal name="HighPx" id="332" presence="optional">-->
-			<!--<exponent>-->
-				<!--<default value="-2"/>-->
-			<!--</exponent>-->
-			<!--<mantissa/>-->
-		<!--</decimal>-->
-		<!--<decimal name="LowPx" id="333" presence="optional">-->
-			<!--<exponent>-->
-				<!--<default value="-2"/>-->
-			<!--</exponent>-->
-			<!--<mantissa/>-->
-		<!--</decimal>-->
-		<string name="Symbol" id="55" presence="optional"/>
-		<uInt32 name="SecurityTradingStatus" id="326" presence="optional"/>
-	</template>
+    <template name="MDSecurityStatus" id="4" dictionary="48" xmlns="http://www.fixprotocol.org/ns/fast/td/1.1">
+	<string name="ApplVerID" id="1128">
+	    <constant value="8"/>
+	</string>
+	<string name="MessageType" id="35">
+	    <constant value="f"/>
+	</string>
+	<string name="SenderCompID" id="49">
+	    <constant value="CME"/>
+	</string>
+	<uInt32 name="MsgSeqNum" id="34"/>
+	<uInt64 name="SendingTime" id="52"/>
+	<string name="PosDupFlag" id="43" presence="optional">
+	    <default/>
+	</string>
+	<uInt32 name="SecurityID" id="48" presence="optional"/>
+	<uInt32 name="SecurityIDSource" id="22" presence="optional">
+	    <constant value="8"/>
+	</uInt32>
+	<!--<decimal name="HighPx" id="332" presence="optional">-->
+	    <!--<exponent>-->
+		<!--<default value="-2"/>-->
+	    <!--</exponent>-->
+	    <!--<mantissa/>-->
+	<!--</decimal>-->
+	<!--<decimal name="LowPx" id="333" presence="optional">-->
+	    <!--<exponent>-->
+		<!--<default value="-2"/>-->
+	    <!--</exponent>-->
+	    <!--<mantissa/>-->
+	<!--</decimal>-->
+	<string name="Symbol" id="55" presence="optional"/>
+	<uInt32 name="SecurityTradingStatus" id="326" presence="optional"/>
+    </template>
 
-	<template name="MDNewsMessage" id="49" dictionary="49" xmlns="http://www.fixprotocol.org/ns/fast/td/1.1">
-		<string name="ApplVerID" id="1128">
-			<constant value="8"/>
-		</string>
-		<string name="MessageType" id="35">
-			<constant value="B"/>
-		</string>
-		<string name="SenderCompID" id="49">
-			<constant value="CME"/>
-		</string>
-		<uInt32 name="MsgSeqNum" id="34"/>
-		<uInt64 name="SendingTime" id="52"/>
-		<string name="Headline" id="147"/>
-		<string name="PosDupFlag" id="43" presence="optional">
-			<default/>
-		</string>
-		<sequence name="LinesOfText">
-			<length name="NoLinesOfText" id="33"/>
-			<string name="text" id="58">
-				<copy/>
-			</string>
-		</sequence>
-	</template>
-
-
-	<template name="MDHeartbeat" id="50" dictionary="50" xmlns="http://www.fixprotocol.org/ns/fast/td/1.1">
-		<string name="ApplVerID" id="1128">
-			<constant value="8"/>
-		</string>
-		<string name="MessageType" id="35">
-			<constant value="0"/>
-		</string>
-		<string name="SenderCompID" id="49">
-			<constant value="CME"/>
-		</string>
-		<uInt32 name="MsgSeqNum" id="34"/>
-		<uInt64 name="SendingTime" id="52"/>
-		<string name="PosDupFlag" id="43" presence="optional">
-			<default/>
-		</string>
-	</template>
-
-	<template name="MDSnapshotFullRefresh_51" id="51" dictionary="51" xmlns="http://www.fixprotocol.org/ns/fast/td/1.1">
-		<string name="MessageType" id="35">
-			<constant value="W"/>
-		</string>
-		<string name="ApplVerID" id="1128">
-			<constant value="8"/>
-		</string>
-		<string name="SenderCompID" id="49">
-			<constant value="CME"/>
-		</string>
-		<uInt32 name="MsgSeqNum" id="34"/>
-		<string name="PosDupFlag" id="43" presence="optional">
-			<default/>
-		</string>
-		<uInt64 name="SendingTime" id="52"/>
+    <template name="MDNewsMessage" id="5" dictionary="49" xmlns="http://www.fixprotocol.org/ns/fast/td/1.1">
+	<string name="ApplVerID" id="1128">
+	    <constant value="8"/>
+	</string>
+	<string name="MessageType" id="35">
+	    <constant value="B"/>
+	</string>
+	<string name="SenderCompID" id="49">
+	    <constant value="CME"/>
+	</string>
+	<uInt32 name="MsgSeqNum" id="34"/>
+	<uInt64 name="SendingTime" id="52"/>
+	<string name="Headline" id="147"/>
+	<string name="PosDupFlag" id="43" presence="optional">
+	    <default/>
+	</string>
+	<sequence name="LinesOfText">
+	    <length name="NoLinesOfText" id="33"/>
+	    <string name="text" id="58">
+		<copy/>
+	    </string>
+	</sequence>
+    </template>
 
 
-		<uInt32 name="LastMsgSeqNumProcessed" id="369"/>
-		<uInt32 name="TotalNumReports" id="911"/>
-		<uInt32 name="MDBookType" id="1021"/>
-		<uInt32 name="SecurityID" id="48">
-			<delta/>
-		</uInt32>
-		<uInt32 name="SecurityIDSource" id="22">
-			<constant value="8"/>
-		</uInt32>
+    <template name="MDHeartbeat" id="6" dictionary="50" xmlns="http://www.fixprotocol.org/ns/fast/td/1.1">
+	<string name="ApplVerID" id="1128">
+	    <constant value="8"/>
+	</string>
+	<string name="MessageType" id="35">
+	    <constant value="0"/>
+	</string>
+	<string name="SenderCompID" id="49">
+	    <constant value="CME"/>
+	</string>
+	<uInt32 name="MsgSeqNum" id="34"/>
+	<uInt64 name="SendingTime" id="52"/>
+	<string name="PosDupFlag" id="43" presence="optional">
+	    <default/>
+	</string>
+    </template>
+
+    <template name="MDSnapshotFullRefresh_51" id="7" dictionary="51" xmlns="http://www.fixprotocol.org/ns/fast/td/1.1">
+	<string name="MessageType" id="35">
+	    <constant value="W"/>
+	</string>
+	<string name="ApplVerID" id="1128">
+	    <constant value="8"/>
+	</string>
+	<string name="SenderCompID" id="49">
+	    <constant value="CME"/>
+	</string>
+	<uInt32 name="MsgSeqNum" id="34"/>
+	<string name="PosDupFlag" id="43" presence="optional">
+	    <default/>
+	</string>
+	<uInt64 name="SendingTime" id="52"/>
+
+
+	<uInt32 name="LastMsgSeqNumProcessed" id="369"/>
+	<uInt32 name="TotalNumReports" id="911"/>
+	<uInt32 name="MDBookType" id="1021"/>
+	<uInt32 name="SecurityID" id="48">
+	    <delta/>
+	</uInt32>
+	<uInt32 name="SecurityIDSource" id="22">
+	    <constant value="8"/>
+	</uInt32>
 
 
 
-		<sequence name="MDEntries">
-			<length name="NoMDEntries" id="268"/>
-			<string name="MDEntryType" id="269">
-				<default value="2"/>
-			</string>
-			<!--<decimal name="MDEntryPx" id="270" presence="optional">-->
-				<!--<exponent>-->
-					<!--<default value="-2"/>-->
-				<!--</exponent>-->
-				<!--<mantissa>-->
-					<!--<delta/>-->
-				<!--</mantissa>-->
-			<!--</decimal>-->
-			<int32 name="MDEntrySize" id="271" presence="optional">
-				<delta/>
-			</int32>
-			<string name="QuoteCondition" id="276" presence="optional">
-				<default value="K"/>
-			</string>
-			<string name="TradeCondition" id="277" presence="optional">
-				<constant value="U"/>
-			</string>
-			<uInt32 name="MDPriceLevel" id="1023" presence="optional">
-				<copy value="1"/>
-			</uInt32>
-			<uInt32 name="NumberOfOrders" id="346" presence="optional">
-				<copy/>
-			</uInt32>
-			<string name="TradingSessionID" id="336" presence="optional">
-				<default value="2"/>
-			</string>
-			<uInt32 name="TradeVolume" id="1020" presence="optional">
-				<delta/>
-			</uInt32>
-			<string name="TickDirection" id="274" presence="optional">
-				<default/>
-			</string>
-			<!--<decimal name="NetChgPrevDay" id="451" presence="optional">-->
-				<!--<exponent>-->
-					<!--<default/>-->
-				<!--</exponent>-->
-				<!--<mantissa>-->
-					<!--<delta/>-->
-				<!--</mantissa>-->
-			<!--</decimal>-->
-		</sequence>
-	</template>
-	
-	<template name="MDLogon" id="1" dictionary="1" xmlns="http://www.fixprotocol.org/ns/fast/td/1.1">
-		<string name="ApplVerID" id="1128">
-			<constant value="8"/>
-		</string>
-		<string name="MessageType" id="35">
-			<constant value="A"/>
-		</string>
-		<string name="SenderCompID" id="49">
-			<constant value="CME"/>
-		</string>
-		<uInt32 name="MsgSeqNum" id="34"/>
-		<uInt64 name="SendingTime" id="52"/>
-		<string name="applFeedId" id="1180">
-			<constant value="REPLAY"/>
-		</string>
-		<uInt32 name="encryptMethod" id="98">
-			<constant value="0"/>
-		</uInt32>
-		<uInt32 name="heartbeatInt" id="108"/>
-		<string name="DefaultApplVerID" id="1137">
-			<constant value="8"/>
-		</string>
-	</template>
-	
-	<template name="MDLogout" id="2" dictionary="2" xmlns="http://www.fixprotocol.org/ns/fast/td/1.1">
-		<string name="ApplVerID" id="1128">
-			<constant value="8"/>
-		</string>
-		<string name="MessageType" id="35">
-			<constant value="5"/>
-		</string>
-		<string name="SenderCompID" id="49">
-			<constant value="CME"/>
-		</string>
-		<uInt32 name="MsgSeqNum" id="34"/>
-		<uInt64 name="SendingTime" id="52"/>
-		<string name="applFeedId" id="1180">
-			<constant value="REPLAY"/>
-		</string>
-		<string name="text" id="58" presence="optional"/>
-	</template>
+	<sequence name="MDEntries">
+	    <length name="NoMDEntries" id="268"/>
+	    <string name="MDEntryType" id="269">
+		<default value="2"/>
+	    </string>
+	    <!--<decimal name="MDEntryPx" id="270" presence="optional">-->
+		<!--<exponent>-->
+		    <!--<default value="-2"/>-->
+		<!--</exponent>-->
+		<!--<mantissa>-->
+		    <!--<delta/>-->
+		<!--</mantissa>-->
+	    <!--</decimal>-->
+	    <int32 name="MDEntrySize" id="271" presence="optional">
+		<delta/>
+	    </int32>
+	    <string name="QuoteCondition" id="276" presence="optional">
+		<default value="K"/>
+	    </string>
+	    <string name="TradeCondition" id="277" presence="optional">
+		<constant value="U"/>
+	    </string>
+	    <uInt32 name="MDPriceLevel" id="1023" presence="optional">
+		<copy value="1"/>
+	    </uInt32>
+	    <uInt32 name="NumberOfOrders" id="346" presence="optional">
+		<copy/>
+	    </uInt32>
+	    <string name="TradingSessionID" id="336" presence="optional">
+		<default value="2"/>
+	    </string>
+	    <uInt32 name="TradeVolume" id="1020" presence="optional">
+		<delta/>
+	    </uInt32>
+	    <string name="TickDirection" id="274" presence="optional">
+		<default/>
+	    </string>
+	    <!--<decimal name="NetChgPrevDay" id="451" presence="optional">-->
+		<!--<exponent>-->
+		    <!--<default/>-->
+		<!--</exponent>-->
+		<!--<mantissa>-->
+		    <!--<delta/>-->
+		<!--</mantissa>-->
+	    <!--</decimal>-->
+	</sequence>
+    </template>
+    
+    <template name="MDLogon" id="8" dictionary="1" xmlns="http://www.fixprotocol.org/ns/fast/td/1.1">
+	<string name="ApplVerID" id="1128">
+	    <constant value="8"/>
+	</string>
+	<string name="MessageType" id="35">
+	    <constant value="A"/>
+	</string>
+	<string name="SenderCompID" id="49">
+	    <constant value="CME"/>
+	</string>
+	<uInt32 name="MsgSeqNum" id="34"/>
+	<uInt64 name="SendingTime" id="52"/>
+	<string name="applFeedId" id="1180">
+	    <constant value="REPLAY"/>
+	</string>
+	<uInt32 name="encryptMethod" id="98">
+	    <constant value="0"/>
+	</uInt32>
+	<uInt32 name="heartbeatInt" id="108"/>
+	<string name="DefaultApplVerID" id="1137">
+	    <constant value="8"/>
+	</string>
+    </template>
+    
+    <template name="MDLogout" id="9" dictionary="2" xmlns="http://www.fixprotocol.org/ns/fast/td/1.1">
+	<string name="ApplVerID" id="1128">
+	    <constant value="8"/>
+	</string>
+	<string name="MessageType" id="35">
+	    <constant value="5"/>
+	</string>
+	<string name="SenderCompID" id="49">
+	    <constant value="CME"/>
+	</string>
+	<uInt32 name="MsgSeqNum" id="34"/>
+	<uInt64 name="SendingTime" id="52"/>
+	<string name="applFeedId" id="1180">
+	    <constant value="REPLAY"/>
+	</string>
+	<string name="text" id="58" presence="optional"/>
+    </template>
 
-  <template name="big_values" id="3">
+  <template name="big_values" id="10">
     <typeRef name="unittestdata"/>"
     <int32 name="int32_nop" id="1">
     </int32>
@@ -536,11 +536,9 @@
     </uInt32>
     <int64 name="int64_const" id="11"><constant value="9223372036854775807"/>
     </int64>
-    <!-- Disable this test due to a bug in boost::lexical_cast: https://svn.boost.org/trac/boost/ticket/2295
     <uInt64 name="uint64_const" id="12">
       <constant value="18446744073709551615"/>
     </uInt64>
-    -->
     <!--<decimal name="decimal_const" id="13"><constant value="9223372036854775807000000000000000000000000000000000000000000000000000000000000000"/>-->
     <!--</decimal>-->
     <string name="asciistring_const" charset="ascii" id="14"><constant value="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"/>
@@ -555,11 +553,10 @@
     </uInt32>
     <int64 name="int64_default" id="19"><default value="9223372036854775807"/>
     </int64>
-    <!-- Disable this test due to a bug in boost::lexical_cast: https://svn.boost.org/trac/boost/ticket/2295
-       uInt64 name="uint64_default" id="20">
-        <default value="18446744073709551615"/>
+    <uInt64 name="uint64_default" id="20">
+	<default value="18446744073709551615"/>
     </uInt64>
-    -->
+   
     <!--<decimal name="decimal_default" id="21"><default value="9223372036854775807000000000000000000000000000000000000000000000000000000000000000"/>-->
     <!--</decimal>-->
     <string name="asciistring_default" charset="ascii" id="22">
@@ -616,7 +613,7 @@
     </byteVector>
     </template>
 
-  <template name="small_values" id="3">
+  <template name="small_values" id="11">
     <typeRef name="unittestdata"/>"
     <int32 name="int32_nop" id="1">
     </int32>
@@ -714,7 +711,7 @@
     </byteVector>
     </template>
 
-  <template name="mandatory_fields" id="3">
+  <template name="mandatory_fields" id="12">
     <typeRef name="unittestdata"/>"
     <int32 name="int32_nop" id="1">
     </int32>
@@ -803,7 +800,7 @@
     <int64 name="int64_incre" id="43"><increment value="1"/>
     </int64>
     <uInt64 name="uint64_incre" id="44"><increment value="1"/>
-    </uInt64> 
+    </uInt64>
     <string name="asciistring_tail" charset="ascii" id="45"><tail/>
     </string>
     <string name="utf8string_tail" charset="unicode" id="46"><tail/>
@@ -812,7 +809,7 @@
     </byteVector>
     </template>
 
-  <template name="optional_fields" id="3">
+  <template name="optional_fields" id="13">
     <typeRef name="unittestdata"/>"
     <int32 name="int32_nop" presence="optional" id="1">
     </int32>
@@ -901,7 +898,7 @@
     <int64 name="int64_incre" presence="optional" id="43"><increment value="1"/>
     </int64>
     <uInt64 name="uint64_incre" presence="optional" id="44"><increment value="1"/>
-    </uInt64> 
+    </uInt64>
     <string name="asciistring_tail" charset="ascii" presence="optional" id="45"><tail/>
     </string>
     <string name="utf8string_tail" charset="unicode" presence="optional" id="46"><tail/>
@@ -910,84 +907,159 @@
     </byteVector>
     </template>
 
-	<template name="sequences" id="4" >
-		<sequence name="seq1">
-			<length name="length1" />
-			<uInt32 name="field11" >
-				<copy value="1"/>
-			</uInt32>
-			<uInt32 name="field12" presence="optional">
-				<default value="1"/>
-			</uInt32>
-			<string name="field13" >
-				<copy value="0"/>
-			</string>
-			<uInt32 name="field14" presence="optional"/>
-		</sequence>
-		<sequence name="nested_seq2">
-			<length name="length" />
-				<sequence name="seq3">
-					<length name="length31" />
-					<uInt32 name="field1" >
-						<copy value="1"/>
-					</uInt32>
-					<uInt32 name="field32" presence="optional">
-						<default value="1"/>
-					</uInt32>
-					<string name="field33" >
-						<copy value="0"/>
-					</string>
-					<uInt32 name="field34" presence="optional"/>
-				</sequence>
-			<uInt32 name="field21" >
-				<copy value="1"/>
-			</uInt32>
-			<uInt32 name="field22" presence="optional">
-				<default value="1"/>
-			</uInt32>
-			<string name="field23" >
-				<copy value="0"/>
-			</string>
-			<uInt32 name="field24"  presence="optional"/>
-		</sequence>
-	</template>
-
-	<template name="groups" id="4" >
-		<group name="group1">
-			<uInt32 name="field11" >
-				<copy value="1"/>
-			</uInt32>
-			<uInt32 name="field12" presence="optional">
-				<default value="1"/>
-			</uInt32>
-			<string name="field13" >
-				<copy value="0"/>
-			</string>
-			<uInt32 name="field14" presence="optional"/>
-		</group>
-		<group name="nested_group2">
-			<group name="group">
-				<uInt32 name="field1" >
-					<copy value="1"/>
-				</uInt32>
-				<uInt32 name="field32" presence="optional">
-					<default value="1"/>
-				</uInt32>
-				<string name="field33" >
-					<copy value="0"/>
-				</string>
-				<uInt32 name="field34" presence="optional"/>
-			</group>
-		<uInt32 name="field21" >
+    <template name="sequences" id="14" >
+	<sequence name="seq1">
+	    <length name="length1" />
+	    <uInt32 name="field11" >
+		<copy value="1"/>
+	    </uInt32>
+	    <uInt32 name="field12" presence="optional">
+		<default value="1"/>
+	    </uInt32>
+	    <string name="field13" >
+		<copy value="0"/>
+	    </string>
+	    <uInt32 name="field14" presence="optional"/>
+	</sequence>
+	<sequence name="nested_seq2">
+	    <length name="length" />
+		<sequence name="seq3">
+		    <length name="length31" />
+		    <uInt32 name="field1" >
 			<copy value="1"/>
-		</uInt32>
-		<uInt32 name="field22" presence="optional">
+		    </uInt32>
+		    <uInt32 name="field32" presence="optional">
 			<default value="1"/>
-		</uInt32>
-		<string name="field23" >
+		    </uInt32>
+		    <string name="field33" >
 			<copy value="0"/>
+		    </string>
+		    <uInt32 name="field34" presence="optional"/>
+		</sequence>
+	    <uInt32 name="field21" >
+		<copy value="1"/>
+	    </uInt32>
+	    <uInt32 name="field22" presence="optional">
+		<default value="1"/>
+	    </uInt32>
+	    <string name="field23" >
+		<copy value="0"/>
+	    </string>
+	    <uInt32 name="field24"  presence="optional"/>
+	</sequence>
+    </template>
+
+    <template name="groups" id="15" >
+	<group name="group1">
+	    <uInt32 name="field11" >
+		<copy value="1"/>
+	    </uInt32>
+	    <uInt32 name="field12" presence="optional">
+		<default value="1"/>
+	    </uInt32>
+	    <string name="field13" >
+		<copy value="0"/>
+	    </string>
+	    <uInt32 name="field14" presence="optional"/>
+	</group>
+	<group name="nested_group2">
+	    <group name="group">
+		<uInt32 name="field1" >
+		    <copy value="1"/>
+		</uInt32>
+		<uInt32 name="field32" presence="optional">
+		    <default value="1"/>
+		</uInt32>
+		<string name="field33" >
+		    <copy value="0"/>
 		</string>
-		<uInt32 name="field24"  presence="optional"/>
-		</group>
-	</template>
+		<uInt32 name="field34" presence="optional"/>
+	    </group>
+	<uInt32 name="field21" >
+	    <copy value="1"/>
+	</uInt32>
+	<uInt32 name="field22" presence="optional">
+	    <default value="1"/>
+	</uInt32>
+	<string name="field23" >
+	    <copy value="0"/>
+	</string>
+	<uInt32 name="field24"  presence="optional"/>
+	</group>
+    </template>
+
+    <template name="app_type" id="16" type="type0">
+	<uInt32 name="field1">
+	    <copy value="1"/>
+	</uInt32>
+	<uInt32 name="field2" presence="optional">
+	    <default value="1"/>
+	</uInt32>
+	<string name="field3" >
+	    <copy value="0"/>
+	</string>
+	<sequence name="seq" type="type1">
+	    <length name="length" />
+	    <uInt32 name="field1" >
+		<copy value="1"/>
+	    </uInt32>
+	    <uInt32 name="field2"  presence="optional">
+		<default value="1"/>
+	    </uInt32>
+	    <string name="field3"  >
+		<copy value="0"/>
+	    </string>
+	</sequence>
+	<group name="group" type="type1">
+	    <uInt32 name="field1" >
+		<copy value="1"/>
+	    </uInt32>
+	    <uInt32 name="field2" presence="optional">
+		<default value="1"/>
+	    </uInt32>
+	    <string name="field3" >
+		<copy value="0"/>
+	    </string>
+	</group>
+    </template>
+
+    <template name="template_reference1" id="17">
+	<uInt32 name="field1">
+	    <copy value="1"/>
+	</uInt32>
+	<uInt32 name="field2" presence="optional">
+	    <default value="1"/>
+	</uInt32>
+	<string name="field3" presence="optional" >
+	    <copy value="0"/>
+	</string>
+	<sequence name="seq" >
+	    <length name="length" />
+	    <uInt32 name="fields1" >
+		<copy value="1"/>
+	    </uInt32>
+	    <uInt32 name="fields2"  presence="optional">
+		<default value="1"/>
+	    </uInt32>
+	    <string name="fields3"  >
+		<copy value="0"/>
+	    </string>
+	</sequence>
+	<templateRef name="template_reference2"/>
+    </template>
+
+    <template name="template_reference3" id="19">
+        <templateRef/>
+    </template>
+
+    <template name="template_reference2" id="18">
+        <int64 name="field4" presence="optional" ><increment value="1"/>
+        </int64>
+        <string name="field5" presence="optional" >
+            <copy value="0"/>
+        </string>
+        <uInt32 name="field6">
+            <copy value="1"/>
+        </uInt32>
+    </template>
 </templates>

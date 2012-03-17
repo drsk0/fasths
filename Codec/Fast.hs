@@ -32,6 +32,7 @@ import qualified Data.Attoparsec as A
 import qualified Data.Monoid as M
 import Control.Monad.State
 import Control.Monad.Reader
+import Control.Applicative (many)
 import Data.Word (Word32)
 import Data.Maybe (fromMaybe)
 import Codec.Fast.Data
@@ -61,12 +62,15 @@ reset ts = put (initState ts)
 
 -- NOTE: Blocks are not supported at the time.
 
-prop_decode_template_encode_template_is_ID :: (Template, [(NsName, Maybe Value)]) -> Property
-prop_decode_template_encode_template_is_ID (t, msgs) = printTestCase (unlines [showDiff m1 m2 | (m1, m2) <- zip (fromMaybe [] l) msgs]) result 
+prop_decode_template_encode_template_is_ID :: [Template] -> (Template, [(NsName, Maybe Value)]) -> Property
+prop_decode_template_encode_template_is_ID ts (_, msgs) = printTestCase (unlines [showDiff m1 m2 | (m1, m2) <- zip (fromMaybe [] l) msgs]) result 
     where
             result = l == r 
-            l = (A.maybeResult (A.feed (A.parse (evalStateT (A.many parser) (initState templates)) bs) B.empty)) 
+            l = (A.maybeResult (A.feed (A.parse (evalStateT (many parser) (initState templates)) bs) B.empty)) 
             r = (Just msgs)
-            parser = message templates (const $ tName t)
-            bs = (B.concat . BL.toChunks . BU.toLazyByteString) (M.mconcat (evalState (mapM (_message templates (const 0)) msgs) (initState templates)))
-            templates = Templates Nothing Nothing Nothing [t]
+            parser = message templates tid2tem
+            bs = (B.concat . BL.toChunks . BU.toLazyByteString) (M.mconcat (evalState (mapM (_message templates tem2tid) msgs) (initState templates)))
+            templates = Templates Nothing Nothing Nothing ts 
+            tid2tem tid = fromMaybe (error ("could not find template " ++ show tid ++ ".")) $ 
+                lookup tid [((read . (\(IdAttr(Token s)) -> s) . (fromMaybe (error "no id attribute in template."))) m_id , n) | (Template n@(TemplateNsName _ _ m_id) _ _ _ _) <- ts]
+            tem2tid (TemplateNsName _ _ m_id) = read $ (\(IdAttr(Token s)) -> s) $ fromMaybe (error "no id attribute in template.") m_id

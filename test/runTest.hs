@@ -90,9 +90,9 @@ main = do
 
     putStr "\n[*] Checking \"templates.xml\" \n"
     ts <- parseTemplateXML (readDocument [] "test/templates.xml") 
-    mapM_ h (tsTemplates ts) where 
-                h t = 
+    mapM_ (h (tsTemplates ts)) (tsTemplates ts) where 
+                h ts t = 
                     let (TemplateNsName (NameAttr n) _ _) = tName t in
                     do 
                         putStr $ n ++ " "
-                        quickCheck (forAll (resize 10 (listOf $ arbitraryMsgForTemplate t)) (prop_decode_template_encode_template_is_ID . (\ms -> (t, ms))))
+                        quickCheck (forAll (resize 10 (listOf $ arbitraryMsgForTemplate ts t)) (prop_decode_template_encode_template_is_ID ts . (\ms -> (t, ms))))

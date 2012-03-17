@@ -34,9 +34,10 @@ import Control.Exception
 -- |Environment of the parser.
 data Env = Env {
     -- |All known templates.
-    templates   ::M.Map TemplateNsName Template,
+    -- TODO: Should the keys be TemplateNsName or just NameAttr?
+    templates :: M.Map TemplateNsName Template,
     -- |The application needs to define how uint32 values are mapped to template names.
-    tid2temp   ::Word32 -> TemplateNsName
+    tid2temp :: Word32 -> TemplateNsName
     }
 
 -- |The environment of the parser depending on the templates and
@@ -52,7 +53,12 @@ segment = presenceMap
 
 -- |Parses presence map and template identifier.
 segment'::FParser (NsName, Maybe Value)
-segment' = presenceMap >> templateIdentifier
+segment' = do
+    s <- get
+    m <- presenceMap >> templateIdentifier
+    s' <- get
+    put $ Context (pm s) (dict s') (template s') (appType s')
+    return m
 
 -- |Parses template identifier and returns the corresponding parser.
 -- template identifier is considered a mandatory copy operator UIn32 field.
@@ -68,7 +74,7 @@ templateIdentifier = do
             put $ Context (pm s0) (dict s0) (Just $ tName $ (templates env M.! tid2temp env i)) (tTypeRef $ (templates env M.! tid2temp env i))
             msg <- template2P (templates env M.! tid2temp env i)
             s1 <- get
-            put $ Context (pm s1) (dict s1) (template s1) (appType s0)
+            put $ Context (pm s1) (dict s1) (template s0) (appType s0)
             return msg
         (Just _) ->  throw $ OtherException "Coding error: templateId field must be of type I."
         Nothing -> throw $ OtherException "Failed to parse template identifier."
@@ -80,7 +86,7 @@ templateIdentifier = do
                             )))
 
 -- |Parse PreseneceMap.
-presenceMap::FParser ()
+presenceMap :: FParser ()
 presenceMap = do
     bs <- l2 anySBEEntity
     -- update state
@@ -99,7 +105,7 @@ instr2P (Instruction f) = field2Parser f
 -- Static template reference.
 instr2P (TemplateReference (Just trc)) = do
     env <- ask
-    template2P (templates env M.! tempRefCont2TempNsName trc) 
+    template2P ((M.mapKeys (\(TemplateNsName n m_ns _) -> TemplateNsName n m_ns Nothing) $ templates env) M.! tempRefCont2TempNsName trc) 
 -- Dynamic template reference.  
 instr2P (TemplateReference Nothing) = segment'
 
