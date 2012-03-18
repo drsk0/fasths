@@ -71,7 +71,7 @@ templateIdentifier = do
         (Just (UI32 i)) -> do 
             env <- ask
             s0 <- get
-            put $ Context (pm s0) (dict s0) (Just $ tName $ (templates env M.! tid2temp env i)) (tTypeRef $ (templates env M.! tid2temp env i))
+            put $ Context (pm s0) (dict s0) (Just $ tName (templates env M.! tid2temp env i)) (tTypeRef (templates env M.! tid2temp env i))
             msg <- template2P (templates env M.! tid2temp env i)
             s1 <- get
             put $ Context (pm s1) (dict s1) (template s0) (appType s0)
@@ -105,7 +105,7 @@ instr2P (Instruction f) = field2Parser f
 -- Static template reference.
 instr2P (TemplateReference (Just trc)) = do
     env <- ask
-    template2P ((M.mapKeys (\(TemplateNsName n m_ns _) -> TemplateNsName n m_ns Nothing) $ templates env) M.! tempRefCont2TempNsName trc) 
+    template2P (M.mapKeys (\(TemplateNsName n m_ns _) -> TemplateNsName n m_ns Nothing) (templates env) M.! tempRefCont2TempNsName trc) 
 -- Dynamic template reference.  
 instr2P (TemplateReference Nothing) = segment'
 
@@ -170,7 +170,7 @@ intF2P' (FieldInstrContent fname (Just Mandatory) (Just (Copy oc)))
         case p of
             (Assigned v) -> return (Just (assertType v))
             Undefined -> h' oc
-                where   h' (OpContext _ _ (Just iv)) = (lift $ updatePrevValue fname oc (Assigned (witnessType i))) >> (return (Just i)) where i = ivToPrimitive iv
+                where   h' (OpContext _ _ (Just iv)) = lift (updatePrevValue fname oc (Assigned (witnessType i))) >> return (Just i) where i = ivToPrimitive iv
                         h' (OpContext _ _ Nothing) = throw $ D5 "No initial value in operator context\
                                                           \for mandatory copy operator with undefined dictionary\
                                                           \value."
@@ -848,11 +848,11 @@ groupF2P (Group fname (Just Mandatory) _ maybe_typeref instrs)
         env <- ask 
         s <- get
         put (Context (pm s) (dict s) (template s) maybe_typeref)
-        if (needsSegment instrs (templates env)) then segment else return ()
+        when (needsSegment instrs (templates env)) segment
         vs <- mapM instr2P instrs
         s' <- get
         put $ Context (pm s) (dict s') (template s) (appType s)
-        return (fname, Just $ Gr $ vs)
+        return (fname, Just $ Gr vs)
 
 groupF2P (Group fname (Just Optional) _ maybe_typeref instrs) 
     = ifPresentElse 
@@ -860,11 +860,11 @@ groupF2P (Group fname (Just Optional) _ maybe_typeref instrs)
         env <- ask 
         s <- get
         put (Context (pm s) (dict s) (template s) maybe_typeref)
-        if (needsSegment instrs (templates env)) then segment else return ()
+        when (needsSegment instrs (templates env)) segment
         vs <- mapM instr2P instrs
         s' <- get
         put $ Context (pm s) (dict s') (template s) (appType s)
-        return (fname, Just $ Gr $ vs))
+        return (fname, Just $ Gr vs))
     (return (fname, Nothing))
 
 -- |nULL parser.
