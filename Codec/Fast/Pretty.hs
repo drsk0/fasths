@@ -45,17 +45,17 @@ shiftRight :: Int -> String
 shiftRight i = replicate i '\t' 
 
 br :: String -> String
-br s = "[" ++ (show s) ++ "]"
+br s = "[" ++ show s ++ "]"
 
 show' :: Int -> Value -> String
 show' _ (Gr []) = "Gr " ++ "EMPTY"
 show' i (Gr vs) = "Gr \n" ++ unlines (map (showPair (i + 1)) vs)
 show' _ (Sq l []) = "Sq [" ++ show l ++ "] " ++ "EMTPY"
-show' i (Sq l xss) = "Sq [" ++ show l ++ "] \n" ++ unlines (map (\xs -> unlines (map (showPair (i +1)) xs)) xss)
+show' i (Sq l xss) = "Sq [" ++ show l ++ "] \n" ++ unlines (map (unlines . map (showPair (i +1))) xss)
 show' _ v = show v
 
-showPair :: Int -> (NsName, (Maybe Value)) -> String
-showPair i (n, m_v) = shiftRight i ++ (show $ PN n) ++ " -> " ++ showMaybeValue i m_v
+showPair :: Int -> (NsName, Maybe Value) -> String
+showPair i (n, m_v) = shiftRight i ++ show (PN n) ++ " -> " ++ showMaybeValue i m_v
 
 showMaybeValue :: Int -> Maybe Value -> String
 showMaybeValue i (Just v) = show' i v
@@ -70,12 +70,12 @@ showDiffValues _ (Gr []) (Gr _) = "Gr " ++ "EMPTY" ++ notEqual ++ "NONEMPTY"
 showDiffValues _ (Gr _) (Gr []) = "Gr " ++ "NONEMPTY" ++ notEqual ++ " EMPTY" 
 showDiffValues i (Gr vs1) (Gr vs2) = "Gr \n" ++ unlines (map (showDiffPairs (i + 1)) (zip vs1 vs2))
 showDiffValues _ (Sq l1 _) (Sq l2 _) | l1 /= l2 = "Different sequence lengths: " ++ show l1 ++ notEqual ++ show l2
-showDiffValues i (Sq l1 pss1) (Sq _ pss2) | otherwise = shiftRight i ++ "Sq " ++ "[" ++ (show l1) ++ "] \n" ++ unlines (map (\(ps1, ps2) -> unlines (map (showDiffPairs (i + 1)) (zip ps1 ps2))) (zip pss1 pss2))
+showDiffValues i (Sq l1 pss1) (Sq _ pss2) = shiftRight i ++ "Sq " ++ "[" ++ show l1 ++ "] \n" ++ unlines (map (\(ps1, ps2) -> unlines (map (showDiffPairs (i + 1)) (zip ps1 ps2))) (zip pss1 pss2))
 showDiffValues _ v1 v2 = show v1 ++ notEqual ++  show v2
 
 showDiffPairs :: Int -> (Pair, Pair) -> String
-showDiffPairs i ((n1, m_v1), (n2, m_v2)) | n1 == n2 = shiftRight i ++ (show $ PN n1) ++ " -> " ++ showDiffMaybeValues i m_v1 m_v2
-showDiffPairs i ((n1, _), (n2, _)) | otherwise = shiftRight i ++ "Names don't match: " ++ show (PN n1) ++ notEqual ++ show (PN n2)
+showDiffPairs i ((n1, m_v1), (n2, m_v2)) | n1 == n2 = shiftRight i ++ show (PN n1) ++ " -> " ++ showDiffMaybeValues i m_v1 m_v2
+showDiffPairs i ((n1, _), (n2, _)) = shiftRight i ++ "Names don't match: " ++ show (PN n1) ++ notEqual ++ show (PN n2)
 
 showDiffMaybeValues :: Int -> Maybe Value -> Maybe Value -> String
 showDiffMaybeValues i (Just v1) Nothing = show' i v1 ++ notEqual ++ " --- " 
