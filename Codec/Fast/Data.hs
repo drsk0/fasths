@@ -439,8 +439,8 @@ instance Primitive AsciiString where
                             
     ftail s1 s2 = take (length s1 - length s2) s1 ++ s2
     ftail_ s1 s2 | length s1 > length s2 = s1
-    ftail_ s1 s2 | length s1 == length s2 = map fst (LL.dropWhile (\(x, y) -> x == y) (LL.zip s1 s2))
-    ftail_ s1 s2 | otherwise = throw $ OtherException ("Can't encode a smaller string with a tail operator." ++ " -> " ++ show s1 ++ " -> " ++ show s2)
+    ftail_ s1 s2 | length s1 == length s2 = map fst (LL.dropWhile (uncurry (==)) (LL.zip s1 s2))
+    ftail_ s1 s2 = throw $ OtherException ("Can't encode a smaller string with a tail operator." ++ " -> " ++ show s1 ++ " -> " ++ show s2)
     decodeP = rmPreamble <$> asciiString
     decodeP0 = rmPreamble0 <$> asciiString
     decodeD = do 
@@ -463,11 +463,11 @@ instance Primitive (Int32, Int64) where
     witnessType = TypeWitnessDec
     assertType (TypeWitnessDec (e, m)) = (e, m)
     assertType _ = throw $ D4 "Type mismatch."
-    toValue (e, m) = Dec $ (fromIntegral m) * 10.0^^e
+    toValue (e, m) = Dec $ fromIntegral m * 10.0^^e
     fromValue (Dec 0.0) = (0, 0)
     fromValue (Dec d) | d > 0.0 = (fromIntegral e  - LL.genericLength digits, m) 
         where   (digits, e) = floatToDigits 10 d
-                m = foldl (\r x -> 10*r + (fromIntegral x)) 0 digits
+                m = foldl (\r x -> 10 * r + fromIntegral x) 0 digits
     fromValue (Dec d) = (e, -1 * m) where (e, m) = fromValue (Dec (-1 * d))
     fromValue _ = throw $ D4 "Type mismatch."
     defaultBaseValue = (0, 0)
@@ -484,11 +484,11 @@ instance Primitive (Int32, Int64) where
     -- TODO: can easily overflow for huge mantissas.
     primitiveToIv (_, 0) = InitialValueAttr "0.0"
     primitiveToIv (e, m) | e >= 0 = InitialValueAttr $ show m ++ LL.genericReplicate e '0' ++ ".0"
-    primitiveToIv (e, m) | e < 0 && m >= 0 = InitialValueAttr $ (fst p_m) ++ "." ++ (LL.genericReplicate (-1 * e - l_m) '0') ++ (snd p_m)
+    primitiveToIv (e, m) | e < 0 && m >= 0 = InitialValueAttr $ fst p_m ++ "." ++ LL.genericReplicate (-1 * e - l_m) '0' ++ snd p_m
                                                 where   p_m = LL.genericSplitAt (l_m - (-1 * e)) s_m 
                                                         s_m = (LL.reverse . LL.dropWhile (=='0') . LL.reverse . show) m   
                                                         l_m = LL.genericLength s_m
-    primitiveToIv (e, m) | e < 0 && m < 0 = InitialValueAttr $ "-" ++ (text $ primitiveToIv (e, -1 * m))
+    primitiveToIv (e, m) | e < 0 && m < 0 = InitialValueAttr $ '-' : text (primitiveToIv (e, -1 * m))
     delta (e1, m1) (Ddec (e2, m2)) = (e1 + e2, m1 + m2)
     delta_ (e2, m2) (e1, m1) = Ddec (e2 - e1, m2 - m1)
     ftail = throw $ S2 "Tail operator is only applicable to ascii, unicode and bytevector fields."
@@ -523,13 +523,13 @@ instance Primitive B.ByteString where
     fromValue (B bs) = bs
     fromValue _ = throw $ D4 "Type mismatch."
     defaultBaseValue = B.empty
-    ivToPrimitive iv = B.pack $ sumPairs numbers where  numbers = (map (fromIntegral . digitToInt) (filter (not . whiteSpace) (text iv)))
+    ivToPrimitive iv = B.pack $ sumPairs numbers where  numbers = map (fromIntegral . digitToInt) (filter (not . whiteSpace) (text iv))
                                                         sumPairs (x : y : xs) = (16* x + y) : sumPairs xs
-                                                        sumPairs (x : []) = x : []
+                                                        sumPairs (x : []) = [x] 
                                                         sumPairs [] = []
-    primitiveToIv bs = InitialValueAttr (concat' (map ((flip showHex "")) (B.unpack bs))) where concat' ([x] : ys) = ['0', x] ++ (concat' ys)
-                                                                                                concat' (x : ys) = x ++ concat' ys
-                                                                                                concat' ([]) = []
+    primitiveToIv bs = InitialValueAttr (concat' (map (`showHex` "") (B.unpack bs))) where  concat' ([x] : ys) = ['0', x] ++ concat' ys
+                                                                                            concat' (x : ys) = x ++ concat' ys
+                                                                                            concat' ([]) = []
     delta bv1 (Dbs (l, bv2)) | l < 0 = bv2 `B.append` bv'' where bv'' = LL.genericDrop (-(l + 1)) bv1 
     delta bv1 (Dbs (l, bv2)) | l >= 0 = bv'' `B.append` bv2 where bv'' = LL.genericTake (LL.genericLength bv1 - l) bv1
     delta _ _ = throw $ D4 "Type mismatch."
@@ -538,10 +538,10 @@ instance Primitive B.ByteString where
                     else Dbs (LL.genericLength l2 - LL.genericLength bv2 - 1, LL.genericTake ((LL.genericLength bv1 - LL.genericLength l2) :: Word32) bv1)
                     where   l1 = takeWhile (uncurry (==)) (LL.zip bv1 bv2)
                             l2 = takeWhile (uncurry (==)) (LL.zip (LL.reverse bv1) (LL.reverse bv2))
-    ftail b1 b2 = (B.take (B.length b1 - B.length b2) b1) `B.append` b2
+    ftail b1 b2 = B.take (B.length b1 - B.length b2) b1 `B.append` b2
     ftail_ b1 b2 | B.length b1  > B.length b2 = b1
-    ftail_ b1 b2 | B.length b1 == B.length b2 = B.pack (map fst (LL.dropWhile (\(x, y) -> x == y) (B.zip b1 b2)))
-    ftail_ b1 b2 | otherwise = throw $ OtherException ("Can't encode a smaller string with a tail operator." ++ " -> " ++ show b1 ++ " -> " ++ show b2)
+    ftail_ b1 b2 | B.length b1 == B.length b2 = B.pack (map fst (LL.dropWhile (uncurry (==)) (B.zip b1 b2)))
+    ftail_ b1 b2 = throw $ OtherException ("Can't encode a smaller string with a tail operator." ++ " -> " ++ show b1 ++ " -> " ++ show b2)
     decodeP = byteVector
     decodeP0 = byteVector0
     decodeD = do 
@@ -897,15 +897,13 @@ _int :: (Bits a, Ord a, Integral a) => Coparser a
 _int  = _anySBEEntity . intBS 
 
 intBS :: (Bits a, Ord a, Integral a) => a -> B.ByteString
-intBS i =   if i < 0 
-            then h i 
-            else   if (testBit (B.head (uintBS i)) 6)
-                   then (B.singleton 0) `mappend` (uintBS i)
-                   else uintBS i
+intBS i | i < 0 = h i 
             where h x = if x' /= -1 || not (testBit (fromIntegral x :: Word8) 6)
                         then h x' `B.snoc` (fromIntegral (x .&. 127) :: Word8)
                         else B.singleton (fromIntegral (x .&. 127) :: Word8)
                         where x' = shiftR x 7
+intBS i | testBit (B.head (uintBS i)) 6 = B.singleton 0 `mappend` uintBS i
+intBS i = uintBS i
 
 -- |ASCII string field parser, non-Nullable.
 asciiString :: A.Parser AsciiString
@@ -1104,7 +1102,7 @@ assertNameIs n1 (n2, x) = if n1 == n2 then x else throw $ OtherException $ "Temp
 -- |Creates a list of dictionaries depending on the fields of a template.
 -- TODO: is there a reserved name for the tid field?
 initDicts::Template -> [Dictionary]
-initDicts t = createDicts $ catMaybes $ ((Just ("global", K (NsKey(KeyAttr (Token "tid")) Nothing), Undefined)) : (concatMap h (tInstructions t)))
+initDicts t = createDicts $ catMaybes (Just ("global", K (NsKey(KeyAttr (Token "tid")) Nothing), Undefined) : concatMap h (tInstructions t))
     where   h (TemplateReference _) = []
             h (Instruction f) = dictOfField f
 
@@ -1177,14 +1175,14 @@ dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Option
 dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Mandatory) (Just(Tail oc))) _)) = [Just $ dictOfOpContext oc fname] 
 dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname (Just Optional) (Just(Tail oc))) _)) = [Just $ dictOfOpContext oc fname]
 dictOfField (UnicodeStrField (UnicodeStringField (FieldInstrContent fname maybe_presence maybe_op) maybe_length)) = dictOfField (ByteVecField (ByteVectorField (FieldInstrContent fname maybe_presence maybe_op) maybe_length))
-dictOfField (Seq (Sequence n maybe_pr (Just (DictionaryAttr dname)) maybe_tref maybe_length is)) = (dictOfField (Seq (Sequence n maybe_pr Nothing maybe_tref maybe_length is)))
-dictOfField (Seq (Sequence n maybe_pr Nothing _ Nothing is)) = (concatMap h is) ++ dictOfField (IntField (UInt32Field (FieldInstrContent (uniqueFName n "l") maybe_pr Nothing)))
+dictOfField (Seq (Sequence n maybe_pr (Just (DictionaryAttr dname)) maybe_tref maybe_length is)) = dictOfField (Seq (Sequence n maybe_pr Nothing maybe_tref maybe_length is))
+dictOfField (Seq (Sequence n maybe_pr Nothing _ Nothing is)) = concatMap h is ++ dictOfField (IntField (UInt32Field (FieldInstrContent (uniqueFName n "l") maybe_pr Nothing)))
     where   h (TemplateReference _) = [Nothing]
             h (Instruction f) = dictOfField f
-dictOfField (Seq (Sequence _ maybe_pr Nothing _ (Just (Length (Just name) maybe_op)) is)) = (concatMap h is) ++ dictOfField (IntField (UInt32Field (FieldInstrContent name maybe_pr maybe_op)))
+dictOfField (Seq (Sequence _ maybe_pr Nothing _ (Just (Length (Just name) maybe_op)) is)) = concatMap h is ++ dictOfField (IntField (UInt32Field (FieldInstrContent name maybe_pr maybe_op)))
     where   h (TemplateReference _) = [Nothing]
             h (Instruction f) = dictOfField f
-dictOfField (Seq (Sequence n maybe_pr Nothing _ (Just (Length Nothing maybe_op)) is)) = (concatMap h is) ++ dictOfField (IntField (UInt32Field (FieldInstrContent (uniqueFName n "l") maybe_pr maybe_op)))
+dictOfField (Seq (Sequence n maybe_pr Nothing _ (Just (Length Nothing maybe_op)) is)) = concatMap h is ++ dictOfField (IntField (UInt32Field (FieldInstrContent (uniqueFName n "l") maybe_pr maybe_op)))
     where   h (TemplateReference _) = [Nothing]
             h (Instruction f) = dictOfField f
 dictOfField (Grp g) = concatMap h (gInstructions g)
@@ -1220,25 +1218,25 @@ dictOfOpContext (OpContext (Just (DictionaryAttr d)) (Just k) _) _ = (d, K k, Un
 -- |Remove Preamble of an ascii string, non-Nullable situation.
 rmPreamble :: AsciiString -> AsciiString
 rmPreamble (['\0']) = []
-rmPreamble (['\0', '\0']) = "\NUL"
+rmPreamble (['\0', '\0']) = "\0"
 -- overlong string.
 rmPreamble s = LL.dropWhile (=='\0') s
 
 -- |Remove preamble of an ascii string, NULLable situation.
 rmPreamble0::AsciiString -> AsciiString
 rmPreamble0 (['\0','\0']) = []
-rmPreamble0 (['\0','\0','\0']) = "\NUL"
+rmPreamble0 (['\0','\0','\0']) = "\0"
 -- overlong string.
 rmPreamble0 s = LL.dropWhile (=='\0') s
 
 addPreamble :: AsciiString -> AsciiString
-addPreamble [] = (['\0'])
-addPreamble "\NUL" = (['\0','\0'])
+addPreamble [] = "\0"
+addPreamble "\0" = "\0\0"
 addPreamble s = LL.dropWhile (=='\0') s
 
 addPreamble0 :: AsciiString -> AsciiString
-addPreamble0 [] = (['\0','\0'])
-addPreamble0 "\NUL" = (['\0','\0','\0'])
+addPreamble0 [] = "\0\0"
+addPreamble0 "\0" = "\0\0\0"
 addPreamble0 s = LL.dropWhile (=='\0') s
 
 
