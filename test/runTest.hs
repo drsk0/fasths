@@ -18,7 +18,7 @@ main = do
     quickCheck (prop_decodeP_dot_encodeP_is_ID :: Int64 -> Bool)
     quickCheck (prop_decodeP_dot_encodeP_is_ID :: Word64 -> Bool)
     quickCheck (prop_decodeP_dot_encodeP_is_ID :: (Int32, Int64) -> Bool)
-    quickCheck (forAll (fmap (\(B7S s) -> s) (arbitrary :: Gen Bit7String)) ((prop_decodeP_dot_encodeP_is_ID) :: AsciiString -> Bool))
+    quickCheck (forAll (fmap (\(B7S s) -> s) (arbitrary :: Gen Bit7String)) (prop_decodeP_dot_encodeP_is_ID :: AsciiString -> Bool))
     quickCheck (prop_decodeP_dot_encodeP_is_ID :: B.ByteString -> Bool)
 
     putStr "\n[*] Checking 'decodeP0 . encodeP0 = id'\n"
@@ -27,23 +27,23 @@ main = do
     quickCheck (prop_decodeP0_dot_encodeP0_is_ID :: Int64 -> Bool)
     quickCheck (prop_decodeP0_dot_encodeP0_is_ID :: Word64 -> Bool)
     quickCheck (prop_decodeP0_dot_encodeP0_is_ID :: (Int32, Int64) -> Bool)
-    quickCheck (forAll (fmap (\(B7S s) -> s) (arbitrary :: Gen Bit7String)) ((prop_decodeP0_dot_encodeP0_is_ID) :: AsciiString -> Bool))
+    quickCheck (forAll (fmap (\(B7S s) -> s) (arbitrary :: Gen Bit7String)) (prop_decodeP0_dot_encodeP0_is_ID :: AsciiString -> Bool))
 
     putStr "\n[*] Checking 'decodeD . encodeD = id'\n"
-    quickCheck (prop_decodeD_dot_encodeD_is_ID :: (Delta Int32) -> Bool)
-    quickCheck (prop_decodeD_dot_encodeD_is_ID :: (Delta Int64) -> Bool)
-    quickCheck (prop_decodeD_dot_encodeD_is_ID :: (Delta Word32) -> Bool)
-    quickCheck (prop_decodeD_dot_encodeD_is_ID :: (Delta Word64) -> Bool)
-    quickCheck (prop_decodeD_dot_encodeD_is_ID :: (Delta (Int32, Int64)) -> Bool)
-    quickCheck (prop_decodeD_dot_encodeD_is_ID :: (Delta B.ByteString) -> Bool)
+    quickCheck (prop_decodeD_dot_encodeD_is_ID :: Delta Int32 -> Bool)
+    quickCheck (prop_decodeD_dot_encodeD_is_ID :: Delta Int64 -> Bool)
+    quickCheck (prop_decodeD_dot_encodeD_is_ID :: Delta Word32 -> Bool)
+    quickCheck (prop_decodeD_dot_encodeD_is_ID :: Delta Word64 -> Bool)
+    quickCheck (prop_decodeD_dot_encodeD_is_ID :: Delta (Int32, Int64) -> Bool)
+    quickCheck (prop_decodeD_dot_encodeD_is_ID :: Delta B.ByteString -> Bool)
 
     putStr "\n[*] Checking 'decodeD0 . encodeD0 = id'\n"
-    quickCheck (prop_decodeD0_dot_encodeD0_is_ID :: (Delta Int32) -> Bool)
-    quickCheck (prop_decodeD0_dot_encodeD0_is_ID :: (Delta Int64) -> Bool)
-    quickCheck (prop_decodeD0_dot_encodeD0_is_ID :: (Delta Word32) -> Bool)
-    quickCheck (prop_decodeD0_dot_encodeD0_is_ID :: (Delta Word64) -> Bool)
-    quickCheck (prop_decodeD0_dot_encodeD0_is_ID :: (Delta (Int32, Int64)) -> Bool)
-    quickCheck (prop_decodeD0_dot_encodeD0_is_ID :: (Delta B.ByteString) -> Bool)
+    quickCheck (prop_decodeD0_dot_encodeD0_is_ID :: Delta Int32 -> Bool)
+    quickCheck (prop_decodeD0_dot_encodeD0_is_ID :: Delta Int64 -> Bool)
+    quickCheck (prop_decodeD0_dot_encodeD0_is_ID :: Delta Word32 -> Bool)
+    quickCheck (prop_decodeD0_dot_encodeD0_is_ID :: Delta Word64 -> Bool)
+    quickCheck (prop_decodeD0_dot_encodeD0_is_ID :: Delta (Int32, Int64) -> Bool)
+    quickCheck (prop_decodeD0_dot_encodeD0_is_ID :: Delta B.ByteString -> Bool)
 
     putStr "\n[*] Checking 'decodeT . encodeT = id'\n"
     quickCheck (forAll (fmap (\(B7S s) -> s) (arbitrary :: Gen Bit7String)) (prop_decodeT_dot_encodeT_is_ID :: AsciiString -> Bool))
@@ -79,7 +79,7 @@ main = do
     quickCheck (prop_rmPreamble_dot_addPreamble_is_ID . (\(NOS s) -> s))
 
     putStr "\n[*] Checking 'bsToPm . pmToBs = id'\n"
-    quickCheck (prop_bsToPm_dot_pmToBs_is_ID)
+    quickCheck prop_bsToPm_dot_pmToBs_is_ID
 
     putStr "\n[*] ivToPrimitive . primitiveToIv  = id'\n"
     quickCheck (prop_ivToPrimitive_dot_primitiveToIv_is_ID :: Int32 -> Bool)

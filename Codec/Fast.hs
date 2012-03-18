@@ -66,11 +66,11 @@ prop_decode_template_encode_template_is_ID :: [Template] -> (Template, [(NsName,
 prop_decode_template_encode_template_is_ID ts (_, msgs) = printTestCase (unlines [showDiff m1 m2 | (m1, m2) <- zip (fromMaybe [] l) msgs]) result 
     where
             result = l == r 
-            l = (A.maybeResult (A.feed (A.parse (evalStateT (many parser) (initState templates)) bs) B.empty)) 
-            r = (Just msgs)
+            l = A.maybeResult (A.feed (A.parse (evalStateT (many parser) (initState templates)) bs) B.empty) 
+            r = Just msgs
             parser = message templates tid2tem
             bs = (B.concat . BL.toChunks . BU.toLazyByteString) (M.mconcat (evalState (mapM (_message templates tem2tid) msgs) (initState templates)))
             templates = Templates Nothing Nothing Nothing ts 
             tid2tem tid = fromMaybe (error ("could not find template " ++ show tid ++ ".")) $ 
-                lookup tid [((read . (\(IdAttr(Token s)) -> s) . (fromMaybe (error "no id attribute in template."))) m_id , n) | (Template n@(TemplateNsName _ _ m_id) _ _ _ _) <- ts]
+                lookup tid [((read . (\(IdAttr(Token s)) -> s) . fromMaybe (error "no id attribute in template.")) m_id , n) | (Template n@(TemplateNsName _ _ m_id) _ _ _ _) <- ts]
             tem2tid (TemplateNsName _ _ m_id) = read $ (\(IdAttr(Token s)) -> s) $ fromMaybe (error "no id attribute in template.") m_id

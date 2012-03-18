@@ -1,3 +1,4 @@
+import Prelude hiding (catch)
 import System.Environment
 import qualified Data.ByteString as B
 import Codec.Fast
@@ -5,7 +6,7 @@ import Text.XML.HXT.Core (readDocument)
 import qualified Data.Attoparsec as A
 import Control.Monad.State
 import Control.Applicative
-import Control.Exception (Exception)
+import Control.Exception (IOException, catch)
 import Data.Word (Word32)
 
 -- |Example of a stream. This stream never resets its context.
@@ -26,13 +27,13 @@ stream2 ts tid2tem = evalStateT (A.many1 (resetMsg <|> msg)) (initState ts)
                     m@(NsName (NameAttr n) _ _, _) <- msg
                     if n == "Reset" then Codec.Fast.reset ts >> return m else fail "Not reset."
 
-handler :: Exception e => e -> IO ()
+handler :: IOException -> IO ()
 handler e = error (show e)
 
-main::IO ()
+main :: IO ()
 main = do 
     args <- getArgs
-    ts <- if not . null $ args then parseTemplateXML (readDocument [] (args!!0)) else error "No template file given."
+    ts <- if not . null $ args then parseTemplateXML (readDocument [] (head args)) else error "No template file given."
     bs <- B.readFile (args!!1)
 --    print ts
     catch (print (A.feed (A.parse (stream2 ts Main.tid2temp) bs) B.empty)) handler
