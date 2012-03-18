@@ -26,16 +26,16 @@ unwrapB7S :: Bit7String -> String
 unwrapB7S (B7S s) = s
 
 instance Arbitrary Bit7String where
-    arbitrary = fmap (B7S . dropWhile (== '\0') . unpack  . B.map (\w -> clearBit w 7) . pack) (arbitrary :: Gen String)
-    shrink = (map B7S) . (shrink :: String -> [String]) . unwrapB7S
+    arbitrary = fmap (B7S . dropWhile (== '\0') . unpack  . B.map (`clearBit` 7) . pack) (arbitrary :: Gen String)
+    shrink = map B7S . (shrink :: String -> [String]) . unwrapB7S
 
 newtype Bit7Char = B7C Char deriving (Show, Eq)
 unwrapB7C :: Bit7Char -> Char
 unwrapB7C (B7C c) = c
 
 instance Arbitrary Bit7Char where
-    arbitrary = ((B7C . toEnum . (\w -> clearBit w 7) . fromEnum) <$> (arbitrary :: Gen Char)) `suchThat` (/= B7C '\0')
-    shrink = (map B7C) . (shrink :: Char -> [Char]) . unwrapB7C
+    arbitrary = ((B7C . toEnum . (`clearBit` 7) . fromEnum) <$> (arbitrary :: Gen Char)) `suchThat` (/= B7C '\0')
+    shrink = map B7C . (shrink :: Char -> String) . unwrapB7C
 
 newtype NormalizedDecimal = ND (Int32, Int64) deriving Show
 unwrapND :: NormalizedDecimal -> (Int32 , Int64)
@@ -46,7 +46,7 @@ instance Arbitrary NormalizedDecimal where
         where   normalize (_, 0) = (0, 0)
                 normalize (e, m) | m `mod` 10 == 0 = normalize (e + 1, m `div` 10)
                 normalize (e, m) = (e, m)
-    shrink = (map ND) . (shrink :: (Int32, Int64) -> [(Int32, Int64)]) . unwrapND
+    shrink = map ND . (shrink :: (Int32, Int64) -> [(Int32, Int64)]) . unwrapND
 
 newtype NonOverlongString = NOS AsciiString deriving Show
 
@@ -58,25 +58,25 @@ instance Arbitrary NonOverlongString where
             overlong "\0" = False
             overlong ('\0':_) = True
             overlong _ = False
-    shrink = (map NOS) . (shrink :: String -> [String]) . (\(NOS s) -> s)
+    shrink = map NOS . (shrink :: String -> [String]) . (\(NOS s) -> s)
 
 arbitraryMsgForTemplate :: [Template] -> Template -> Gen (NsName, Maybe Value)
 arbitraryMsgForTemplate ts t = do 
-                                vs <- sequence $ map (arbitraryValueForInstruction ts) (tInstructions t)
+                                vs <- mapM (arbitraryValueForInstruction ts) (tInstructions t)
                                 return (tname2fname $ tName t, Just $ Gr vs)
 
 arbitraryValueForInstruction :: [Template] -> Instruction -> Gen (NsName, Maybe Value)
 arbitraryValueForInstruction ts (Instruction f) = arbitraryValueForField ts f
-arbitraryValueForInstruction ts (TemplateReference (Just trc)) = arbitraryMsgForTemplate ts ((M.fromList [(TemplateNsName n m_ns Nothing, t) | t@(Template (TemplateNsName n m_ns _) _ _ _ _)  <- ts]) M.! (tempRefCont2TempNsName trc))
+arbitraryValueForInstruction ts (TemplateReference (Just trc)) = arbitraryMsgForTemplate ts (M.fromList [(TemplateNsName n m_ns Nothing, t) | t@(Template (TemplateNsName n m_ns _) _ _ _ _)  <- ts] M.! tempRefCont2TempNsName trc)
 arbitraryValueForInstruction ts (TemplateReference Nothing) = do 
                                                                t <- elements ts
                                                                arbitraryMsgForTemplate ts t
 
 arbitraryValueForField :: [Template] -> Field -> Gen (NsName, Maybe Value)
-arbitraryValueForField ts (IntField f@(Int32Field (FieldInstrContent fname _ _ ))) = (fname,) <$> fmap toValue <$> ((arbitraryValueForIntField ts f) :: Gen (Maybe Int32))
-arbitraryValueForField ts (IntField f@(Int64Field (FieldInstrContent fname _ _ ))) = (fname,) <$> fmap toValue <$> ((arbitraryValueForIntField ts f) :: Gen (Maybe Int64))
-arbitraryValueForField ts (IntField f@(UInt32Field (FieldInstrContent fname _ _ ))) = (fname,) <$> fmap toValue <$> ((arbitraryValueForIntField ts f) :: Gen (Maybe Word32))
-arbitraryValueForField ts (IntField f@(UInt64Field (FieldInstrContent fname _ _ ))) = (fname,) <$> fmap toValue <$> ((arbitraryValueForIntField ts f) :: Gen (Maybe Word64))
+arbitraryValueForField ts (IntField f@(Int32Field (FieldInstrContent fname _ _ ))) = (fname,) <$> fmap toValue <$> (arbitraryValueForIntField ts f :: Gen (Maybe Int32))
+arbitraryValueForField ts (IntField f@(Int64Field (FieldInstrContent fname _ _ ))) = (fname,) <$> fmap toValue <$> (arbitraryValueForIntField ts f :: Gen (Maybe Int64))
+arbitraryValueForField ts (IntField f@(UInt32Field (FieldInstrContent fname _ _ ))) = (fname,) <$> fmap toValue <$> (arbitraryValueForIntField ts f :: Gen (Maybe Word32))
+arbitraryValueForField ts (IntField f@(UInt64Field (FieldInstrContent fname _ _ ))) = (fname,) <$> fmap toValue <$> (arbitraryValueForIntField ts f :: Gen (Maybe Word64))
 arbitraryValueForField ts (DecField f@(DecimalField fname _ _ )) = (fname, ) <$> fmap toValue <$> arbitraryValueForDecField ts f 
 arbitraryValueForField ts (AsciiStrField f@(AsciiStringField(FieldInstrContent fname _ _ ))) = (fname, ) <$> fmap toValue <$> arbitraryValueForAsciiField ts f
 arbitraryValueForField ts (UnicodeStrField (UnicodeStringField f@(FieldInstrContent fname _ _ ) maybe_len )) = (fname, ) <$> fmap toValue <$> (arbitraryValueForByteVectorField ts f maybe_len :: Gen (Maybe UnicodeString))
@@ -136,8 +136,8 @@ arbitraryValueForDecField ts (DecimalField fname (Just Optional) (Just (Right (D
         m <- arbitraryValueForIntField ts (Int64Field (FieldInstrContent fname'' (Just Mandatory) maybe_maOp))
         case (e, m) of
             (Nothing, Nothing) -> return Nothing
-            ((Just e'), (Just m')) -> return (Just (e', m'))
-            ((Just e'), Nothing) -> do 
+            (Just e', Just m') -> return (Just (e', m'))
+            (Just e', Nothing) -> do 
                 m' <- arbitrary
                 return (Just (e', m'))
             (Nothing, Just m') -> do
@@ -152,8 +152,8 @@ arbitraryValueForDecField ts (DecimalField fname (Just Mandatory) (Just (Right (
         m <- arbitraryValueForIntField ts (Int64Field (FieldInstrContent fname'' (Just Mandatory) maybe_maOp))
         case (e, m) of
             (Nothing, Nothing) -> return Nothing
-            ((Just e'), (Just m')) -> return (Just (e', m'))
-            ((Just e'), Nothing) -> do 
+            (Just e', Just m') -> return (Just (e', m'))
+            (Just e', Nothing) -> do 
                 m' <- arbitrary
                 return (Just (e', m'))
             (Nothing, Just m') -> do
@@ -173,10 +173,10 @@ arbitraryValueForAsciiField _ (AsciiStringField(FieldInstrContent _ (Just Mandat
 arbitraryValueForAsciiField _ (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Increment _))))
     = throw $ S2 "Increment operator is only applicable to integer fields." 
 arbitraryValueForAsciiField _ (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Delta _)))) = (Just . unwrapB7S) <$> arbitrary
-arbitraryValueForAsciiField _ (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Tail _)))) = (Just . (dropWhile (=='\0')) . (map unwrapB7C)) <$> vectorOf 10 arbitrary
+arbitraryValueForAsciiField _ (AsciiStringField(FieldInstrContent _ (Just Mandatory) (Just (Tail _)))) = (Just . dropWhile (=='\0') . map unwrapB7C) <$> vectorOf 10 arbitrary
 arbitraryValueForAsciiField _ (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Constant iv))))  = oneof [return $ Just $ ivToPrimitive iv, return Nothing]
-arbitraryValueForAsciiField _ (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Tail _)))) = oneof [return Nothing, (Just . (dropWhile (=='\0')) . (map unwrapB7C)) <$> vectorOf 10 arbitrary]
-arbitraryValueForAsciiField _ _ = (fmap unwrapB7S) <$> arbitrary
+arbitraryValueForAsciiField _ (AsciiStringField(FieldInstrContent _ (Just Optional) (Just (Tail _)))) = oneof [return Nothing, (Just . dropWhile (=='\0') . map unwrapB7C) <$> vectorOf 10 arbitrary]
+arbitraryValueForAsciiField _ _ = fmap unwrapB7S <$> arbitrary
 
 arbitraryValueForByteVectorField :: (Primitive a, Arbitrary a, LL.ListLike a c, Arbitrary c) => [Template] -> FieldInstrContent -> Maybe ByteVectorLength -> Gen (Maybe a)
 arbitraryValueForByteVectorField ts (FieldInstrContent fname Nothing maybe_op) len 
@@ -204,7 +204,7 @@ arbitraryValueForSequence ts (Sequence fname pr _ _ m_length instrs) = do
     where  
         g Nothing = return (fname, Nothing)
         g (Just i') = do 
-                         sq <- (vectorOf (fromIntegral i') (mapM (arbitraryValueForInstruction ts) instrs))
+                         sq <- vectorOf (fromIntegral i') (mapM (arbitraryValueForInstruction ts) instrs)
                          return (fname, Just (Sq (fromIntegral i') sq))
         fname' = uniqueFName fname "l" 
         h p Nothing = arbitraryValueForIntField ts (UInt32Field (FieldInstrContent fname' p Nothing)) :: Gen (Maybe Word32)
@@ -214,5 +214,5 @@ arbitraryValueForSequence ts (Sequence fname pr _ _ m_length instrs) = do
 arbitraryValueForGroup :: [Template] -> Group -> Gen (NsName, Maybe Value)
 arbitraryValueForGroup ts (Group fname Nothing maybe_dict maybe_typeref instrs)
     = arbitraryValueForGroup ts (Group fname (Just Mandatory) maybe_dict maybe_typeref instrs)
-arbitraryValueForGroup ts (Group fname (Just Mandatory) _ _ instrs) = (fname,) <$> Just . Gr <$> (mapM (arbitraryValueForInstruction ts) instrs)
-arbitraryValueForGroup ts (Group fname (Just Optional) _ _ instrs) = (fname,) <$> oneof [Just . Gr <$> (mapM (arbitraryValueForInstruction ts) instrs), return Nothing]
+arbitraryValueForGroup ts (Group fname (Just Mandatory) _ _ instrs) = (fname,) <$> Just . Gr <$> mapM (arbitraryValueForInstruction ts) instrs
+arbitraryValueForGroup ts (Group fname (Just Optional) _ _ instrs) = (fname,) <$> oneof [Just . Gr <$> mapM (arbitraryValueForInstruction ts) instrs, return Nothing]
