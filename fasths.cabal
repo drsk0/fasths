@@ -9,6 +9,11 @@ Category:            Codec
 Build-type:          Simple
 Cabal-version:       >=1.8
 
+Test-Suite simple-testsuite
+  Type: exitcode-stdio-1.0
+  Main-is: Test/runTest.hs
+  Hs-Source-Dirs:	src
+  Build-depends: base, QuickCheck, bytestring, mtl, binary, attoparsec, containers, ListLike, hxt
 
 Library
   Build-Depends:	base, QuickCheck, bytestring, binary, mtl, attoparsec, containers, ListLike, hxt
@@ -20,9 +25,3 @@ Executable parseFile
   Main-Is:	examples/parseFile.hs
   Hs-Source-Dirs:	src
   Build-Depends: base, fasths, mtl, attoparsec, hxt, bytestring, QuickCheck, binary, containers, ListLike
-
-Executable runTest
-  Main-Is: 	test/runTest.hs
-  Hs-Source-Dirs:	src
-  Build-Depends: base, bytestring, fasths, QuickCheck, mtl, binary, attoparsec, containers, ListLike, hxt
-  Other-modules: Codec.Fast.TemplateParser

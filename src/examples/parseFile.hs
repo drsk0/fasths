@@ -1,5 +1,5 @@
 import Prelude hiding (catch)
-import System.Environment
+import System.Environment (getArgs)
 import qualified Data.ByteString as B
 import Codec.Fast
 import Text.XML.HXT.Core (readDocument)

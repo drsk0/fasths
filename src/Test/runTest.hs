@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleContexts, TupleSections, TypeFamilies #-}
 
+import System.Environment (getArgs)
 import Test.QuickCheck
 import Text.XML.HXT.Core (readDocument)
 import Data.Word (Word32, Word64)
@@ -89,7 +90,8 @@ main = do
     quickCheck (prop_ivToPrimitive_dot_primitiveToIv_is_ID :: B.ByteString -> Bool)
 
     putStr "\n[*] Checking \"templates.xml\" \n"
-    ts <- parseTemplateXML (readDocument [] "test/templates.xml") 
+    args <- getArgs
+    ts <- if not . null $ args then parseTemplateXML (readDocument [] (head args)) else error "No template file given."
     mapM_ (h (tsTemplates ts)) (tsTemplates ts) where 
                 h ts t = 
                     let (TemplateNsName (NameAttr n) _ _) = tName t in
