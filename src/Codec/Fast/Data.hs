@@ -11,9 +11,19 @@
 
 module Codec.Fast.Data 
 (
+-- * Primitive type class
+
+-- | This is the central type class of the encoder/decoder.
+Primitive (..),
 TypeWitness (..),
 Value (..),
-Primitive (..),
+-- * Basic types
+Context (..),
+Encoder,
+DualType,
+contramap,
+sequenceD,
+-- * Data structures
 Templates (..),
 Template (..),
 TypeRef (..),
@@ -51,28 +61,29 @@ Token (..),
 UnicodeString (..),
 AsciiString,
 Decimal,
+-- * Basic decoders/encoders
 anySBEEntity,
-FASTException (..),
-Context (..),
-tname2fname,
-fname2tname,
 _anySBEEntity,
-Coparser,
-DualType,
-contramap,
-sequenceD,
-prevValue,
-updatePrevValue,
+-- * Presence map
 setPMap,
-uniqueFName,
-needsSegment,
-needsPm,
-tempRefCont2TempNsName,
 pmToBs,
 bsToPm,
-assertNameIs,
+needsPm,
+-- * Previous value
+prevValue,
+updatePrevValue,
+-- * State
 initState,
--- testing properties.
+-- * Exceptions
+FASTException (..),
+-- * Helpers
+tname2fname,
+fname2tname,
+uniqueFName,
+needsSegment,
+tempRefCont2TempNsName,
+assertNameIs,
+-- * QuickCheck properties
 prop_decodeP_dot_encodeP_is_ID,
 prop_decodeP0_dot_encodeP0_is_ID,
 prop_decodeD_dot_encodeD_is_ID,
@@ -139,7 +150,10 @@ data FASTException = S1 String
                    | R7 String
                    | R8 String
                    | R9 String
+                   -- | This exception is not in the reference. It is thrown, when the encoder 
+                   -- finds inconsitencies in the message, etc.
                    | EncoderException String
+                   -- | Not in the reference. For other exceptions.
                    | OtherException String
                    deriving (Show, Typeable)
 
@@ -147,9 +161,9 @@ instance Exception FASTException
 
 -- |State of the (co)parser.
 data Context = Context {
-    -- |Presence map
+    -- | Presence map.
     pm   :: [Bool],
-    -- |Dictionaries.
+    -- | Dictionaries.
     dict :: M.Map String Dictionary,
     -- | Current template.
     template :: Maybe TemplateNsName,
@@ -157,8 +171,8 @@ data Context = Context {
     appType :: Maybe TypeRef
     } deriving (Show)
 
--- |The initial state of the parser depending on the templates.
-initState::Templates -> Context
+-- | The initial state of the parser depending on the templates.
+initState :: Templates -> Context
 initState ts = Context [] (M.fromListWith merge [(k,d) | d@(Dictionary k _) <- concatMap initDicts (tsTemplates ts)]) Nothing Nothing
     where merge (Dictionary n1 d1) (Dictionary _ d2) = Dictionary n1 (d1 `M.union` d2)
 
@@ -186,6 +200,7 @@ instance Show (TypeWitness a) where
 
 type DualType a m = a -> m
 
+-- | Pull back of a dual.
 contramap :: (a -> b) -> DualType b m -> DualType a m
 contramap f cp = cp . f
 
@@ -195,13 +210,15 @@ append cp1 cp2 (x, y) = cp1 x `mappend` cp2 y
 append' :: (Monoid m) => DualType a m -> DualType a m -> DualType a m
 append' cp1 cp2 = contramap (\x -> (x, x)) (cp1 `append` cp2)
 
+-- | Sequence duals.
 sequenceD :: (Monoid m) => [DualType a m] -> DualType [a] m
 sequenceD ds xs = mconcat (zipWith (\d x -> d x) ds xs)
 
-type Coparser a = DualType a BU.Builder
+type Encoder a = DualType a BU.Builder
 
 -- | Primitive type class.
 class Primitive a where
+    -- | Every primitive has an associated Delta type.
     data Delta a     :: *
     witnessType      :: a -> TypeWitness a
     assertType       :: (Primitive b) => TypeWitness b -> a
@@ -210,22 +227,38 @@ class Primitive a where
     defaultBaseValue :: a
     ivToPrimitive    :: InitialValueAttr -> a
     primitiveToIv    :: a -> InitialValueAttr
+    -- | Delta operation.
     delta            :: a -> Delta a -> a
+    -- | Calculate delta of two primitives.
     delta_           :: a -> a -> Delta a
+    -- | Tail operation.
     ftail            :: a -> a -> a
+    -- | Calculate the tail of two primitives.
     ftail_           :: a -> a -> a
+    -- | Decode a primitive.
     decodeP          :: A.Parser a
+    -- | Decode a nullable primitive.
     decodeP0         :: A.Parser a
+    -- | Decode a delta.
     decodeD          :: A.Parser (Delta a)
+    -- | Decode a nullable delta.
     decodeD0         :: A.Parser (Delta a)
+    -- | Decode a tail.
     decodeT          :: A.Parser a
+    -- | Decode a nullable tail.
     decodeT0         :: A.Parser a
-    encodeP          :: Coparser a
-    encodeP0         :: Coparser a
-    encodeD          :: Coparser (Delta a)
-    encodeD0         :: Coparser (Delta a)
-    encodeT          :: Coparser a
-    encodeT0         :: Coparser a
+    -- | Encode a primitive.
+    encodeP          :: Encoder a
+    -- | Encode a nullable primitive.
+    encodeP0         :: Encoder a
+    -- | Encode a delta.
+    encodeD          :: Encoder (Delta a)
+    -- | Encode a nullable delta.
+    encodeD0         :: Encoder (Delta a)
+    -- | Encode a tail.
+    encodeT          :: Encoder a
+    -- | Encode a nullable tail.
+    encodeT0         :: Encoder a
 
     decodeT  = decodeP
     decodeT0 = decodeP0
@@ -279,7 +312,7 @@ data Value = I32 Int32
            | Gr [(NsName, Maybe Value)]
            deriving (Eq, Show, Data, Typeable)
 
--- |Some basic types, renamed for readability.
+-- | Unicode string.
 newtype UnicodeString = UNI String deriving (Show, Eq, Monoid, Data, Typeable)
 unwrapUNI :: UnicodeString -> String
 unwrapUNI (UNI s) = s
@@ -294,7 +327,9 @@ instance LL.ListLike UnicodeString Char where
     tail = UNI . LL.tail . unwrapUNI
     genericLength = LL.genericLength . unwrapUNI
 
+-- | Ascii string.
 type AsciiString = String
+-- | Decimals are a tuble consisting of exponent and mantissa.
 type Decimal = (Int32, Int64)
 
 instance Primitive Int32 where
@@ -748,10 +783,10 @@ data DecFieldOp = DecFieldOp {
 -- |Dictionary consists of a name and a list of key value pairs.
 data Dictionary = Dictionary String (M.Map (DictKey, Maybe TemplateNsName, Maybe TypeRef)  DictValue) deriving (Show) 
 
+-- | The keys in of a dictionary.
 data DictKey = N NsName
              | K NsKey
 				deriving (Eq, Ord, Show)
-
 
 -- |Entry in a dictionary can be in one of three states.
 data DictValue = Undefined
@@ -808,17 +843,17 @@ tname2fname :: TemplateNsName -> NsName
 tname2fname (TemplateNsName n (Just (TemplateNsAttr ns)) maybe_id) = NsName n (Just (NsAttr ns)) maybe_id
 tname2fname (TemplateNsName n Nothing maybe_id) = NsName n Nothing maybe_id
 
+-- | Inverse of tname2fname.
 fname2tname :: NsName -> TemplateNsName
 fname2tname (NsName n (Just (NsAttr ns)) maybe_id) = TemplateNsName n (Just (TemplateNsAttr ns)) maybe_id
 fname2tname (NsName n Nothing maybe_id) = TemplateNsName n Nothing maybe_id
 
--- |The very basic name related attributes.
+-- The very basic name related attributes.
 newtype NameAttr = NameAttr String deriving (Eq, Ord, Show, Data, Typeable)
 newtype NsAttr = NsAttr String deriving (Eq, Ord, Show, Data, Typeable)
 newtype TemplateNsAttr = TemplateNsAttr String deriving (Eq, Ord, Show, Data, Typeable)
 newtype IdAttr = IdAttr Token deriving (Eq, Ord, Show, Data, Typeable)
 newtype Token = Token String deriving (Eq, Ord, Show, Data, Typeable)
-
 
 -- |Get a Stopbit encoded entity.
 anySBEEntity :: A.Parser B.ByteString
@@ -826,7 +861,8 @@ anySBEEntity = do
                     bs <- takeTill' stopBitSet
                     return (B.init bs `B.append` B.singleton (clearBit (B.last bs) 7))
 
-_anySBEEntity :: Coparser B.ByteString
+-- |Encode a stopbit encoded entity.
+_anySBEEntity :: Encoder B.ByteString
 _anySBEEntity bs | B.null bs = BU.empty
 _anySBEEntity bs = BU.fromByteString (B.init bs `B.append` B.singleton (setBit (B.last bs) 7))
 
@@ -841,12 +877,13 @@ takeTill' f = do
 stopBitSet :: Word8 -> Bool
 stopBitSet c = testBit c 7
 
--- |Bytevector size preamble parser.
+-- |Bytevector parser.
 byteVector :: A.Parser B.ByteString
 byteVector = do
     s <- uint::A.Parser Word32
     byteVector' s
 
+-- |Nullable bytevector parser.
 byteVector0 :: A.Parser B.ByteString
 byteVector0 = do
     s <- uint::A.Parser Word32
@@ -854,14 +891,16 @@ byteVector0 = do
 
 -- |Bytevector field parser. The first argument is the size of the bytevector.
 -- If the length of the bytevector is bigger than maxBound::Int an exception 
--- will be trown.
+-- will be thrown.
 byteVector' :: Word32 -> A.Parser B.ByteString
 byteVector' c = A.take (fromIntegral c)
 
-_byteVector :: Coparser B.ByteString
+-- |Bytevector encoder.
+_byteVector :: Encoder B.ByteString
 _byteVector = (_uint . (\bs -> fromIntegral(B.length bs) :: Word32)) `append'` BU.fromByteString
 
-_byteVector0 :: Coparser B.ByteString
+-- |Nullable bytevector encoder.
+_byteVector0 :: Encoder B.ByteString
 _byteVector0 = (_uint . (\bs -> plusOne $ fromIntegral(B.length bs) :: Word32)) `append'` BU.fromByteString
 
 -- |Unsigned integer parser, doesn't check for bounds.
@@ -873,9 +912,11 @@ uint = do
     where   h::(Bits a, Num a) => a -> Word8 -> a
             h r w = fromIntegral (clearBit w 7) .|. shiftL r 7
         
-_uint :: (Bits a, Eq a, Integral a) => Coparser a
+-- |Unsigned integer encoder.
+_uint :: (Bits a, Eq a, Integral a) => Encoder a
 _uint = _anySBEEntity . uintBS 
 
+-- |Helper for _uint.
 uintBS :: (Bits a, Eq a, Integral a) => a -> B.ByteString
 uintBS ui = if ui' /= 0 
             then uintBS ui' `B.snoc` (fromIntegral (ui .&. 127) :: Word8)
@@ -893,9 +934,11 @@ int = do
                 h :: (Bits a, Num a) => a -> Word8 -> a
                 h r w = fromIntegral (clearBit w 7) .|. shiftL r 7
 
-_int :: (Bits a, Ord a, Integral a) => Coparser a
+-- |Signed integer encoder.
+_int :: (Bits a, Ord a, Integral a) => Encoder a
 _int  = _anySBEEntity . intBS 
 
+-- |Helper for _int.
 intBS :: (Bits a, Ord a, Integral a) => a -> B.ByteString
 intBS i | i < 0 = h i 
             where h x = if x' /= -1 || not (testBit (fromIntegral x :: Word8) 6)
@@ -912,16 +955,21 @@ asciiString = do
     let bs' = B.init bs `mappend` B.singleton (clearBit (B.last bs) 7) in
         return (unpack bs')
 
-_asciiString :: Coparser AsciiString
+-- |AsciiString encoder.
+_asciiString :: Encoder AsciiString
 _asciiString = _anySBEEntity . pack 
 
+-- |Drops whitespace in front of a string.
 trimWhiteSpace :: String -> String
 trimWhiteSpace = LL.reverse . LL.dropWhile whiteSpace . LL.reverse . LL.dropWhile whiteSpace
 
+-- |Return true if char is a whitespace.
 whiteSpace :: Char -> Bool
 whiteSpace c =  c `elem` " \t\r\n"
 
--- *Previous value related functions.
+--
+-- Previos value related functions.
+--
 
 -- |Get previous value.
 prevValue :: (Monad m) => NsName -> OpContext -> StateT Context m DictValue
@@ -937,6 +985,7 @@ prevValue name (OpContext Nothing Nothing _ )
 prevValue _ (OpContext Nothing (Just dkey) _ ) 
     = pv "global" (K dkey)
 
+-- |Helper for pv.
 pv :: (Monad m) => String -> DictKey -> StateT Context m DictValue
 pv d k = 
     let     
@@ -964,6 +1013,7 @@ updatePrevValue name (OpContext Nothing Nothing _ ) dvalue
 updatePrevValue _ (OpContext Nothing (Just dkey) _ ) dvalue
     = uppv "global" (K dkey) dvalue
 
+-- |Helper for updatePrevValue.
 uppv :: (Monad m) => String -> DictKey -> DictValue -> StateT Context m ()
 uppv d k v = 
     let     
@@ -975,6 +1025,7 @@ uppv d k v =
         st <- get
         put $ Context (pm st) (M.adjust (\(Dictionary n xs) -> Dictionary n (M.adjust (\_ -> v) (k' st d) xs)) d (dict st)) (template st) (appType st)
 
+-- |Add a bit to the presence map.
 setPMap :: (Monad m) => Bool -> StateT Context m ()
 setPMap b = do 
                  st <- get
@@ -985,12 +1036,13 @@ uniqueFName::NsName -> String -> NsName
 uniqueFName fname s = NsName (NameAttr(n ++ s)) ns ide
     where (NsName (NameAttr n) ns ide) = fname
 
+-- |Decides wether a list of instructions needs to be encoded as segment or not.
 needsSegment ::[Instruction] -> M.Map TemplateNsName Template -> Bool
 needsSegment ins ts = any (needsPm ts) ins 
 
 -- |Decides wether an instruction uses the presence map or not. We need to know all the templates,
 -- to process template reference instructions recursivly.
-needsPm::M.Map TemplateNsName Template -> Instruction -> Bool
+needsPm :: M.Map TemplateNsName Template -> Instruction -> Bool
 -- static template reference
 needsPm ts (TemplateReference (Just trc)) = all (needsPm ts) (tInstructions t) where t = ts M.! tempRefCont2TempNsName trc
 -- dynamic template reference
@@ -1083,6 +1135,7 @@ bsToPm bs = concatMap h (B.unpack bs)
     where   h::Word8 -> [Bool]
             h w = map (testBit w) [6,5..0] 
 
+-- |Convert a presence map into a bytestring.
 pmToBs :: [Bool] -> B.ByteString
 pmToBs xs = B.pack (map h (sublistsOfLength 7 xs))
     where   h :: [Bool] -> Word8
@@ -1091,13 +1144,14 @@ pmToBs xs = B.pack (map h (sublistsOfLength 7 xs))
 prop_bsToPm_dot_pmToBs_is_ID :: [Bool] -> Bool
 prop_bsToPm_dot_pmToBs_is_ID pmap = take (length pmap) ((bsToPm . pmToBs) pmap) == pmap
 
+-- |Return the sublists of a given length.
 sublistsOfLength :: Int -> [a] -> [[a]]
 sublistsOfLength _ [] = []
 sublistsOfLength n xs = take n xs : sublistsOfLength n (drop n xs)
 
+-- |Assert that a field has a given name.
 assertNameIs :: NsName -> (NsName, a) -> a
 assertNameIs n1 (n2, x) = if n1 == n2 then x else throw $ OtherException $ "Template doesn't fit message, in the field: " ++ show n1
-
 
 -- |Creates a list of dictionaries depending on the fields of a template.
 -- TODO: is there a reserved name for the tid field?
@@ -1229,22 +1283,24 @@ rmPreamble0 (['\0','\0','\0']) = "\0"
 -- overlong string.
 rmPreamble0 s = LL.dropWhile (=='\0') s
 
+-- |Add a preamble to a string.
 addPreamble :: AsciiString -> AsciiString
 addPreamble [] = "\0"
 addPreamble "\0" = "\0\0"
 addPreamble s = LL.dropWhile (=='\0') s
 
+-- |Add a preamble to a nullable string.
 addPreamble0 :: AsciiString -> AsciiString
 addPreamble0 [] = "\0\0"
 addPreamble0 "\0" = "\0\0\0"
 addPreamble0 s = LL.dropWhile (=='\0') s
 
-
--- |Decrement the value of an integer, when it is positive.
+-- |Decrement the value of an integer when it is positive.
 minusOne::(Ord a, Num a) => a -> a
 minusOne x | x > 0 = x - 1
 minusOne x = x
 
+-- |Increment the value of an integer when it is positive.
 plusOne :: (Ord a, Num a) => a -> a
 plusOne x | x >= 0 = x + 1 
 plusOne x = x
