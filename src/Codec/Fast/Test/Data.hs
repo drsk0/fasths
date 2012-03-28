@@ -21,6 +21,7 @@ import Control.Exception
 import qualified Data.ByteString as B
 import qualified Data.Map as M
 
+-- | Strings with the 7th bit equal to zero.
 newtype Bit7String = B7S String deriving Show
 unwrapB7S :: Bit7String -> String
 unwrapB7S (B7S s) = s
@@ -29,6 +30,7 @@ instance Arbitrary Bit7String where
     arbitrary = fmap (B7S . dropWhile (== '\0') . unpack  . B.map (`clearBit` 7) . pack) (arbitrary :: Gen String)
     shrink = map B7S . (shrink :: String -> [String]) . unwrapB7S
 
+-- |A char with the 7th bit equal to zero.
 newtype Bit7Char = B7C Char deriving (Show, Eq)
 unwrapB7C :: Bit7Char -> Char
 unwrapB7C (B7C c) = c
@@ -48,6 +50,7 @@ instance Arbitrary NormalizedDecimal where
                 normalize (e, m) = (e, m)
     shrink = map ND . (shrink :: (Int32, Int64) -> [(Int32, Int64)]) . unwrapND
 
+-- | String with no leading NULL bytes.
 newtype NonOverlongString = NOS AsciiString deriving Show
 
 instance Arbitrary NonOverlongString where
@@ -60,7 +63,10 @@ instance Arbitrary NonOverlongString where
             overlong _ = False
     shrink = map NOS . (shrink :: String -> [String]) . (\(NOS s) -> s)
 
-arbitraryMsgForTemplate :: [Template] -> Template -> Gen (NsName, Maybe Value)
+-- | Generates an arbitrary message that fits a certain template.
+arbitraryMsgForTemplate ::  [Template] -- ^ Collection of templates for template references.
+                            -> Template -- ^ Template that the message should fit.
+                            -> Gen (NsName, Maybe Value)
 arbitraryMsgForTemplate ts t = do 
                                 vs <- mapM (arbitraryValueForInstruction ts) (tInstructions t)
                                 return (tname2fname $ tName t, Just $ Gr vs)

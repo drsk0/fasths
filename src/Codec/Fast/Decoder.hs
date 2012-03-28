@@ -1,5 +1,5 @@
 -- |
--- Module      :  Codec.Fast.Parser
+-- Module      :  Codec.Fast.Decoder
 -- Copyright   :  Robin S. Krom 2011
 -- License     :  BSD3
 -- 
@@ -9,12 +9,10 @@
 --
 {-# LANGUAGE FlexibleContexts, GADTs, TupleSections, MultiParamTypeClasses, TypeFamilies #-}
 
-module Codec.Fast.Parser 
+module Codec.Fast.Decoder 
 (
-Context (..),
 initEnv,
 segment',
-template2P
 )
 where 
 
@@ -42,17 +40,17 @@ data Env = Env {
 
 -- |The environment of the parser depending on the templates and
 -- the tid2temp function provided by the application.
-initEnv::Templates -> (Word32 -> TemplateNsName) -> Env
+initEnv :: Templates -> (Word32 -> TemplateNsName) -> Env
 initEnv ts = Env (M.fromList [(tName t,t) | t <- tsTemplates ts])
 
-type FParser a = ReaderT Env (StateT Context A.Parser) a
+type FDecoder a = ReaderT Env (StateT Context A.Parser) a
 
 -- |Parses the beginning of a new segment.
-segment::FParser ()
+segment :: FDecoder ()
 segment = presenceMap
 
 -- |Parses presence map and template identifier.
-segment'::FParser (NsName, Maybe Value)
+segment'::FDecoder (NsName, Maybe Value)
 segment' = do
     s <- get
     m <- presenceMap >> templateIdentifier
@@ -62,9 +60,8 @@ segment' = do
 
 -- |Parses template identifier and returns the corresponding parser.
 -- template identifier is considered a mandatory copy operator UIn32 field.
--- TODO: Check wether mandatory is right.
 -- TODO: Which token should this key have, define a policy?
-templateIdentifier::FParser (NsName, Maybe Value)
+templateIdentifier::FDecoder (NsName, Maybe Value)
 templateIdentifier = do
     (_ , maybe_i) <- p
     case maybe_i of
@@ -79,14 +76,14 @@ templateIdentifier = do
         (Just _) ->  throw $ OtherException "Coding error: templateId field must be of type I."
         Nothing -> throw $ OtherException "Failed to parse template identifier."
 
-    where p = field2Parser (IntField (UInt32Field (FieldInstrContent 
+    where p = field2Decoder (IntField (UInt32Field (FieldInstrContent 
                             (NsName (NameAttr "templateId") Nothing Nothing) 
                             (Just Mandatory) 
                             (Just (Copy (OpContext (Just (DictionaryAttr "global")) (Just (NsKey(KeyAttr (Token "tid")) Nothing)) Nothing)))
                             )))
 
 -- |Parse PreseneceMap.
-presenceMap :: FParser ()
+presenceMap :: FDecoder ()
 presenceMap = do
     bs <- l2 anySBEEntity
     -- update state
@@ -95,13 +92,13 @@ presenceMap = do
 
 -- |Maps a template to its corresponding parser.
 -- We treat a template as a group with NsName equal the TemplateNsName.
-template2P :: Template -> FParser (NsName, Maybe Value)
+template2P :: Template -> FDecoder (NsName, Maybe Value)
 template2P t = (tname2fname (tName t), ) <$> Just . Gr <$> mapM instr2P (tInstructions t)
 
 
 -- |Maps an instruction to its corresponding parser.
-instr2P :: Instruction -> FParser (NsName, Maybe Value)
-instr2P (Instruction f) = field2Parser f
+instr2P :: Instruction -> FDecoder (NsName, Maybe Value)
+instr2P (Instruction f) = field2Decoder f
 -- Static template reference.
 instr2P (TemplateReference (Just trc)) = do
     env <- ask
@@ -109,29 +106,29 @@ instr2P (TemplateReference (Just trc)) = do
 -- Dynamic template reference.  
 instr2P (TemplateReference Nothing) = segment'
 
--- |Constructs a parser out of a field. The FParser monad has underlying type
+-- |Constructs a parser out of a field. The FDecoder monad has underlying type
 -- Maybe Primitive, the Nothing constructor represents a field that was not
 -- present in the stream.
-field2Parser :: Field -> FParser (NsName, Maybe Value)
-field2Parser (IntField f@(Int32Field (FieldInstrContent fname _ _))) = (fname, ) <$> fmap toValue <$> (intF2P f :: FParser (Maybe Int32))
-field2Parser (IntField f@(Int64Field (FieldInstrContent fname _ _))) = (fname, ) <$> fmap toValue <$> (intF2P f :: FParser (Maybe Int64))
-field2Parser (IntField f@(UInt32Field (FieldInstrContent fname _ _))) = (fname, ) <$> fmap toValue <$> (intF2P f :: FParser (Maybe Word32))
-field2Parser (IntField f@(UInt64Field (FieldInstrContent fname _ _))) = (fname, ) <$> fmap toValue <$> (intF2P f :: FParser (Maybe Word64))
-field2Parser (DecField f@(DecimalField fname _ _ )) = (fname, ) <$> fmap toValue <$> decF2P f
-field2Parser (AsciiStrField f@(AsciiStringField(FieldInstrContent fname _ _ ))) = (fname, ) <$> fmap toValue <$> asciiStrF2P f
-field2Parser (UnicodeStrField (UnicodeStringField f@(FieldInstrContent fname _ _ ) maybe_bvlength )) = (fname, ) <$> fmap toValue <$> (bytevecF2P f maybe_bvlength :: FParser (Maybe UnicodeString))
-field2Parser (ByteVecField (ByteVectorField f@(FieldInstrContent fname _ _ ) maybe_bvlength )) = (fname, ) <$> fmap toValue <$> (bytevecF2P f maybe_bvlength :: FParser (Maybe B.ByteString))
-field2Parser (Seq s) = seqF2P s
-field2Parser (Grp g) = groupF2P g
+field2Decoder :: Field -> FDecoder (NsName, Maybe Value)
+field2Decoder (IntField f@(Int32Field (FieldInstrContent fname _ _))) = (fname, ) <$> fmap toValue <$> (intF2P f :: FDecoder (Maybe Int32))
+field2Decoder (IntField f@(Int64Field (FieldInstrContent fname _ _))) = (fname, ) <$> fmap toValue <$> (intF2P f :: FDecoder (Maybe Int64))
+field2Decoder (IntField f@(UInt32Field (FieldInstrContent fname _ _))) = (fname, ) <$> fmap toValue <$> (intF2P f :: FDecoder (Maybe Word32))
+field2Decoder (IntField f@(UInt64Field (FieldInstrContent fname _ _))) = (fname, ) <$> fmap toValue <$> (intF2P f :: FDecoder (Maybe Word64))
+field2Decoder (DecField f@(DecimalField fname _ _ )) = (fname, ) <$> fmap toValue <$> decF2P f
+field2Decoder (AsciiStrField f@(AsciiStringField(FieldInstrContent fname _ _ ))) = (fname, ) <$> fmap toValue <$> asciiStrF2P f
+field2Decoder (UnicodeStrField (UnicodeStringField f@(FieldInstrContent fname _ _ ) maybe_bvlength )) = (fname, ) <$> fmap toValue <$> (bytevecF2P f maybe_bvlength :: FDecoder (Maybe UnicodeString))
+field2Decoder (ByteVecField (ByteVectorField f@(FieldInstrContent fname _ _ ) maybe_bvlength )) = (fname, ) <$> fmap toValue <$> (bytevecF2P f maybe_bvlength :: FDecoder (Maybe B.ByteString))
+field2Decoder (Seq s) = seqF2P s
+field2Decoder (Grp g) = groupF2P g
 
 -- |Maps an integer field to its parser.
-intF2P :: (Primitive a, Num a, Ord a,  Ord (Delta a), Num (Delta a)) => IntegerField -> FParser (Maybe a)
+intF2P :: (Primitive a, Num a, Ord a,  Ord (Delta a), Num (Delta a)) => IntegerField -> FDecoder (Maybe a)
 intF2P (Int32Field fic) = intF2P' fic 
 intF2P (UInt32Field fic) = intF2P' fic 
 intF2P (Int64Field fic) = intF2P' fic 
 intF2P (UInt64Field fic) = intF2P' fic 
 
-intF2P' :: (Primitive a, Num a, Ord a, Ord (Delta a), Num (Delta a)) => FieldInstrContent -> FParser (Maybe a)
+intF2P' :: (Primitive a, Num a, Ord a, Ord (Delta a), Num (Delta a)) => FieldInstrContent -> FDecoder (Maybe a)
 
 -- if the presence attribute is not specified, it is mandatory.
 intF2P' (FieldInstrContent fname Nothing maybe_op) = intF2P' (FieldInstrContent fname (Just Mandatory) maybe_op)
@@ -292,7 +289,7 @@ intF2P' (FieldInstrContent fname (Just Optional) (Just (Delta oc)))
                 lift $ updatePrevValue fname oc (Assigned (witnessType i)) >> return (Just i)
 
 -- |Maps an decimal field to its parser.
-decF2P::DecimalField -> FParser (Maybe Decimal)
+decF2P::DecimalField -> FDecoder (Maybe Decimal)
 
 -- If the presence attribute is not specified, the field is considered mandatory.
 decF2P (DecimalField fname Nothing maybe_either_op) 
@@ -448,7 +445,7 @@ decF2P (DecimalField fname (Just Optional) (Just (Right (DecFieldOp maybe_exOp m
                         h (Just e') (Just m') = Just (e', m')
 
 -- |Maps an ascii field to its parser.
-asciiStrF2P::AsciiStringField -> FParser (Maybe AsciiString)
+asciiStrF2P::AsciiStringField -> FDecoder (Maybe AsciiString)
 -- If the presence attribute is not specified, its a mandatory field.
 asciiStrF2P (AsciiStringField(FieldInstrContent fname Nothing maybe_op))
     = asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Mandatory) maybe_op))
@@ -635,7 +632,7 @@ asciiStrF2P (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (Tai
     )
 
 -- |Maps a bytevector field to its parser.
-bytevecF2P :: (Primitive a) => FieldInstrContent -> Maybe ByteVectorLength -> FParser (Maybe a)
+bytevecF2P :: (Primitive a) => FieldInstrContent -> Maybe ByteVectorLength -> FDecoder (Maybe a)
 bytevecF2P (FieldInstrContent fname Nothing maybe_op) len 
     = bytevecF2P (FieldInstrContent fname (Just Mandatory) maybe_op) len
 
@@ -818,7 +815,7 @@ bytevecF2P (FieldInstrContent fname (Just Optional) (Just(Tail oc))) _
     )
 
 -- |Maps a sequence field to its parser.
-seqF2P :: Sequence -> FParser (NsName, Maybe Value)
+seqF2P :: Sequence -> FDecoder (NsName, Maybe Value)
 seqF2P (Sequence fname maybe_presence _ maybe_typeref maybe_length instrs) 
     = do 
         i <- h maybe_presence maybe_length
@@ -839,7 +836,7 @@ seqF2P (Sequence fname maybe_presence _ maybe_typeref maybe_length instrs)
                 h m_p (Just (Length (Just fn) op)) = intF2P (UInt32Field (FieldInstrContent fn m_p op))
                 
 -- |Maps a group field to its parser.
-groupF2P :: Group -> FParser (NsName, Maybe Value)
+groupF2P :: Group -> FDecoder (NsName, Maybe Value)
 groupF2P (Group fname Nothing maybe_dict maybe_typeref instrs)
     = groupF2P (Group fname (Just Mandatory) maybe_dict maybe_typeref instrs)
 
@@ -868,15 +865,16 @@ groupF2P (Group fname (Just Optional) _ maybe_typeref instrs)
     (return (fname, Nothing))
 
 -- |nULL parser.
-nULL :: FParser (Maybe a)
+nULL :: FDecoder (Maybe a)
 nULL = l2 nULL'
     where nULL' = do 
             -- discard result.
             _ <- A.word8 0x80
             return Nothing
     
-
-ifPresentElse::FParser a -> FParser a -> FParser a
+-- |Returns first argument, when presence map indicates that the field is present, the second
+-- otherwise
+ifPresentElse::FDecoder a -> FDecoder a -> FDecoder a
 ifPresentElse p1 p2 = do 
                         s <- get
                         put (Context (tail (pm s)) (dict s) (template s) (appType s))
@@ -885,5 +883,5 @@ ifPresentElse p1 p2 = do
                             then p1
                             else p2
 
-l2 :: A.Parser a -> FParser a
+l2 :: A.Parser a -> FDecoder a
 l2 = lift . lift

@@ -19,9 +19,9 @@ Library
   Build-Depends:	base, QuickCheck, bytestring, binary, mtl, attoparsec, containers, ListLike, hxt
   Exposed-modules:	Codec.Fast
   Hs-Source-Dirs:	src
-  Other-modules:  Codec.Fast.Parser, Codec.Fast.Coparser, Codec.Fast.Pretty, Codec.Fast.TemplateParser, Codec.Fast.Test.Data
+  Other-modules:  Codec.Fast.Encoder, Codec.Fast.Encoder, Codec.Fast.Pretty, Codec.Fast.TemplateParser, Codec.Fast.Test.Data
 
-Executable parseFile
-  Main-Is:	examples/parseFile.hs
-  Hs-Source-Dirs:	src
-  Build-Depends: base, fasths, mtl, attoparsec, hxt, bytestring, QuickCheck, binary, containers, ListLike
+--Executable parseFile
+--  Main-Is:	examples/parseFile.hs
+--  Hs-Source-Dirs:	src
+--  Build-Depends: base, fasths, mtl, attoparsec, hxt, bytestring, QuickCheck, binary, containers, ListLike

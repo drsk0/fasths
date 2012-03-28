@@ -10,19 +10,21 @@
 
 {-#LANGUAGE FlexibleContexts #-}
 
-module Codec.Fast 
+module Codec.Fast
 (
+-- * Encoder/Decoder
 message, 
+_message,
 Codec.Fast.reset,
 Templates, 
-NsName (..), 
-TemplateNsName (..),
-NameAttr (..),
-Token (..),
-IdAttr (..),
-Value (..),
 parseTemplateXML,
 initState,
+NsName (..), 
+TemplateNsName (..),
+IdAttr (..),
+Value (..),
+Token (..),
+NameAttr (..),
 -- * QuickCheck properties.
 prop_decode_template_encode_template_is_ID
 ) 
@@ -36,8 +38,8 @@ import Control.Applicative (many)
 import Data.Word (Word32)
 import Data.Maybe (fromMaybe)
 import Codec.Fast.Data
-import Codec.Fast.Parser 
-import Codec.Fast.Coparser
+import Codec.Fast.Decoder
+import Codec.Fast.Encoder
 import Codec.Fast.TemplateParser
 import Codec.Fast.Pretty
 import qualified Data.Binary.Builder as BU
@@ -45,21 +47,21 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import Test.QuickCheck (printTestCase, Property)
 
--- |Parser for one message.
+-- | Decoder for one message.
 message :: Templates
         -> (Word32 -> TemplateNsName) -- ^ Defines how to map an identifier to a template.
         -> StateT Context A.Parser (NsName, Maybe Value)
 message ts tid2tem = let env = initEnv ts tid2tem 
     in runReaderT segment' env
 
--- |Encoder for one message.
+-- | Encoder for one message.
 _message :: Templates 
             -> (TemplateNsName -> Word32) -- ^ Defines how to map a template to an identifier.
             -> ((NsName, Maybe Value) -> State Context BU.Builder)
 _message ts tem2tid msg = let env = _initEnv ts tem2tid
     in runReaderT (_segment' msg) env
 
--- |Resets the de/encoder to the initial state.
+-- | Resets the de/encoder to the initial state.
 reset :: (MonadState Context m) => Templates -> m ()
 reset ts = put (initState ts)
 

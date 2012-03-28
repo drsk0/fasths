@@ -159,7 +159,7 @@ data FASTException = S1 String
 
 instance Exception FASTException
 
--- |State of the (co)parser.
+-- |State of the en/decoder.
 data Context = Context {
     -- | Presence map.
     pm   :: [Bool],
@@ -299,7 +299,7 @@ prop_rmPreamble_dot_addPreamble_is_ID s = (rmPreamble . addPreamble) s == s && (
 prop_ivToPrimitive_dot_primitiveToIv_is_ID :: (Primitive a, Eq a) => a -> Bool
 prop_ivToPrimitive_dot_primitiveToIv_is_ID x = ( f . ivToPrimitive . f) x == f x where f = primitiveToIv
 
--- |The values in a messages.
+-- |The values in a messages. A message is a tuple (NsName, Maybe Value).
 data Value = I32 Int32
            | UI32 Word32
            | I64 Int64
@@ -825,12 +825,6 @@ data KeyAttr = KeyAttr {
 data InitialValueAttr = InitialValueAttr {
     text :: String
     } deriving (Show, Eq, Data, Typeable)
-
--- |A full name in a template is given by a namespace URI and localname. For 
--- application types, fields and operator keys the namespace URI is given by 
--- the 'ns' attribute. For templates the namespace URI is given by the 
--- 'templateNs' attribute.
--- Note that full name constructors in the data structures are named 'fname'.
 
 -- |A full name for an application type, field or operator key.
 data NsName = NsName NameAttr (Maybe NsAttr) (Maybe IdAttr) deriving (Eq, Ord, Show, Data, Typeable)

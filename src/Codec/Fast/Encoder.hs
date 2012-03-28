@@ -9,11 +9,10 @@
 --
 {-#LANGUAGE TypeSynonymInstances, FlexibleContexts, FlexibleInstances #-}
 
-module Codec.Fast.Coparser 
+module Codec.Fast.Encoder
 (
-_segment',
 _initEnv,
-template2Cop,
+_segment',
 )
 where 
 
@@ -29,6 +28,7 @@ import Control.Applicative
 import qualified Data.ByteString as B
 import qualified Data.Binary.Builder as BU
 
+-- | The environment of the encoder.
 data Env_ = Env_ {
     -- |All known templates.
     templates :: M.Map TemplateNsName Template,
@@ -36,11 +36,12 @@ data Env_ = Env_ {
     temp2tid :: TemplateNsName -> Word32
     }
 
+-- | Createst the initial environment based on the templates and a function that maps templates to identifiers.
 _initEnv :: Templates -> (TemplateNsName -> Word32) -> Env_
 _initEnv ts = Env_ (M.fromList [(tName t,t) | t <- tsTemplates ts])
 
 type FBuilder = ReaderT Env_ (State Context) BU.Builder
-type FCoparser a = a -> FBuilder
+type FEncoder a = a -> FBuilder
 
 instance Monoid FBuilder where
     mappend mb1 mb2 = do
@@ -49,7 +50,8 @@ instance Monoid FBuilder where
         return (b1 `BU.append` b2)
     mempty = return BU.empty
 
-_segment' :: FCoparser (NsName, Maybe Value)
+-- | Encodes a segment including the whole message.
+_segment' :: FEncoder (NsName, Maybe Value)
 _segment' (n, v) = do 
     s <- get
     put $ Context [] (dict s) (template s) (appType s)
@@ -59,10 +61,12 @@ _segment' (n, v) = do
     put $ Context (pm s) (dict s') (template s') (appType s')
     return $ pmap `BU.append` tid
 
-_segment :: FCoparser ()
+-- | Equivalent to _presenceMap.
+_segment :: FEncoder ()
 _segment = _presenceMap
 
-_templateIdentifier :: FCoparser (NsName, Maybe Value)
+-- | Encodes a template identifier.
+_templateIdentifier :: FEncoder (NsName, Maybe Value)
 _templateIdentifier (n, v)  = 
     let tidname = NsName (NameAttr "templateId") Nothing Nothing 
         _p = field2Cop  (IntField (UInt32Field (FieldInstrContent 
@@ -81,44 +85,50 @@ _templateIdentifier (n, v)  =
        put $ Context (pm s') (dict s') (template s) (appType s)
        return (tid `BU.append` msg)
 
-_presenceMap :: FCoparser ()
+-- | Encodes the presence map.
+_presenceMap :: FEncoder ()
 _presenceMap () = do
     s <- get
     put $ Context [] (dict s) (template s) (appType s)
     return $ _anySBEEntity (pmToBs $ pm s)
 
-template2Cop :: Template -> FCoparser (NsName, Maybe Value)
+-- | Maps a template to its encoder.
+template2Cop :: Template -> FEncoder (NsName, Maybe Value)
 template2Cop t = f
     where f (_, Just (Gr g)) = sequenceD (map instr2Cop (tInstructions t)) g
           f (fname, _) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
           -- TODO: Are there cases that shoudn't trigger an exception?
 
-instr2Cop :: Instruction -> FCoparser (NsName, Maybe Value)
+-- | Maps an instruction to its encoder.
+instr2Cop :: Instruction -> FEncoder (NsName, Maybe Value)
 instr2Cop (Instruction f) = field2Cop f 
 instr2Cop (TemplateReference (Just trc)) = \(n, v) -> do
     env <- ask
     template2Cop (M.mapKeys (\(TemplateNsName name m_ns _) -> TemplateNsName name m_ns Nothing) (templates env) M.! tempRefCont2TempNsName trc) (n, v) 
 instr2Cop (TemplateReference Nothing) = _segment'
 
-field2Cop :: Field -> FCoparser (NsName, Maybe Value)
-field2Cop (IntField f@(Int32Field (FieldInstrContent fname _ _))) = contramap (fmap fromValue . assertNameIs fname) (intF2Cop f :: FCoparser (Maybe Int32))
-field2Cop (IntField f@(Int64Field (FieldInstrContent fname _ _))) = contramap (fmap fromValue . assertNameIs fname) (intF2Cop f :: FCoparser (Maybe Int64))
-field2Cop (IntField f@(UInt32Field (FieldInstrContent fname _ _))) = contramap (fmap fromValue . assertNameIs fname) (intF2Cop f :: FCoparser (Maybe Word32))
-field2Cop (IntField f@(UInt64Field (FieldInstrContent fname _ _))) = contramap (fmap fromValue . assertNameIs fname) (intF2Cop f :: FCoparser (Maybe Word64))
+-- | Maps a field to its encoder.
+field2Cop :: Field -> FEncoder (NsName, Maybe Value)
+field2Cop (IntField f@(Int32Field (FieldInstrContent fname _ _))) = contramap (fmap fromValue . assertNameIs fname) (intF2Cop f :: FEncoder (Maybe Int32))
+field2Cop (IntField f@(Int64Field (FieldInstrContent fname _ _))) = contramap (fmap fromValue . assertNameIs fname) (intF2Cop f :: FEncoder (Maybe Int64))
+field2Cop (IntField f@(UInt32Field (FieldInstrContent fname _ _))) = contramap (fmap fromValue . assertNameIs fname) (intF2Cop f :: FEncoder (Maybe Word32))
+field2Cop (IntField f@(UInt64Field (FieldInstrContent fname _ _))) = contramap (fmap fromValue . assertNameIs fname) (intF2Cop f :: FEncoder (Maybe Word64))
 field2Cop (DecField f@(DecimalField fname _ _ )) = contramap (fmap fromValue . assertNameIs fname) (decF2Cop f)
 field2Cop (AsciiStrField f@(AsciiStringField(FieldInstrContent fname _ _ ))) = contramap (fmap fromValue . assertNameIs fname) (asciiStrF2Cop f)
-field2Cop (UnicodeStrField (UnicodeStringField f@(FieldInstrContent fname _ _ ) maybe_len )) = contramap (fmap fromValue . assertNameIs fname) (bytevecF2Cop f maybe_len :: FCoparser (Maybe UnicodeString))
-field2Cop (ByteVecField (ByteVectorField f@(FieldInstrContent fname _ _ ) maybe_len )) = contramap (fmap fromValue . assertNameIs fname) (bytevecF2Cop f maybe_len :: FCoparser (Maybe B.ByteString))
+field2Cop (UnicodeStrField (UnicodeStringField f@(FieldInstrContent fname _ _ ) maybe_len )) = contramap (fmap fromValue . assertNameIs fname) (bytevecF2Cop f maybe_len :: FEncoder (Maybe UnicodeString))
+field2Cop (ByteVecField (ByteVectorField f@(FieldInstrContent fname _ _ ) maybe_len )) = contramap (fmap fromValue . assertNameIs fname) (bytevecF2Cop f maybe_len :: FEncoder (Maybe B.ByteString))
 field2Cop (Seq s) = contramap (assertNameIs (sFName s)) (seqF2Cop s)
 field2Cop (Grp g) = contramap (assertNameIs (gFName g)) (groupF2Cop g)
 
-intF2Cop :: (Primitive a, Num a, Ord a, Ord (Delta a), Num (Delta a)) => IntegerField -> FCoparser (Maybe a)
+-- | Maps an integer field to its encoder.
+intF2Cop :: (Primitive a, Num a, Ord a, Ord (Delta a), Num (Delta a)) => IntegerField -> FEncoder (Maybe a)
 intF2Cop (Int32Field fic) = intF2Cop' fic 
 intF2Cop (UInt32Field fic) = intF2Cop' fic 
 intF2Cop (Int64Field fic) = intF2Cop' fic 
 intF2Cop (UInt64Field fic) = intF2Cop' fic 
 
-intF2Cop' :: (Primitive a, Num a, Ord a, Ord (Delta a), Num (Delta a)) => FieldInstrContent -> FCoparser (Maybe a)
+-- | Helper for intF2Cop.
+intF2Cop' :: (Primitive a, Num a, Ord a, Ord (Delta a), Num (Delta a)) => FieldInstrContent -> FEncoder (Maybe a)
 
 -- if the presence attribute is not specified, it is mandatory.
 intF2Cop' (FieldInstrContent fname Nothing maybe_op) = intF2Cop' (FieldInstrContent fname (Just Mandatory) maybe_op)
@@ -278,7 +288,8 @@ intF2Cop' (FieldInstrContent fname (Just Optional) (Just (Delta oc)))
                                         lift $ updatePrevValue fname oc (Assigned (witnessType i)) >> return (encodeD0 (delta_ i b))
                     cp (Nothing) = nulL
                     
-decF2Cop::DecimalField -> FCoparser (Maybe Decimal)
+-- | Maps a decimal field to its encoder.
+decF2Cop :: DecimalField -> FEncoder (Maybe Decimal)
 
 -- If the presence attribute is not specified, the field is considered mandatory.
 decF2Cop (DecimalField fname Nothing maybe_either_op) 
@@ -423,8 +434,8 @@ decF2Cop (DecimalField fname (Just Mandatory) (Just (Right (DecFieldOp maybe_exO
                                     fname'' = uniqueFName fname "m" 
                                 in
                                     do 
-                                        be <- (intF2Cop (Int32Field (FieldInstrContent fname' (Just Mandatory) maybe_exOp)) :: FCoparser (Maybe Int32)) Nothing 
-                                        bm <- (intF2Cop (Int64Field (FieldInstrContent fname'' (Just Mandatory) maybe_maOp)) :: FCoparser (Maybe Int64)) Nothing 
+                                        be <- (intF2Cop (Int32Field (FieldInstrContent fname' (Just Mandatory) maybe_exOp)) :: FEncoder (Maybe Int32)) Nothing 
+                                        bm <- (intF2Cop (Int64Field (FieldInstrContent fname'' (Just Mandatory) maybe_maOp)) :: FEncoder (Maybe Int64)) Nothing 
                                         lift $ return $ be `BU.append` bm
 
 
@@ -441,11 +452,12 @@ decF2Cop (DecimalField fname (Just Optional) (Just (Right (DecFieldOp maybe_exOp
                                     fname'' = uniqueFName fname "m" 
                                 in
                                     do 
-                                        be <- (intF2Cop (Int32Field (FieldInstrContent fname' (Just Optional) maybe_exOp)) :: FCoparser (Maybe Int32))  Nothing 
-                                        bm <- (intF2Cop (Int64Field (FieldInstrContent fname'' (Just Mandatory) maybe_maOp)) :: FCoparser (Maybe Int64)) Nothing 
+                                        be <- (intF2Cop (Int32Field (FieldInstrContent fname' (Just Optional) maybe_exOp)) :: FEncoder (Maybe Int32))  Nothing 
+                                        bm <- (intF2Cop (Int64Field (FieldInstrContent fname'' (Just Mandatory) maybe_maOp)) :: FEncoder (Maybe Int64)) Nothing 
                                         lift $ return $ be `BU.append` bm
 
-asciiStrF2Cop :: AsciiStringField -> FCoparser (Maybe AsciiString)
+-- | Maps an ascii field to its encoder.
+asciiStrF2Cop :: AsciiStringField -> FEncoder (Maybe AsciiString)
 
 -- If the presence attribute is not specified, its a mandatory field.
 asciiStrF2Cop (AsciiStringField(FieldInstrContent fname Nothing maybe_op))
@@ -622,7 +634,8 @@ asciiStrF2Cop (AsciiStringField(FieldInstrContent fname (Just Optional) (Just (T
                                                 h (OpContext _ _ Nothing) = lift $ setPMap False >> updatePrevValue fname oc Empty >> return BU.empty
                                     Empty -> lift $ setPMap False >> return BU.empty
 
-bytevecF2Cop :: (Primitive a, Eq a) => FieldInstrContent -> Maybe ByteVectorLength -> FCoparser (Maybe a)
+-- | Maps a bytevector field to its encoder.
+bytevecF2Cop :: (Primitive a, Eq a) => FieldInstrContent -> Maybe ByteVectorLength -> FEncoder (Maybe a)
 
 bytevecF2Cop (FieldInstrContent fname Nothing maybe_op) len 
     = bytevecF2Cop (FieldInstrContent fname (Just Mandatory) maybe_op) len
@@ -797,13 +810,14 @@ bytevecF2Cop  (FieldInstrContent fname (Just Optional) (Just(Tail oc))) _
                                                 h (OpContext _ _ Nothing) = lift $ setPMap False >> updatePrevValue fname oc Empty >> return BU.empty
                                     Empty -> lift $ setPMap False >> return BU.empty
 
-seqF2Cop :: Sequence -> FCoparser (Maybe Value)
+-- | Maps a sequence to its encoder.
+seqF2Cop :: Sequence -> FEncoder (Maybe Value)
 seqF2Cop (Sequence fname maybe_presence _ maybe_typeref maybe_length instrs) 
     = cp where cp (Just (Sq w xs)) = let    lengthb = h maybe_presence maybe_length
                                             fname' = uniqueFName fname "l" 
-                                            h p Nothing = (intF2Cop (UInt32Field (FieldInstrContent fname' p Nothing)) :: FCoparser (Maybe Word32)) (Just w)
-                                            h p (Just (Length Nothing op)) = (intF2Cop (UInt32Field (FieldInstrContent fname' p op)) :: FCoparser (Maybe Word32)) (Just w)
-                                            h p (Just (Length (Just fn) op)) = (intF2Cop (UInt32Field (FieldInstrContent fn p op)) :: FCoparser (Maybe Word32)) (Just w)
+                                            h p Nothing = (intF2Cop (UInt32Field (FieldInstrContent fname' p Nothing)) :: FEncoder (Maybe Word32)) (Just w)
+                                            h p (Just (Length Nothing op)) = (intF2Cop (UInt32Field (FieldInstrContent fname' p op)) :: FEncoder (Maybe Word32)) (Just w)
+                                            h p (Just (Length (Just fn) op)) = (intF2Cop (UInt32Field (FieldInstrContent fn p op)) :: FEncoder (Maybe Word32)) (Just w)
 
                                             segs = map (sequenceD $ map instr2Cop instrs) xs
                                             segs' = fmap mconcat $ mapM g segs where g segb = do  
@@ -832,11 +846,12 @@ seqF2Cop (Sequence fname maybe_presence _ maybe_typeref maybe_length instrs)
                -- we need this since we don't have a 'fromValue' function for sequences.
                cp (Nothing) =   lengthb where   lengthb = h maybe_presence maybe_length
                                                 fname' = uniqueFName fname "l" 
-                                                h p Nothing = (intF2Cop (UInt32Field (FieldInstrContent fname' p Nothing)) :: FCoparser (Maybe Word32)) Nothing 
-                                                h p (Just (Length Nothing op)) = (intF2Cop (UInt32Field (FieldInstrContent fname' p op)) :: FCoparser (Maybe Word32)) Nothing 
-                                                h p (Just (Length (Just fn) op)) = (intF2Cop (UInt32Field (FieldInstrContent fn p op)) :: FCoparser (Maybe Word32)) Nothing 
+                                                h p Nothing = (intF2Cop (UInt32Field (FieldInstrContent fname' p Nothing)) :: FEncoder (Maybe Word32)) Nothing 
+                                                h p (Just (Length Nothing op)) = (intF2Cop (UInt32Field (FieldInstrContent fname' p op)) :: FEncoder (Maybe Word32)) Nothing 
+                                                h p (Just (Length (Just fn) op)) = (intF2Cop (UInt32Field (FieldInstrContent fn p op)) :: FEncoder (Maybe Word32)) Nothing 
 
-groupF2Cop :: Group -> FCoparser (Maybe Value)
+-- | Maps a group to its encoder.
+groupF2Cop :: Group -> FEncoder (Maybe Value)
 groupF2Cop (Group fname Nothing maybe_dict maybe_typeref instrs)
     = groupF2Cop (Group fname (Just Mandatory) maybe_dict maybe_typeref instrs)
 
@@ -883,5 +898,6 @@ groupF2Cop (Group fname (Just Optional) _ maybe_typeref instrs)
                 cp (Just _) = throw $ EncoderException $ "Template doesn't fit message, in the field: " ++ show fname
                 cp (Nothing) = lift $ setPMap False >> return BU.empty
 
+-- | Encodes the NULL byte.
 nulL :: FBuilder 
 nulL = lift $ return $ BU.singleton 0x80
