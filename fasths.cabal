@@ -1,10 +1,12 @@
 Name:                fasths
 Version:             0.1
 Synopsis:            A decoder/encoder library for the FAST protocoll.
+Description:         A decoder/encoder library for the FAST protocoll.
 Homepage:            www.github.com/RobinKrom/fasths
 License:             BSD3
 License-file:        LICENSE
 Author:              Robin S. Krom
+Maintainer: 	     Robin S. Krom
 Category:            Codec
 Build-type:          Simple
 Cabal-version:       >=1.8
@@ -20,6 +22,11 @@ Library
   Exposed-modules:	Codec.Fast
   Hs-Source-Dirs:	src
   Other-modules:  Codec.Fast.Encoder, Codec.Fast.Decoder, Codec.Fast.Pretty, Codec.Fast.TemplateParser, Codec.Fast.Test.Data
+
+source-repository head
+  type: 	git
+  location: http://github.com/RobinKrom/fasths
+
 
 --Executable parseFile
 --  Main-Is:	examples/parseFile.hs
