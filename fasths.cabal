@@ -21,7 +21,7 @@ Library
   Hs-Source-Dirs:	src
   Other-modules:  Codec.Fast.Encoder, Codec.Fast.Encoder, Codec.Fast.Pretty, Codec.Fast.TemplateParser, Codec.Fast.Test.Data
 
---Executable parseFile
---  Main-Is:	examples/parseFile.hs
---  Hs-Source-Dirs:	src
---  Build-Depends: base, fasths, mtl, attoparsec, hxt, bytestring, QuickCheck, binary, containers, ListLike
+Executable parseFile
+  Main-Is:	examples/parseFile.hs
+  Hs-Source-Dirs:	src
+  Build-Depends: base, fasths, mtl, attoparsec, hxt, bytestring, QuickCheck, binary, containers, ListLike

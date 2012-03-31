@@ -35,8 +35,7 @@ main = do
     args <- getArgs
     ts <- if not . null $ args then parseTemplateXML (readDocument [] (head args)) else error "No template file given."
     bs <- B.readFile (args!!1)
---    print ts
-    catch (print (A.feed (A.parse (stream2 ts Main.tid2temp) bs) B.empty)) handler
+    catch (print (A.feed (A.parse (fmap (map PMsg) (stream2 ts Main.tid2temp)) bs) B.empty)) handler
 
 
 tid2temp :: Word32 -> TemplateNsName
