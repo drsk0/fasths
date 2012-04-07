@@ -14,22 +14,21 @@ Tested-with:         GHC==7.4.1
 
 Test-Suite simple-testsuite
   Type: exitcode-stdio-1.0
-  Main-is: Test/runTest.hs
-  Hs-Source-Dirs:	src
+  Main-is: runTest.hs
+  Hs-Source-Dirs: testsuite	
   Build-depends: base, QuickCheck, bytestring, mtl, binary, attoparsec, containers, ListLike, hxt
 
 Library
   Build-Depends:	base, QuickCheck, bytestring, binary, mtl, attoparsec, containers, ListLike, hxt
   Exposed-modules:	Codec.Fast
   Hs-Source-Dirs:	src
-  Other-modules:  Codec.Fast.Encoder, Codec.Fast.Decoder, Codec.Fast.Pretty, Codec.Fast.TemplateParser, Codec.Fast.Test.Data
+  Other-modules:  Codec.Fast.Data, Codec.Fast.Encoder, Codec.Fast.Decoder, Codec.Fast.Pretty, Codec.Fast.TemplateParser, Codec.Fast.Test.Data
 
 source-repository head
   type: 	git
   location: http://github.com/RobinKrom/fasths
 
-
---Executable parseFile
---  Main-Is:	examples/parseFile.hs
---  Hs-Source-Dirs:	src
---  Build-Depends: base, fasths, mtl, attoparsec, hxt, bytestring, QuickCheck, binary, containers, ListLike
+Executable parseFile
+  Main-Is: parseFile.hs
+  Hs-Source-Dirs: examples
+  Build-Depends: base, fasths, mtl, attoparsec, hxt, bytestring, QuickCheck, binary, containers, ListLike

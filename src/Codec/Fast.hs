@@ -14,7 +14,7 @@ module Codec.Fast
 -- * Introduction 
 
 -- |This library provides the means to decode or encode binary data encoded according to the FAST protocol. See
--- <http://fixprotocol.org/fast> for more information on FAST. A FAST message is a tuple ('NsName', Maybe 'Value'). Note that 'Value' is a recursive data structure. Here is how a typical decoded message will look like: 
+-- <http://fixprotocol.org/fast> for more information on FAST. A FAST message is a tuple ('NsName', Maybe 'Value'), where 'Value' is a recursive data structure. Here is how a typical decoded message will look like: 
 -- 
 -- @[Msg Name [\"MDIncRefresh_33\"] Ns [\"-\"] Id [\"33\"] -> Gr 
 --        Name [\"ApplVerID\"] Ns [\"-\"] Id [\"1128\"] -> A \"8\"
@@ -37,6 +37,8 @@ module Codec.Fast
 --        Name [\"TickDirection\"] Ns [\"-\"] Id [\"274\"] ->  --- 
 --        Name [\"TradeCondition\"] Ns [\"-\"] Id [\"277\"] ->  --- 
 --        Name [\"MDEntryTime\"] Ns [\"-\"] Id [\"273\"] -> UI32 192034000@
+--
+-- The central element of the decoder is the 'message' function. It provides a parser for a single FAST message. A decoder for a stream can be build by using the combinators provided by the 'Data.Attoparsec' library. An encoder for one message is given by the '_message' function.
 
 -- * Examples
 
