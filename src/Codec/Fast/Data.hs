@@ -899,7 +899,7 @@ _byteVector0 = (_uint . (\bs -> plusOne $ fromIntegral(B.length bs) :: Word32)) 
 
 -- |Unsigned integer parser, doesn't check for bounds.
 -- TODO: should we check for R6 errors, i.e overlong fields?
-uint :: (Bits a) => A.Parser a
+uint :: (Bits a, Num a) => A.Parser a
 uint = do 
     bs <- anySBEEntity
     return (B.foldl h 0 bs)
@@ -918,7 +918,7 @@ uintBS ui = if ui' /= 0
             where ui' = shiftR ui 7
 
 -- |Signed integer parser, doesn't check for bounds.
-int :: (Bits a) => A.Parser a
+int :: (Bits a, Num a) => A.Parser a
 int = do
         bs <- anySBEEntity
         return (if testBit (B.head bs) 6 
