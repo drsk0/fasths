@@ -10,7 +10,7 @@ Maintainer: 	     Robin S. Krom
 Category:            Codec
 Build-type:          Simple
 Cabal-version:       >=1.8
-Tested-with:         GHC==7.4.1
+Tested-with:         GHC==7.6.3
 
 Test-Suite simple-testsuite
   Type: exitcode-stdio-1.0
